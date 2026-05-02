@@ -30,9 +30,10 @@ export interface ExtensionInfo {
 	id: string;
 	name: string;
 	version: string;
-	description: string;
-	enabled: boolean;
-	source: "local" | "npm" | "localPath";
+	description?: string;
+	enabled?: boolean;
+	source?: "local" | "npm" | "localPath" | "git";
+	path?: string;
 }
 
 // Provider info from pi's models.json
