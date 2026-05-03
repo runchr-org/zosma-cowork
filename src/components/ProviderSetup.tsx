@@ -5,13 +5,14 @@ import { useState } from "react";
 interface ProviderSetupProps {
 	providers: AuthProviderPreset[];
 	configuredProviders: string[];
-	onSave: (providerId: string, apiKey: string) => Promise<void>;
+	onSave: (providerId: string, apiKey: string, baseUrl?: string) => Promise<void>;
 	onCancel?: () => void;
 }
 
 export function ProviderSetup({ providers, configuredProviders, onSave, onCancel }: ProviderSetupProps) {
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [apiKey, setApiKey] = useState("");
+	const [customBaseUrl, setCustomBaseUrl] = useState("");
 	const [showKey, setShowKey] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function ProviderSetup({ providers, configuredProviders, onSave, onCancel
 	const handleSelect = (provider: AuthProviderPreset) => {
 		setSelectedId(provider.id);
 		setApiKey("");
+		setCustomBaseUrl(provider.defaultBaseUrl ?? "");
 		setError(null);
 		setShowKey(false);
 	};
@@ -34,7 +36,9 @@ export function ProviderSetup({ providers, configuredProviders, onSave, onCancel
 		setSaving(true);
 		setError(null);
 		try {
-			await onSave(selectedId, apiKey.trim());
+			// For gateway providers, pass the custom baseUrl if set
+			const baseUrl = selectedProvider?.defaultBaseUrl ? (customBaseUrl.trim() || undefined) : undefined;
+			await onSave(selectedId, apiKey.trim(), baseUrl);
 			// Parent will handle navigation via callback or state change
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to save API key");
@@ -149,12 +153,34 @@ export function ProviderSetup({ providers, configuredProviders, onSave, onCancel
 										onClick={() => setShowKey(!showKey)}
 										className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
 									>
-										{showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-									</button>
-								</div>
+									{showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+								</button>
 							</div>
+						</div>
 
-							{/* Actions */}
+						{/* Custom API URL for gateway providers */}
+						{selectedProvider.defaultBaseUrl && (
+							<div>
+								<label htmlFor="base-url-input" className="text-xs text-muted-foreground mb-1.5 block">
+									Custom API URL
+								</label>
+								<input
+									id="base-url-input"
+									type="text"
+									value={customBaseUrl}
+									onChange={(e) => setCustomBaseUrl(e.target.value)}
+									placeholder={selectedProvider.defaultBaseUrl}
+									className="w-full text-sm rounded-lg border bg-background px-3 py-2.5 text-foreground font-mono focus:outline-none focus:ring-2"
+									style={{ borderColor: "hsl(var(--border))" }}
+									autoComplete="off"
+								/>
+								<p className="text-[10px] text-muted-foreground mt-1">
+									Leave empty to use default: {selectedProvider.defaultBaseUrl}
+								</p>
+							</div>
+						)}
+
+						{/* Actions */}
 							<div className="flex items-center gap-3 pt-1">
 								<button
 									type="button"

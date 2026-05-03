@@ -422,8 +422,8 @@ function App() {
 						<ProviderSetup
 							providers={AUTH_PROVIDERS}
 							configuredProviders={configuredProviders}
-							onSave={async (providerId, apiKey) => {
-								await saveApiKey(providerId, apiKey);
+							onSave={async (providerId, apiKey, baseUrl) => {
+								await saveApiKey(providerId, apiKey, baseUrl);
 								setShowProviderSetup(false);
 							}}
 							onCancel={() => setShowProviderSetup(false)}

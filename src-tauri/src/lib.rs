@@ -434,6 +434,7 @@ const GATEWAY_PROVIDERS: [GatewayProvider; 2] = [
 /// For gateway providers (crofai, opencode-go) that aren't in the SDK's
 /// built-in model catalog, this also auto-fetches models from the API
 /// and writes them to models.json so they appear in the registry.
+/// If a custom base_url is provided, it uses that instead of the hardcoded default.
 ///
 /// Reloads the cached ConfigSnapshot so the new provider/models
 /// appear immediately without requiring an app restart.
@@ -441,14 +442,27 @@ const GATEWAY_PROVIDERS: [GatewayProvider; 2] = [
 async fn save_auth_key(
     provider_id: String,
     api_key: String,
+    base_url: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     config::save_auth_api_key(&provider_id, &api_key)?;
 
     // Auto-fetch models for gateway providers not in SDK built-in catalog
-    if let Some((_, base_url)) = GATEWAY_PROVIDERS.iter().find(|(id, _)| *id == provider_id) {
-        if let Err(e) = fetch_gateway_models(base_url, &api_key).await {
-            log::warn!("Failed to auto-fetch models for {}: {}", provider_id, e);
+    if GATEWAY_PROVIDERS.iter().any(|(id, _)| *id == provider_id) {
+        // Determine base_url: user-provided > existing in models.json > hardcoded default
+        let effective_base_url = base_url
+            .or_else(|| config::get_provider_base_url(&provider_id))
+            .or_else(|| GATEWAY_PROVIDERS.iter().find(|(id, _)| *id == provider_id).map(|(_, url)| (*url).to_string()));
+
+        if let Some(url) = effective_base_url {
+            match fetch_gateway_models(&url, &api_key, &provider_id).await {
+                Ok(()) => log::info!("Auto-fetched models for {}", provider_id),
+                Err(e) => {
+                    log::warn!("Failed to auto-fetch models for {}: {}", provider_id, e);
+                    // Return error so frontend can inform user
+                    return Err(format!("API key saved, but failed to fetch models: {}. You can retry fetching in Settings.", e));
+                }
+            }
         }
     }
 
@@ -461,13 +475,21 @@ async fn save_auth_key(
 }
 
 /// Fetch models from a gateway provider's /models endpoint and write to models.json.
-async fn fetch_gateway_models(base_url: &str, api_key: &str) -> Result<(), String> {
+async fn fetch_gateway_models(base_url: &str, api_key: &str, provider_id: &str) -> Result<(), String> {
     let client = reqwest::ClientBuilder::new()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
-    let url = format!("{}/models", base_url);
+    // Normalize the URL: if base_url ends with /v1 or contains /v1/, append /models
+    let url = if base_url.ends_with("/models") {
+        base_url.to_string()
+    } else if base_url.ends_with("/v1") || base_url.contains("/v1/") {
+        format!("{}/models", base_url)
+    } else {
+        format!("{}/v1/models", base_url)
+    };
+
     let resp = client
         .get(&url)
         .header("Authorization", format!("Bearer {}", api_key))
@@ -476,7 +498,9 @@ async fn fetch_gateway_models(base_url: &str, api_key: &str) -> Result<(), Strin
         .map_err(|e| format!("Failed to fetch models: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("API returned {}", resp.status().as_u16()));
+        let status = resp.status().as_u16();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("API returned {}: {}", status, body_text.chars().take(100).collect::<String>()));
     }
 
     let body: serde_json::Value = resp
@@ -500,15 +524,6 @@ async fn fetch_gateway_models(base_url: &str, api_key: &str) -> Result<(), Strin
     if model_entries.is_empty() {
         return Err("No models found in response".to_string());
     }
-
-    // Determine provider ID from base_url for upsert
-    let provider_id = if base_url.contains("crof") {
-        "crofai"
-    } else if base_url.contains("opencode") {
-        "opencode-go"
-    } else {
-        return Err("Unknown gateway provider".to_string());
-    };
 
     // Write api_key in models.json so the SDK's apply_custom_models
     // resolves it for each model (the SDK doesn't read auth.json

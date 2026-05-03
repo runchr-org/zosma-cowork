@@ -337,6 +337,18 @@ pub fn write_models_json_raw(content: &serde_json::Value) -> Result<(), String> 
     Ok(())
 }
 
+/// Read the existing baseUrl for a provider from models.json.
+/// Returns None if the provider doesn't exist or has no baseUrl configured.
+pub fn get_provider_base_url(provider_id: &str) -> Option<String> {
+    let root = read_models_json_raw();
+    root.get("providers")
+        .and_then(|p| p.as_object())
+        .and_then(|prov| prov.get(provider_id))
+        .and_then(|cfg| cfg.get("baseUrl"))
+        .and_then(|url| url.as_str())
+        .map(String::from)
+}
+
 /// Add or update a provider configuration in models.json.
 ///
 /// Takes the provider ID and a JSON object with provider settings.

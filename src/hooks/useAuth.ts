@@ -9,6 +9,8 @@ export interface AuthProviderPreset {
 	description: string;
 	apiKeyHint: string;
 	signupUrl?: string;
+	/** Default base URL for gateway providers (can be overridden by user) */
+	defaultBaseUrl?: string;
 }
 
 /** Well-known providers with API key auth, ordered by recommendation. */
@@ -20,6 +22,7 @@ export const AUTH_PROVIDERS: AuthProviderPreset[] = [
 		description: "All-in-one AI gateway — access top models through one API key",
 		apiKeyHint: "nahcrof_...",
 		signupUrl: "https://crof.ai",
+		defaultBaseUrl: "https://api.crof.ai/v1",
 	},
 	{
 		id: "opencode-go",
@@ -28,6 +31,7 @@ export const AUTH_PROVIDERS: AuthProviderPreset[] = [
 		description: "Budget-friendly aggregator — $5 first month, then $10/mo",
 		apiKeyHint: "sk-...",
 		signupUrl: "https://opencode.go",
+		defaultBaseUrl: "https://api.opencode.go/v1",
 	},
 	{
 		id: "openai",
@@ -102,8 +106,8 @@ export function useAuth() {
 	}, [refresh]);
 
 	const saveApiKey = useCallback(
-		async (providerId: string, apiKey: string) => {
-			await invoke("save_auth_key", { providerId, apiKey });
+		async (providerId: string, apiKey: string, baseUrl?: string) => {
+			await invoke("save_auth_key", { providerId, apiKey, baseUrl });
 
 			// Refresh auth status and notify providers to reload config
 			await refresh();
