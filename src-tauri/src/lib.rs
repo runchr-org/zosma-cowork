@@ -418,12 +418,24 @@ async fn fetch_models(base_url: String, api_key: String) -> Result<Vec<FetchedMo
 // Commands — auth configuration (auth.json)
 // ---------------------------------------------------------------------------
 
+/// Gateway providers not in the SDK built-in catalog.
+/// When a user saves an API key for these, we auto-fetch models from their API.
+type GatewayProvider = (&'static str, &'static str);
+const GATEWAY_PROVIDERS: [GatewayProvider; 2] = [
+    ("crofai", "https://api.crof.ai/v1"),
+    ("opencode-go", "https://api.opencode.go/v1"),
+];
+
 /// Save an API key for a built-in provider in auth.json.
 ///
 /// Creates the file if it doesn't exist. Merges with existing entries.
 /// Uses the standard pi auth format.
 ///
-/// Also reloads the cached ConfigSnapshot so the new provider/models
+/// For gateway providers (crofai, opencode-go) that aren't in the SDK's
+/// built-in model catalog, this also auto-fetches models from the API
+/// and writes them to models.json so they appear in the registry.
+///
+/// Reloads the cached ConfigSnapshot so the new provider/models
 /// appear immediately without requiring an app restart.
 #[tauri::command]
 async fn save_auth_key(
@@ -433,12 +445,92 @@ async fn save_auth_key(
 ) -> Result<(), String> {
     config::save_auth_api_key(&provider_id, &api_key)?;
 
+    // Auto-fetch models for gateway providers not in SDK built-in catalog
+    if let Some((_, base_url)) = GATEWAY_PROVIDERS
+        .iter()
+        .find(|(id, _)| *id == provider_id)
+    {
+        if let Err(e) = fetch_gateway_models(base_url, &api_key).await {
+            log::warn!(
+                "Failed to auto-fetch models for {}: {}",
+                provider_id,
+                e
+            );
+        }
+    }
+
     // Reload cached config so the new provider/models appear immediately
     let fresh = config::load_config();
     let mut guard = state.config.write().unwrap_or_else(|e| e.into_inner());
     *guard = fresh;
 
     Ok(())
+}
+
+/// Fetch models from a gateway provider's /models endpoint and write to models.json.
+async fn fetch_gateway_models(base_url: &str, api_key: &str) -> Result<(), String> {
+    let client = reqwest::ClientBuilder::new()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+
+    let url = format!("{}/models", base_url);
+    let resp = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch models: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "API returned {}",
+            resp.status().as_u16()
+        ));
+    }
+
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let models = body
+        .get("data")
+        .and_then(|d| d.as_array())
+        .ok_or("Response missing 'data' array")?;
+
+    let model_entries: Vec<serde_json::Value> = models
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("id")?.as_str()?.to_string();
+            Some(serde_json::json!({ "id": id }))
+        })
+        .collect();
+
+    if model_entries.is_empty() {
+        return Err("No models found in response".to_string());
+    }
+
+    // Determine provider ID from base_url for upsert
+    let provider_id = if base_url.contains("crof") {
+        "crofai"
+    } else if base_url.contains("opencode") {
+        "opencode-go"
+    } else {
+        return Err("Unknown gateway provider".to_string());
+    };
+
+    // Write api_key in models.json so the SDK's apply_custom_models
+    // resolves it for each model (the SDK doesn't read auth.json
+    // for custom providers from models.json).
+    let provider_config = serde_json::json!({
+        "baseUrl": base_url,
+        "api": "openai-completions",
+        "apiKey": api_key,
+        "models": model_entries,
+    });
+
+    config::upsert_provider(provider_id, &provider_config)
 }
 
 /// Check if any provider has a valid API key in auth.json.

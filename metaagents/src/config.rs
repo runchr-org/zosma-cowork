@@ -231,7 +231,7 @@ pub fn load_config() -> ConfigSnapshot {
         })
         .collect();
 
-    providers.sort_by(|a, b| a.id.to_lowercase().cmp(&b.id.to_lowercase()));
+    providers.sort_by_key(|a| a.id.to_lowercase());
 
     ConfigSnapshot {
         settings,
