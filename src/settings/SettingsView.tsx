@@ -484,7 +484,7 @@ export function SettingsView() {
 		if (api === "openai-completions" || api === "openai") {
 			const trimmed = url.replace(/\/$/, "");
 			if (!trimmed.endsWith("/v1")) {
-				return trimmed + "/v1";
+				return `${trimmed}/v1`;
 			}
 		}
 		return url;
