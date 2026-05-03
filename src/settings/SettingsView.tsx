@@ -209,8 +209,8 @@ function ProviderEditForm({
 		setFetchError(null);
 		try {
 			const models: Array<{ id: string; name: string }> = await invoke("fetch_models", {
-				baseUrl: provider.baseUrl,
-				ApiKey: provider.apiKey,
+				base_url: provider.baseUrl,
+				api_key: provider.apiKey,
 			});
 			if (models.length === 0) {
 				setFetchError("API returned no models.");
