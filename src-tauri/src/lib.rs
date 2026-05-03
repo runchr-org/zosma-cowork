@@ -446,16 +446,9 @@ async fn save_auth_key(
     config::save_auth_api_key(&provider_id, &api_key)?;
 
     // Auto-fetch models for gateway providers not in SDK built-in catalog
-    if let Some((_, base_url)) = GATEWAY_PROVIDERS
-        .iter()
-        .find(|(id, _)| *id == provider_id)
-    {
+    if let Some((_, base_url)) = GATEWAY_PROVIDERS.iter().find(|(id, _)| *id == provider_id) {
         if let Err(e) = fetch_gateway_models(base_url, &api_key).await {
-            log::warn!(
-                "Failed to auto-fetch models for {}: {}",
-                provider_id,
-                e
-            );
+            log::warn!("Failed to auto-fetch models for {}: {}", provider_id, e);
         }
     }
 
@@ -483,10 +476,7 @@ async fn fetch_gateway_models(base_url: &str, api_key: &str) -> Result<(), Strin
         .map_err(|e| format!("Failed to fetch models: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!(
-            "API returned {}",
-            resp.status().as_u16()
-        ));
+        return Err(format!("API returned {}", resp.status().as_u16()));
     }
 
     let body: serde_json::Value = resp
