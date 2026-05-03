@@ -221,6 +221,21 @@ function App() {
 		return () => window.removeEventListener("navigate", handleNavigate);
 	}, []);
 
+	// Auto-recover from session_not_found errors: create a new session and retry
+	useEffect(() => {
+		async function handleSessionRecovery(e: Event) {
+			const detail = (e as CustomEvent).detail as { prompt?: string };
+			if (!detail?.prompt) return;
+			const id = crypto.randomUUID();
+			currentSessionIdRef.current = id;
+			await createSession(id);
+			stableTrackSessionCreated(id);
+			void startStream(detail.prompt, id);
+		}
+		window.addEventListener("session_recovery", handleSessionRecovery);
+		return () => window.removeEventListener("session_recovery", handleSessionRecovery);
+	}, [createSession, stableTrackSessionCreated, startStream]);
+
 	useEffect(() => {
 		function handleKeyDown(e: KeyboardEvent) {
 			// CMD+B: Toggle right panel

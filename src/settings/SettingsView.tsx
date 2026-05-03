@@ -265,6 +265,11 @@ function ProviderEditForm({
 					className="w-full text-sm rounded-lg border bg-background px-3 py-1.5 text-foreground font-mono focus:outline-none focus:ring-1"
 					style={{ borderColor: "hsl(var(--border))" }}
 				/>
+				{provider.api === "openai-completions" && (
+					<p className="text-xs text-muted-foreground mt-1">
+						<code className="text-[10px]">/v1</code> will be auto-appended if missing.
+					</p>
+				)}
 			</div>
 
 			{/* API Key */}
@@ -422,11 +427,23 @@ export function SettingsView() {
 		setSaveError(null);
 		setSaveSuccess(false);
 
-		try {
-			const providersObj: Record<string, unknown> = {};
-			for (const p of editableProviders) {
-				providersObj[p.id] = {
-					baseUrl: p.baseUrl,
+		// Normalize base URLs: for OpenAI-compatible APIs, ensure /v1 suffix
+	function normalizeBaseUrl(url: string, api: string): string {
+		if (!url) return url;
+		if (api === "openai-completions" || api === "openai") {
+			const trimmed = url.replace(/\/$/, "");
+			if (!trimmed.endsWith("/v1")) {
+				return trimmed + "/v1";
+			}
+		}
+		return url;
+	}
+
+	try {
+		const providersObj: Record<string, unknown> = {};
+		for (const p of editableProviders) {
+			providersObj[p.id] = {
+				baseUrl: normalizeBaseUrl(p.baseUrl, p.api),
 					api: p.api,
 					apiKey: p.apiKey,
 					compat: {

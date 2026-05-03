@@ -455,6 +455,22 @@ export function usePiStream() {
 
 					case "error": {
 						const errEvent = event as PiErrorEvent;
+
+						// Auto-recover from session_not_found: emit a custom event
+						// so App.tsx can create a new session and retry the prompt.
+						if (errEvent.code === "session_not_found") {
+							console.warn(
+								"[cowork] Session not found, requesting recovery..."
+							);
+							window.dispatchEvent(
+								new CustomEvent("session_recovery", {
+									detail: { prompt },
+								})
+							);
+							dispatch({ type: "RESET" });
+							break;
+						}
+
 						dispatch({
 							type: "STREAM_ERROR",
 							error: errEvent.message || "Unknown error",

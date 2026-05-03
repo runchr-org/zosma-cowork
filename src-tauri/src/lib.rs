@@ -638,7 +638,7 @@ pub fn run() {
 
             // Auto-start sidecar for Pi extension compatibility
             let sidecar_app = app.handle().clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 let entry = resolve_sidecar_entry(&sidecar_app);
                 log::info!("Auto-starting sidecar: {}", entry.display());
 
