@@ -196,6 +196,40 @@ function ProviderEditForm({
 	onUpdate: (updated: EditableProvider) => void;
 	onDelete: () => void;
 }) {
+	const [fetching, setFetching] = useState(false);
+	const [fetchError, setFetchError] = useState<string | null>(null);
+
+	// Fetch models from the API
+	const handleFetchModels = async () => {
+		if (!provider.baseUrl || !provider.apiKey) {
+			setFetchError("Please enter Base URL and API Key first.");
+			return;
+		}
+		setFetching(true);
+		setFetchError(null);
+		try {
+			const models: Array<{ id: string; name: string }> = await invoke("fetch_models", {
+				baseUrl: provider.baseUrl,
+				ApiKey: provider.apiKey,
+			});
+			if (models.length === 0) {
+				setFetchError("API returned no models.");
+				return;
+			}
+			const newModels: EditableModel[] = models.map((m) => ({
+				id: m.id,
+				name: m.name || m.id,
+				contextWindow: 128000,
+				maxTokens: 8192,
+			}));
+			onUpdate({ ...provider, models: newModels });
+		} catch (err) {
+			setFetchError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setFetching(false);
+		}
+	};
+
 	const addModel = () => {
 		onUpdate({
 			...provider,
@@ -291,15 +325,32 @@ function ProviderEditForm({
 			{/* Models list */}
 			<div>
 				<div className="flex items-center justify-between mb-1">
-					<span className="text-xs text-muted-foreground">Models</span>
-					<button
-						type="button"
-						onClick={addModel}
-						className="text-xs text-primary hover:underline flex items-center gap-1"
-					>
-						<Plus className="w-3 h-3" /> Add model
-					</button>
+					<span className="text-xs text-muted-foreground">Models ({provider.models.length})</span>
+					<div className="flex items-center gap-2">
+						{provider.api === "openai-completions" && (
+							<button
+								type="button"
+								onClick={handleFetchModels}
+								disabled={fetching || !provider.baseUrl || !provider.apiKey}
+								className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-50"
+							>
+								{fetching ? "Fetching..." : "Fetch from API"}
+							</button>
+						)}
+						<button
+							type="button"
+							onClick={addModel}
+							className="text-xs text-primary hover:underline flex items-center gap-1"
+						>
+							<Plus className="w-3 h-3" /> Add model
+						</button>
+					</div>
 				</div>
+				{fetchError && (
+					<p className="text-xs mb-1" style={{ color: "hsl(var(--destructive))" }}>
+						{fetchError}
+					</p>
+				)}
 				<div className="space-y-2">
 					{provider.models.map((model, idx) => (
 						<div

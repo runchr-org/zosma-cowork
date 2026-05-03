@@ -342,6 +342,78 @@ async fn delete_provider_cmd(
     Ok(())
 }
 
+/// Fetch models from an OpenAI-compatible API endpoint.
+///
+/// Calls `{baseUrl}/models` with Bearer auth and returns the model list.
+/// The frontend uses this to auto-populate the models editor.
+#[derive(serde::Serialize)]
+struct FetchedModel {
+    id: String,
+    name: String,
+}
+
+#[tauri::command]
+async fn fetch_models(base_url: String, api_key: String) -> Result<Vec<FetchedModel>, String> {
+    let url = if base_url.ends_with("/models") {
+        base_url
+    } else if base_url.ends_with("/v1") || base_url.contains("/v1/") {
+        format!("{}/models", base_url)
+    } else {
+        format!("{}/v1/models", base_url)
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+
+    let resp = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to {}: {}", url, e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "API returned {} {}: {}",
+            status.as_u16(),
+            status.canonical_reason().unwrap_or("Unknown"),
+            body.chars().take(200).collect::<String>()
+        ));
+    }
+
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    // OpenAI-compatible format: { "data": [{ "id": "..." }, ...] }
+    let models = body
+        .get("data")
+        .and_then(|d| d.as_array())
+        .ok_or("Response missing 'data' array")?;
+
+    let result: Vec<FetchedModel> = models
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("id")?.as_str()?.to_string();
+            // Try to get a friendly name from the response, fallback to id
+            let name = m
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or(&id)
+                .to_string();
+            Some(FetchedModel { id, name })
+        })
+        .collect();
+
+    Ok(result)
+}
+
 // ---------------------------------------------------------------------------
 // Commands — auth configuration (auth.json)
 // ---------------------------------------------------------------------------
@@ -681,6 +753,7 @@ pub fn run() {
             save_models_config,
             upsert_provider,
             delete_provider_cmd,
+            fetch_models,
             // Auth configuration (auth.json)
             save_auth_key,
             has_any_credentials,
