@@ -7,10 +7,21 @@
 //!
 //! The pi SDK is also redirected to this directory via the
 //! `PI_CODING_AGENT_DIR` env var set at Tauri startup.
+//!
+//! This module uses `pi::sdk::models::ModelRegistry` as the single source
+//! of truth for provider and model discovery.  It leverages:
+//! - Built-in models from the SDK's legacy catalog
+//! - Custom overrides from `models.json`
+//! - Auth-aware filtering via `available_models()`
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Provider / Model configuration structs (for models.json editing)
+// ---------------------------------------------------------------------------
 
 /// Provider configuration from models.json.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +79,10 @@ pub struct CostConfig {
     pub cache_write: f64,
 }
 
+// ---------------------------------------------------------------------------
+// Settings structs
+// ---------------------------------------------------------------------------
+
 /// Parsed pi settings from settings.json.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,18 +104,22 @@ pub struct PiSettings {
     pub enabled_models: Vec<String>,
 }
 
+// ---------------------------------------------------------------------------
+// Frontend-facing types
+// ---------------------------------------------------------------------------
+
 /// Complete configuration snapshot combining settings and models.
 #[derive(Debug, Clone)]
 pub struct ConfigSnapshot {
     /// Parsed settings from settings.json.
     pub settings: Option<PiSettings>,
-    /// Provider definitions from models.json.
+    /// Provider definitions (grouped from SDK ModelRegistry).
     pub providers: Vec<ProviderInfo>,
-    /// All available models across all providers.
+    /// All available models across all providers (auth-filtered).
     pub models: Vec<ModelInfo>,
 }
 
-/// Provider info for the frontend (simplified from ProviderConfig).
+/// Provider info for the frontend (simplified from SDK types).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderInfo {
@@ -139,12 +158,80 @@ pub struct ModelInfo {
     pub max_tokens: u32,
 }
 
+// ---------------------------------------------------------------------------
+// Config loading (uses pi SDK ModelRegistry)
+// ---------------------------------------------------------------------------
+
 /// Load the complete configuration snapshot from disk.
+///
+/// Uses `pi::sdk::models::ModelRegistry` as the single source of truth.
+/// Only models for which credentials are configured (or none required)
+/// are included — via `available_models()`.
 pub fn load_config() -> ConfigSnapshot {
     let agent_dir = zosmaai_agent_dir();
 
     let settings = load_settings(&agent_dir);
-    let (providers, models) = load_models(&agent_dir);
+
+    // Load auth storage from ~/.zosmaai/agent/auth.json
+    let auth_path = agent_dir.join("auth.json");
+    let models_path = agent_dir.join("models.json");
+
+    // Use SDK's AuthStorage and ModelRegistry.
+    // AuthStorage lives at pi::auth (not in sdk module).
+    // ModelRegistry is re-exported at pi::sdk::ModelRegistry.
+    let auth = pi::auth::AuthStorage::load(auth_path).unwrap_or_else(|_| {
+        log::warn!("Failed to load custom auth.json, falling back to SDK default");
+        pi::auth::AuthStorage::load(pi::sdk::Config::auth_path())
+            .expect("SDK default auth load also failed")
+    });
+
+    let registry = pi::sdk::ModelRegistry::load(&auth, Some(models_path));
+
+    // Convert SDK models to our frontend types (auth-filtered)
+    let available = registry.available_models();
+    let mut models: Vec<ModelInfo> = Vec::with_capacity(available.len());
+    let mut provider_map: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for entry in &available {
+        let model = &entry.model;
+        let provider_id = model.provider.clone();
+
+        models.push(ModelInfo {
+            id: model.id.clone(),
+            name: model.name.clone(),
+            provider: provider_id.clone(),
+            reasoning: model.reasoning,
+            context_window: model.context_window,
+            max_tokens: model.max_tokens,
+        });
+
+        provider_map
+            .entry(provider_id)
+            .or_default()
+            .insert(model.id.clone());
+    }
+
+    // Build provider list from SDK models (only providers with available models)
+    let mut providers: Vec<ProviderInfo> = provider_map
+        .into_iter()
+        .map(|(provider_id, model_ids)| {
+            // Try to get API type from the first available model for this provider
+            let api = available
+                .iter()
+                .find(|e| e.model.provider == provider_id)
+                .map(|e| e.model.api.clone())
+                .unwrap_or_default();
+
+            ProviderInfo {
+                id: provider_id.clone(),
+                name: format_provider_name(&provider_id),
+                api,
+                model_count: model_ids.len(),
+            }
+        })
+        .collect();
+
+    providers.sort_by(|a, b| a.id.to_lowercase().cmp(&b.id.to_lowercase()));
 
     ConfigSnapshot {
         settings,
@@ -153,63 +240,20 @@ pub fn load_config() -> ConfigSnapshot {
     }
 }
 
+/// Format a provider ID into a human-readable name.
+fn format_provider_name(id: &str) -> String {
+    id.chars()
+        .next()
+        .map(|c| c.to_uppercase().to_string())
+        .unwrap_or_default()
+        + &id[1..]
+}
+
 /// Load settings from the agent directory.
 fn load_settings(agent_dir: &Path) -> Option<PiSettings> {
     let settings_path = agent_dir.join("settings.json");
     let content = std::fs::read_to_string(&settings_path).ok()?;
     serde_json::from_str(&content).ok()
-}
-
-/// Load provider and model definitions from models.json.
-fn load_models(agent_dir: &Path) -> (Vec<ProviderInfo>, Vec<ModelInfo>) {
-    let models_path = agent_dir.join("models.json");
-    let content = match std::fs::read_to_string(&models_path) {
-        Ok(c) => c,
-        Err(_) => return (Vec::new(), Vec::new()),
-    };
-
-    #[derive(Deserialize)]
-    struct ModelsFile {
-        #[serde(default)]
-        providers: std::collections::HashMap<String, ProviderConfig>,
-    }
-
-    let models_file: ModelsFile = match serde_json::from_str(&content) {
-        Ok(f) => f,
-        Err(_) => return (Vec::new(), Vec::new()),
-    };
-
-    let mut providers = Vec::new();
-    let mut models = Vec::new();
-
-    for (provider_id, config) in models_file.providers {
-        let provider_info = ProviderInfo {
-            id: provider_id.clone(),
-            name: provider_id
-                .chars()
-                .next()
-                .map(|c| c.to_uppercase().to_string())
-                .unwrap_or_default()
-                + &provider_id[1..],
-            api: config.api.clone().unwrap_or_default(),
-            model_count: config.models.len(),
-        };
-
-        for model in config.models {
-            models.push(ModelInfo {
-                id: model.id,
-                name: model.name,
-                provider: provider_id.clone(),
-                reasoning: model.reasoning,
-                context_window: model.context_window,
-                max_tokens: model.max_tokens,
-            });
-        }
-
-        providers.push(provider_info);
-    }
-
-    (providers, models)
 }
 
 /// Get the home directory path.
@@ -296,7 +340,7 @@ pub fn write_models_json_raw(content: &serde_json::Value) -> Result<(), String> 
 /// Add or update a provider configuration in models.json.
 ///
 /// Takes the provider ID and a JSON object with provider settings.
-/// Merges with existing models list if the provider already exists.
+/// Merges with existing provider entry if it already exists.
 pub fn upsert_provider(
     provider_id: &str,
     provider_config: &serde_json::Value,
@@ -310,7 +354,18 @@ pub fn upsert_provider(
         .and_then(|p| p.as_object_mut())
         .ok_or_else(|| "models.json root must be an object with a 'providers' map".to_string())?;
 
-    providers.insert(provider_id.to_string(), provider_config.clone());
+    // Merge with existing entry to preserve baseUrl, apiKey, etc.
+    if let Some(existing) = providers.get(provider_id).and_then(|v| v.as_object()) {
+        let mut merged = serde_json::Map::from_iter(existing.clone());
+        if let Some(new_obj) = provider_config.as_object() {
+            for (k, v) in new_obj {
+                merged.insert(k.clone(), v.clone());
+            }
+        }
+        providers.insert(provider_id.to_string(), serde_json::Value::Object(merged));
+    } else {
+        providers.insert(provider_id.to_string(), provider_config.clone());
+    }
 
     write_models_json_raw(&root)
 }
@@ -356,77 +411,14 @@ pub fn read_auth_json() -> serde_json::Value {
     }
 }
 
-/// Return default model definitions for known built-in providers.
-///
-/// When a user saves an API key for one of these providers, we automatically
-/// populate `models.json` with these models so the dropdown is not empty.
-pub fn builtin_provider_models(provider_id: &str) -> Option<Vec<serde_json::Value>> {
-    let models = match provider_id {
-        // Crof AI — OpenAI-compatible gateway
-        "crofai" => vec![
-            model_entry("gpt-4o", "GPT-4o"),
-            model_entry("gpt-4o-mini", "GPT-4o Mini"),
-            model_entry("o3-mini", "O3 Mini"),
-            model_entry("claude-sonnet-4-20250514", "Claude Sonnet 4"),
-        ],
-        // OpenCode Go — budget-friendly aggregator
-        "opencode-go" => vec![
-            model_entry("gpt-4o", "GPT-4o"),
-            model_entry("gpt-4o-mini", "GPT-4o Mini"),
-            model_entry("claude-sonnet-4-20250514", "Claude Sonnet 4"),
-        ],
-        // OpenAI
-        "openai" => vec![
-            model_entry("gpt-4o", "GPT-4o"),
-            model_entry("gpt-4o-mini", "GPT-4o Mini"),
-            model_entry("o3-mini", "O3 Mini"),
-        ],
-        // Anthropic
-        "anthropic" => vec![
-            model_entry("claude-sonnet-4-20250514", "Claude Sonnet 4"),
-            model_entry("claude-opus-4-20250514", "Claude Opus 4"),
-        ],
-        // Google (Gemini)
-        "google" => vec![
-            model_entry("gemini-2.5-flash", "Gemini 2.5 Flash"),
-            model_entry("gemini-2.5-pro", "Gemini 2.5 Pro"),
-        ],
-        // Groq
-        "groq" => vec![
-            model_entry("llama-3.3-70b-versatile", "Llama 3.3 70B"),
-            model_entry("llama-3.1-8b-instant", "Llama 3.1 8B"),
-        ],
-        // Together AI
-        "together" => vec![model_entry(
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-            "Llama 3.3 70B",
-        )],
-        // xAI
-        "xai" => vec![
-            model_entry("grok-2-1212", "Grok 2"),
-            model_entry("grok-3", "Grok 3"),
-        ],
-        _ => return None,
-    };
-    Some(models)
-}
-
-/// Create a minimal model entry JSON object.
-fn model_entry(id: &str, name: &str) -> serde_json::Value {
-    serde_json::json!({
-        "id": id,
-        "name": name
-    })
-}
-
 /// Save an API key for a built-in provider in auth.json.
 ///
 /// Creates the file if it doesn't exist. Merges with existing entries.
 /// Uses the standard pi auth format: `{ "provider-id": { "type": "api_key", "key": "..." } }`.
 ///
-/// Additionally, if the provider is a known built-in provider, this function
-/// automatically populates `models.json` with default model definitions so that
-/// the model dropdown in the UI is not empty after saving an API key.
+/// Models are NOT auto-populated here.  The SDK's `ModelRegistry` handles
+/// built-in model discovery, and custom providers should use the "Fetch
+/// from API" button in Settings to populate their models dynamically.
 pub fn save_auth_api_key(provider_id: &str, api_key: &str) -> Result<(), String> {
     let mut root = read_auth_json();
 
@@ -446,15 +438,6 @@ pub fn save_auth_api_key(provider_id: &str, api_key: &str) -> Result<(), String>
     let pretty = serde_json::to_string_pretty(&root)
         .map_err(|e| format!("Failed to serialize auth config: {e}"))?;
     std::fs::write(&path, pretty).map_err(|e| format!("Failed to write auth.json: {e}"))?;
-
-    // Also populate models.json for known built-in providers
-    if let Some(models) = builtin_provider_models(provider_id) {
-        let provider_config = serde_json::json!({
-            "models": models
-        });
-        upsert_provider(provider_id, &provider_config)
-            .map_err(|e| format!("Failed to populate models for {provider_id}: {e}"))?;
-    }
 
     Ok(())
 }
@@ -618,38 +601,9 @@ mod tests {
     }
 
     #[test]
-    fn builtin_models_returns_models_for_known_providers() {
-        for provider_id in [
-            "crofai",
-            "opencode-go",
-            "openai",
-            "anthropic",
-            "google",
-            "groq",
-            "together",
-            "xai",
-        ] {
-            let models = builtin_provider_models(provider_id);
-            assert!(
-                models.is_some(),
-                "Expected models for provider: {provider_id}",
-            );
-            let model_list = models.unwrap();
-            assert!(
-                !model_list.is_empty(),
-                "Models should not be empty for {provider_id}"
-            );
-            // Each model entry should have an id and name
-            for model in &model_list {
-                assert!(model.get("id").is_some(), "Model should have an id");
-                assert!(model.get("name").is_some(), "Model should have a name");
-            }
-        }
-    }
-
-    #[test]
-    fn builtin_models_returns_none_for_unknown_provider() {
-        assert!(builtin_provider_models("unknown-provider").is_none());
-        assert!(builtin_provider_models("").is_none());
+    fn format_provider_name_capitalizes_first_char() {
+        assert_eq!(format_provider_name("openai"), "Openai");
+        assert_eq!(format_provider_name("anthropic"), "Anthropic");
+        assert_eq!(format_provider_name("crofai"), "Crofai");
     }
 }
