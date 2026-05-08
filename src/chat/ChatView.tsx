@@ -49,16 +49,11 @@ export function ChatView({
 		isUserScrolledUp.current = scrollHeight - scrollTop - clientHeight > 100;
 	}, []);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on any content change
 	useEffect(() => {
-		// Re-run when messages change or streaming content updates
-		const _ml = messages.length;
-		const _sc = streamingMessage?.content.length;
-		const _st = streamingMessage?.thinking?.length;
-		void _ml;
-		void _sc;
-		void _st;
-		if (!isUserScrolledUp.current) {
-			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		if (!isUserScrolledUp.current && messagesEndRef.current) {
+			// Use instant scroll for streaming to avoid jitter from queued smooth animations
+			messagesEndRef.current.scrollIntoView({ behavior: "auto" });
 		}
 	}, [messages.length, streamingMessage?.content.length, streamingMessage?.thinking?.length]);
 
@@ -90,11 +85,10 @@ export function ChatView({
 					</div>
 				) : (
 					<div className="pb-4">
-						{allMessages.map((msg, idx) => (
+						{allMessages.map((msg) => (
 							<ChatMessageItem
 								key={msg.id}
 								message={msg}
-								isLatest={idx === allMessages.length - 1}
 							/>
 						))}
 						<div ref={messagesEndRef} />
