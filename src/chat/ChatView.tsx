@@ -49,13 +49,18 @@ export function ChatView({
 		isUserScrolledUp.current = scrollHeight - scrollTop - clientHeight > 100;
 	}, []);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on any content change
+	// Build a stable key from tool call state so scroll fires on tool changes too
+	const toolCallsKey = streamingMessage?.toolCalls
+		?.map((tc) => `${tc.id}:${tc.status}:${tc.partialOutput?.length ?? 0}:${tc.result?.length ?? 0}`)
+		.join("|") ?? "";
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on any content change including tools
 	useEffect(() => {
 		if (!isUserScrolledUp.current && messagesEndRef.current) {
 			// Use instant scroll for streaming to avoid jitter from queued smooth animations
 			messagesEndRef.current.scrollIntoView({ behavior: "auto" });
 		}
-	}, [messages.length, streamingMessage?.content.length, streamingMessage?.thinking?.length]);
+	}, [messages.length, streamingMessage?.content.length, streamingMessage?.thinking?.length, toolCallsKey]);
 
 	const allMessages = streamingMessage ? [...messages, streamingMessage] : messages;
 	const isEmpty = messages.length === 0 && !streamingMessage;

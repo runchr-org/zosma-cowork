@@ -12,6 +12,7 @@
 
 import type { ToolCallInfo } from "@/types";
 import { Loader2, AlertCircle, Check } from "lucide-react";
+import { useState } from "react";
 
 // ─── Main timeline ──────────────────────────────────────────────────
 
@@ -175,12 +176,10 @@ function buildHeader(tc: ToolCallInfo): { header: string; statusLine?: string } 
 function ToolContent({ toolCall }: { toolCall: ToolCallInfo }) {
 	const isRunning = toolCall.status === "running";
 
-	// Running: show partial output
+	// Running: show partial output (already truncated)
 	if (isRunning && toolCall.partialOutput) {
 		return (
-			<pre className="text-[11px] opacity-60 whitespace-pre-wrap">
-				{truncate(toolCall.partialOutput, 800)}
-			</pre>
+			<TruncatedOutput text={toolCall.partialOutput} limit={800} />
 		);
 	}
 
@@ -189,14 +188,14 @@ function ToolContent({ toolCall }: { toolCall: ToolCallInfo }) {
 		return null;
 	}
 
-	// Edit/write with diff
+	// Edit/write with diff — always show (diffs are structured)
 	if ((toolCall.name === "edit" || toolCall.name === "write") && isDiff(toolCall.result)) {
 		return <SplitDiff diffText={toolCall.result} />;
 	}
 
-	// Read result — try to show as code block with line numbers
+	// Read — NEVER show content inline. Just header.
 	if (toolCall.name === "read") {
-		return <CodeBlock content={toolCall.result} />;
+		return null;
 	}
 
 	// Bash error
@@ -208,11 +207,43 @@ function ToolContent({ toolCall }: { toolCall: ToolCallInfo }) {
 		);
 	}
 
-	// Default
+	// Default — truncated with expand
+	return <TruncatedOutput text={toolCall.result} limit={2000} />;
+}
+
+// ─── Truncated output with expand ───────────────────────────────────
+
+function TruncatedOutput({ text, limit }: { text: string; limit: number }) {
+	const [expanded, setExpanded] = useState(false);
+	const needsTruncation = text.length > limit;
+
+	if (!needsTruncation || expanded) {
+		return (
+			<pre className="text-[11px] whitespace-pre-wrap opacity-80">
+				{text}
+			</pre>
+		);
+	}
+
+	const lines = text.split("\n");
+	const truncated = lines.slice(0, 20).join("\n");
+	const hiddenLines = lines.length - 20;
+
 	return (
-		<pre className="text-[11px] whitespace-pre-wrap opacity-80">
-			{truncate(toolCall.result, 3000)}
-		</pre>
+		<div>
+			<pre className="text-[11px] whitespace-pre-wrap opacity-80">
+				{truncated}
+			</pre>
+			<button
+				type="button"
+				onClick={() => setExpanded(true)}
+				className="text-[10px] opacity-50 hover:opacity-90 transition-opacity mt-0.5"
+			>
+				{hiddenLines > 0
+					? `··· ${hiddenLines} more line${hiddenLines !== 1 ? "s" : ""} · Click to expand`
+					: "··· Click to expand"}
+			</button>
+		</div>
 	);
 }
 
@@ -221,19 +252,23 @@ function ToolContent({ toolCall }: { toolCall: ToolCallInfo }) {
 interface DiffLine {
 	oldNum: number | null;
 	newNum: number | null;
-	type: "context" | "add" | "remove" | "header" | "hunk";
+	type: "context" | "add" | "remove" | "header" | "hunk" | "ellipsis";
 	text: string;
 }
 
-function parseUnifiedDiff(diffText: string): DiffLine[][] {
+function parseUnifiedDiff(diffText: string): { hunks: DiffLine[][]; isNewFile: boolean } {
 	const lines = diffText.split("\n");
 	const hunks: DiffLine[][] = [];
 	let currentHunk: DiffLine[] = [];
 	let oldLine = 0;
 	let newLine = 0;
+	let isNewFile = false;
 
 	for (const line of lines) {
 		if (line.startsWith("+++ ") || line.startsWith("--- ")) {
+			if (line.startsWith("--- ") && line.includes("/dev/null")) {
+				isNewFile = true;
+			}
 			if (currentHunk.length > 0) {
 				hunks.push(currentHunk);
 				currentHunk = [];
@@ -273,11 +308,43 @@ function parseUnifiedDiff(diffText: string): DiffLine[][] {
 	}
 
 	if (currentHunk.length > 0) hunks.push(currentHunk);
-	return hunks;
+	return { hunks: hunks.map(collapseContext), isNewFile };
+}
+
+/** Collapse runs of 4+ context lines into ellipsis */
+function collapseContext(hunk: DiffLine[]): DiffLine[] {
+	const result: DiffLine[] = [];
+	let contextRun: DiffLine[] = [];
+
+	for (const line of hunk) {
+		if (line.type === "context") {
+			contextRun.push(line);
+		} else {
+			if (contextRun.length >= 4) {
+				result.push(contextRun[0]);
+				result.push({ oldNum: null, newNum: null, type: "ellipsis", text: `··· ${contextRun.length - 2} lines ···` });
+				result.push(contextRun[contextRun.length - 1]);
+			} else {
+				result.push(...contextRun);
+			}
+			contextRun = [];
+			result.push(line);
+		}
+	}
+
+	if (contextRun.length >= 4) {
+		result.push(contextRun[0]);
+		result.push({ oldNum: null, newNum: null, type: "ellipsis", text: `··· ${contextRun.length - 2} lines ···` });
+		result.push(contextRun[contextRun.length - 1]);
+	} else {
+		result.push(...contextRun);
+	}
+
+	return result;
 }
 
 function SplitDiff({ diffText }: { diffText: string }) {
-	const hunks = parseUnifiedDiff(diffText);
+	const { hunks, isNewFile } = parseUnifiedDiff(diffText);
 	if (hunks.length === 0) return null;
 
 	return (
@@ -289,15 +356,22 @@ function SplitDiff({ diffText }: { diffText: string }) {
 						<div className="text-[10px] opacity-50 py-0.5">{hunk[0].text}</div>
 					)}
 					{/* Side-by-side rows */}
-					<div className="grid grid-cols-2 gap-px">
-						{/* Old column header */}
-						<div className="text-[10px] opacity-40 px-1 border-b border-border/30">old</div>
-						<div className="text-[10px] opacity-40 px-1 border-b border-border/30">new</div>
+					<div className="grid" style={{ gridTemplateColumns: isNewFile ? "1fr" : "1fr 1fr" }}>
+						{/* Column headers */}
+						{!isNewFile && (
+							<>
+								<div className="text-[10px] opacity-40 px-1 border-b border-border/30">old</div>
+								<div className="text-[10px] opacity-40 px-1 border-b border-border/30">new</div>
+							</>
+						)}
+						{isNewFile && (
+							<div className="text-[10px] opacity-40 px-1 border-b border-border/30">new file</div>
+						)}
 						{/* Lines */}
 						{hunk
 							.filter((l) => l.type !== "header" && l.type !== "hunk")
 							.map((line) => (
-								<DiffRow key={`${line.oldNum ?? 'n'}-${line.newNum ?? 'n'}-${line.text.slice(0, 20)}`} line={line} />
+								<DiffRow key={`${line.oldNum ?? 'n'}-${line.newNum ?? 'n'}-${line.text.slice(0, 30)}`} line={line} isNewFile={isNewFile} />
 							))}
 					</div>
 				</div>
@@ -306,12 +380,21 @@ function SplitDiff({ diffText }: { diffText: string }) {
 	);
 }
 
-function DiffRow({ line }: { line: DiffLine }) {
+function DiffRow({ line, isNewFile }: { line: DiffLine; isNewFile: boolean }) {
 	const removeBg = "hsl(var(--diff-removed-bg))";
 	const removeFg = "hsl(var(--diff-removed-fg))";
 	const addBg = "hsl(var(--diff-added-bg))";
 	const addFg = "hsl(var(--diff-added-fg))";
 	const contextFg = "hsl(var(--diff-context-fg))";
+
+	if (line.type === "ellipsis") {
+		return (
+			<>
+				{!isNewFile && <div className="px-1 py-0.5 opacity-30 text-center">{line.text}</div>}
+				<div className={`px-1 py-0.5 opacity-30 text-center ${isNewFile ? "col-span-2" : ""}`}>{line.text}</div>
+			</>
+		);
+	}
 
 	if (line.type === "remove") {
 		return (
@@ -320,7 +403,7 @@ function DiffRow({ line }: { line: DiffLine }) {
 					<span className="opacity-40 w-6 text-right flex-shrink-0">{line.oldNum}</span>
 					<span className="truncate">{line.text || " "}</span>
 				</div>
-				<div className="px-1" style={{ background: removeBg }} />
+				{!isNewFile && <div className="px-1" style={{ background: removeBg }} />}
 			</>
 		);
 	}
@@ -328,8 +411,8 @@ function DiffRow({ line }: { line: DiffLine }) {
 	if (line.type === "add") {
 		return (
 			<>
-				<div className="px-1" style={{ background: addBg }} />
-				<div className="px-1 flex gap-1" style={{ background: addBg, color: addFg }}>
+				{!isNewFile && <div className="px-1" style={{ background: addBg }} />}
+				<div className={`px-1 flex gap-1 ${isNewFile ? "col-span-2" : ""}`} style={{ background: addBg, color: addFg }}>
 					<span className="opacity-40 w-6 text-right flex-shrink-0">{line.newNum}</span>
 					<span className="truncate">{line.text || " "}</span>
 				</div>
@@ -340,37 +423,17 @@ function DiffRow({ line }: { line: DiffLine }) {
 	// Context
 	return (
 		<>
-			<div className="px-1 flex gap-1" style={{ color: contextFg }}>
-				<span className="opacity-40 w-6 text-right flex-shrink-0">{line.oldNum}</span>
-				<span className="truncate">{line.text || " "}</span>
-			</div>
-			<div className="px-1 flex gap-1" style={{ color: contextFg }}>
+			{!isNewFile && (
+				<div className="px-1 flex gap-1" style={{ color: contextFg }}>
+					<span className="opacity-40 w-6 text-right flex-shrink-0">{line.oldNum}</span>
+					<span className="truncate">{line.text || " "}</span>
+				</div>
+			)}
+			<div className={`px-1 flex gap-1 ${isNewFile ? "col-span-2" : ""}`} style={{ color: contextFg }}>
 				<span className="opacity-40 w-6 text-right flex-shrink-0">{line.newNum}</span>
 				<span className="truncate">{line.text || " "}</span>
 			</div>
 		</>
-	);
-}
-
-// ─── Code block with line numbers ───────────────────────────────────
-
-function CodeBlock({ content }: { content: string }) {
-	const lines = content.split("\n");
-	const startNum = 1;
-
-	return (
-		<div className="mt-1 overflow-x-auto">
-			<div className="min-w-[300px]">
-				{lines.map((line, idx) => (
-					<div key={`L${startNum + idx}`} className="flex gap-2 text-[11px]">
-						<span className="opacity-30 w-8 text-right flex-shrink-0 select-none">
-							{startNum + idx}
-						</span>
-						<span className="whitespace-pre opacity-80">{line || " "}</span>
-					</div>
-				))}
-			</div>
-		</div>
 	);
 }
 
