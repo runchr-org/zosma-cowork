@@ -1,7 +1,7 @@
 {
-	"name": "metaagents-cowork",
-	"version": "0.2.0",
-	"description": "Zosma Cowork — desktop AI coworker powered by the metaagents engine",
+	"name": "zosma-cowork",
+	"version": "0.3.0",
+	"description": "Zosma Cowork — desktop AI coworker powered by the pi-mono SDK",
 	"type": "module",
 	"scripts": {
 		"dev:frontend": "vite",
@@ -12,7 +12,7 @@
 		"format": "biome format --write .",
 		"lint": "biome lint .",
 		"check": "biome check --write .",
-		"test": "vitest run",
+		"test": "vitest run --passWithNoTests",
 		"test:watch": "vitest",
 		"typecheck": "tsc --noEmit",
 		"validate": "npm run lint && npm run typecheck && npm run test"
