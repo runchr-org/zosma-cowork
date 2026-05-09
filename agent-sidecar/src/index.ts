@@ -842,7 +842,7 @@ async function main() {
 			log("Error: %s", message);
 			send({
 				type: "error",
-				id: "unknown",
+				id: "id" in cmd ? cmd.id : "unknown",
 				message,
 			});
 			if (activePromptId) {
