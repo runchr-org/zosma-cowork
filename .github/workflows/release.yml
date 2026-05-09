@@ -77,6 +77,13 @@ jobs:
             console.log('Cargo.toml updated');
           "
 
+      - name: Build agent-sidecar
+        shell: bash
+        run: |
+          cd agent-sidecar
+          npm ci
+          npm run build
+
       - name: Install frontend dependencies
         run: npm ci
 
