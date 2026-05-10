@@ -27,7 +27,20 @@ code = code.replace(
 );
 writeFileSync(bundlePath, code, "utf-8");
 
-// Copy bundle + pi-coding-agent package.json into src-tauri/ for Tauri resource bundling
+// Inline pi-coding-agent's package.json into the bundle to avoid
+// needing the file at runtime (the bundled code reads its own
+// package.json for name, version, piConfig.configDir, etc.).
+console.log("[prebuild] Inlining pi-coding-agent package.json...");
+const piPkgPath = join(sidecarDir, "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
+const piPkg = JSON.parse(readFileSync(piPkgPath, "utf-8"));
+const inlinedPkg = JSON.stringify({ name: piPkg.name, version: piPkg.version, piConfig: piPkg.piConfig });
+code = code.replace(
+	'var pkg = JSON.parse((0, import_fs.readFileSync)(getPackageJsonPath(), "utf-8"));',
+	`var pkg = ${inlinedPkg};`,
+);
+writeFileSync(bundlePath, code, "utf-8");
+
+// Copy bundled file into src-tauri/ for Tauri resource bundling
 const targetDir = join(root, "src-tauri", "agent-sidecar");
 mkdirSync(targetDir, { recursive: true });
 // Clean stale files from previous builds
@@ -37,13 +50,5 @@ for (const f of ["index.cjs", "index.d.ts", "index.js", "index.js.map", "index.d
 }
 console.log("[prebuild] Copying bundle...");
 cpSync(bundlePath, join(targetDir, "index.cjs"));
-
-// Copy pi-coding-agent's package.json alongside the bundle.
-// The bundled pi-coding-agent reads its own package.json at runtime
-// (for name, version, piConfig.configDir, etc.). Without it, the
-// AppImage crashes with ENOENT because only index.cjs is bundled.
-console.log("[prebuild] Copying pi-coding-agent package.json...");
-const piPkgPath = join(sidecarDir, "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
-cpSync(piPkgPath, join(targetDir, "package.json"));
 
 console.log("[prebuild] Done (%.1f MB)", code.length / 1024 / 1024);
