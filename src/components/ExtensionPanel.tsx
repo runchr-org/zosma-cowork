@@ -9,13 +9,7 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useExtensions } from "@/hooks/useExtensions";
 import type { ZemExtension } from "@/types";
-import {
-	AlertCircle,
-	Loader2,
-	Package,
-	RefreshCw,
-	Trash2,
-} from "lucide-react";
+import { AlertCircle, Loader2, Package, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 interface ExtensionPanelProps {
@@ -23,18 +17,29 @@ interface ExtensionPanelProps {
 }
 
 export function ExtensionPanel({ onReload }: ExtensionPanelProps) {
-	const { extensions, loading, error, refresh, install, uninstall, setEnabled, searchDiscover, installing } =
-		useExtensions();
+	const {
+		extensions,
+		loading,
+		error,
+		refresh,
+		install,
+		uninstall,
+		setEnabled,
+		searchDiscover,
+		installing,
+	} = useExtensions();
 	const [selectedExt, setSelectedExt] = useState<string | null>(null);
 
 	// Discover / search state
 	const [searchQuery, setSearchQuery] = useState("");
-	const [searchResults, setSearchResults] = useState<Array<{
-		name: string;
-		description: string;
-		version: string;
-		score: number;
-	}>>([]);
+	const [searchResults, setSearchResults] = useState<
+		Array<{
+			name: string;
+			description: string;
+			version: string;
+			score: number;
+		}>
+	>([]);
 	const [searching, setSearching] = useState(false);
 
 	async function handleSearch() {
@@ -132,8 +137,6 @@ export function ExtensionPanel({ onReload }: ExtensionPanelProps) {
 					</div>
 				)}
 
-
-
 				{/* ── Discover section ── */}
 				<div className="px-1 py-3 border-t" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
 					<div className="text-xs font-semibold text-sidebar-foreground/70 uppercase tracking-wider mb-2">
@@ -141,140 +144,143 @@ export function ExtensionPanel({ onReload }: ExtensionPanelProps) {
 					</div>
 
 					<div className="space-y-2">
-							{/* Search input */}
-							<div className="flex gap-1.5">
-								<input
-									type="text"
-									value={searchQuery}
-									onChange={(e) => setSearchQuery(e.target.value)}
-									onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-									placeholder="Search pi extensions..."
-									className="flex-1 text-xs px-2 py-1.5 rounded-lg border bg-transparent outline-none transition-colors"
-									style={{
-										borderColor: "hsl(var(--border))",
-										color: "hsl(var(--foreground))",
-									}}
-								/>
+						{/* Search input */}
+						<div className="flex gap-1.5">
+							<input
+								type="text"
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+								onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+								placeholder="Search pi extensions..."
+								className="flex-1 text-xs px-2 py-1.5 rounded-lg border bg-transparent outline-none transition-colors"
+								style={{
+									borderColor: "hsl(var(--border))",
+									color: "hsl(var(--foreground))",
+								}}
+							/>
+							<button
+								type="button"
+								onClick={handleSearch}
+								disabled={searching || !searchQuery.trim()}
+								className="text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+								style={{
+									background: "hsl(var(--primary))",
+									color: "hsl(var(--primary-foreground))",
+								}}
+							>
+								{searching ? <Loader2 className="w-3 h-3 animate-spin" /> : "Search"}
+							</button>
+						</div>
+
+						{/* Quick search tags */}
+						<div className="flex flex-wrap gap-1">
+							{[
+								{ label: "pi extensions", query: "keywords:pi" },
+								{ label: "@zosmaai", query: "scope:@zosmaai" },
+								{ label: "pi tools", query: "pi agent extension" },
+							].map((tag) => (
 								<button
+									key={tag.label}
 									type="button"
-									onClick={handleSearch}
-									disabled={searching || !searchQuery.trim()}
-									className="text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+									onClick={() => {
+										setSearchQuery(tag.query);
+										handleSearch();
+									}}
+									className="text-[9px] px-1.5 py-0.5 rounded transition-colors"
 									style={{
-										background: "hsl(var(--primary))",
-										color: "hsl(var(--primary-foreground))",
+										background: "hsl(var(--muted))",
+										color: "hsl(var(--muted-foreground))",
 									}}
 								>
-									{searching ? (
-										<Loader2 className="w-3 h-3 animate-spin" />
-									) : (
-										"Search"
-									)}
+									{tag.label}
 								</button>
-							</div>
+							))}
+						</div>
 
-							{/* Quick search tags */}
-							<div className="flex flex-wrap gap-1">
-								{[{ label: "pi extensions", query: "keywords:pi" }, { label: "@zosmaai", query: "scope:@zosmaai" }, { label: "pi tools", query: "pi agent extension" }].map(
-									(tag) => (
-										<button
-											key={tag.label}
-											type="button"
-											onClick={() => {
-												setSearchQuery(tag.query);
-												handleSearch();
-											}}
-											className="text-[9px] px-1.5 py-0.5 rounded transition-colors"
+						{/* Search results */}
+						{searchResults.length > 0 && (
+							<div className="space-y-1 mt-2">
+								<p className="text-[10px] text-sidebar-foreground/50">
+									{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
+								</p>
+								{searchResults.map((pkg) => {
+									const isInstalled = extensions.some(
+										(e) => e.id === pkg.name || e.source.value === pkg.name,
+									);
+									return (
+										<div
+											key={pkg.name}
+											className="rounded-lg border p-2"
 											style={{
-												background: "hsl(var(--muted))",
-												color: "hsl(var(--muted-foreground))",
+												borderColor: "hsl(var(--border))",
+												background: "hsl(var(--card))",
 											}}
 										>
-											{tag.label}
-										</button>
-									),
-								)}
-							</div>
-
-							{/* Search results */}
-							{searchResults.length > 0 && (
-								<div className="space-y-1 mt-2">
-									<p className="text-[10px] text-sidebar-foreground/50">
-										{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
-									</p>
-									{searchResults.map((pkg) => {
-										const isInstalled = extensions.some((e) => e.id === pkg.name || e.source.value === pkg.name);
-										return (
-											<div
-												key={pkg.name}
-												className="rounded-lg border p-2"
-												style={{
-													borderColor: "hsl(var(--border))",
-													background: "hsl(var(--card))",
-												}}
-											>
-												<div className="flex items-center justify-between gap-2">
-													<div className="flex-1 min-w-0">
-														<div className="flex items-center gap-1.5">
+											<div className="flex items-center justify-between gap-2">
+												<div className="flex-1 min-w-0">
+													<div className="flex items-center gap-1.5">
+														<span
+															className="text-xs font-medium truncate"
+															style={{ color: "hsl(var(--foreground))" }}
+														>
+															{pkg.name}
+														</span>
+														<span className="text-[9px] text-muted-foreground/50 shrink-0">
+															v{pkg.version}
+														</span>
+														{pkg.score > 50 && (
 															<span
-																className="text-xs font-medium truncate"
-																style={{ color: "hsl(var(--foreground))" }}
+																className="text-[9px] shrink-0"
+																style={{ color: "hsl(var(--success))" }}
 															>
-																{pkg.name}
+																★ {pkg.score}
 															</span>
-															<span className="text-[9px] text-muted-foreground/50 shrink-0">
-																v{pkg.version}
-															</span>
-															{pkg.score > 50 && (
-																<span className="text-[9px] shrink-0" style={{ color: "hsl(var(--success))" }}>
-																	★ {pkg.score}
-																</span>
-															)}
-														</div>
-														{pkg.description && (
-															<p className="text-[10px] text-muted-foreground truncate mt-0.5">
-																{pkg.description}
-															</p>
 														)}
 													</div>
-													<button
-														type="button"
-														onClick={() => install(pkg.name)}
-														disabled={isInstalled || installing === pkg.name}
-														className="text-[10px] px-2 py-1 rounded shrink-0 transition-colors disabled:opacity-30"
-														style={{
-															background: isInstalled
-																? "hsl(var(--muted))"
-																: installing === pkg.name
-																	? "hsl(var(--muted))"
-																	: "hsl(var(--primary))",
-															color: isInstalled
-																? "hsl(var(--muted-foreground))"
-																: "hsl(var(--primary-foreground))",
-														}}
-													>
-														{installing === pkg.name ? (
-															<Loader2 className="w-3 h-3 animate-spin" />
-														) : isInstalled ? (
-															"Installed"
-														) : (
-															"Install"
-														)}
-													</button>
+													{pkg.description && (
+														<p className="text-[10px] text-muted-foreground truncate mt-0.5">
+															{pkg.description}
+														</p>
+													)}
 												</div>
+												<button
+													type="button"
+													onClick={() => install(pkg.name)}
+													disabled={isInstalled || installing === pkg.name}
+													className="text-[10px] px-2 py-1 rounded shrink-0 transition-colors disabled:opacity-30"
+													style={{
+														background: isInstalled
+															? "hsl(var(--muted))"
+															: installing === pkg.name
+																? "hsl(var(--muted))"
+																: "hsl(var(--primary))",
+														color: isInstalled
+															? "hsl(var(--muted-foreground))"
+															: "hsl(var(--primary-foreground))",
+													}}
+												>
+													{installing === pkg.name ? (
+														<Loader2 className="w-3 h-3 animate-spin" />
+													) : isInstalled ? (
+														"Installed"
+													) : (
+														"Install"
+													)}
+												</button>
 											</div>
-										);
-									})}
-								</div>
-							)}
+										</div>
+									);
+								})}
+							</div>
+						)}
 
-							{searchResults.length === 0 && searchQuery && !searching && (
-								<p className="text-[10px] text-sidebar-foreground/40 text-center py-4">
-									No results found for "{searchQuery}" try a different search
-								</p>
-							)}
-						</div>
+						{searchResults.length === 0 && searchQuery && !searching && (
+							<p className="text-[10px] text-sidebar-foreground/40 text-center py-4">
+								No results found for "{searchQuery}" try a different search
+							</p>
+						)}
 					</div>
+				</div>
 			</ScrollArea>
 		</>
 	);
@@ -304,12 +310,8 @@ function ExtensionCard({
 			<div
 				className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
 				style={{
-					background: ext.enabled
-						? "hsl(var(--primary) / 0.15)"
-						: "hsl(var(--muted))",
-					color: ext.enabled
-						? "hsl(var(--primary))"
-						: "hsl(var(--muted-foreground))",
+					background: ext.enabled ? "hsl(var(--primary) / 0.15)" : "hsl(var(--muted))",
+					color: ext.enabled ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
 				}}
 			>
 				{ext.icon || ext.name.charAt(0).toUpperCase()}
@@ -333,13 +335,14 @@ function ExtensionCard({
 			<label
 				className="relative inline-flex items-center shrink-0 cursor-pointer"
 				onClick={(e) => e.stopPropagation()}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" || e.key === " ") {
+						e.stopPropagation();
+						onToggle();
+					}
+				}}
 			>
-				<input
-					type="checkbox"
-					checked={ext.enabled}
-					onChange={onToggle}
-					className="sr-only peer"
-				/>
+				<input type="checkbox" checked={ext.enabled} onChange={onToggle} className="sr-only peer" />
 				<div
 					className="w-7 h-4 rounded-full peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:rounded-full after:h-3 after:w-3 after:transition-all"
 					style={{
@@ -402,7 +405,10 @@ function ExtensionDetail({
 					{ext.icon || ext.name.charAt(0).toUpperCase()}
 				</div>
 				<div className="flex-1 min-w-0">
-					<h3 className="text-sm font-semibold truncate" style={{ color: "hsl(var(--foreground))" }}>
+					<h3
+						className="text-sm font-semibold truncate"
+						style={{ color: "hsl(var(--foreground))" }}
+					>
 						{ext.name}
 					</h3>
 					<p className="text-[10px] text-muted-foreground">
@@ -523,7 +529,10 @@ function ChevronLeft({ className }: { className?: string }) {
 			strokeLinecap="round"
 			strokeLinejoin="round"
 			className={className}
+			aria-label="Back"
+			role="img"
 		>
+			<title>Back</title>
 			<path d="M15 18l-6-6 6-6" />
 		</svg>
 	);

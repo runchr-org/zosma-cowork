@@ -51,7 +51,10 @@ export function ModelSelector({ models, currentModelId, onSelect }: ModelSelecto
 								model.id === currentModelId ? "text-primary font-medium" : "text-foreground"
 							}`}
 						>
-							<span className="truncate">{model.name} <span className="text-muted-foreground">({model.provider.split("-")[0]})</span></span>
+							<span className="truncate">
+								{model.name}{" "}
+								<span className="text-muted-foreground">({model.provider.split("-")[0]})</span>
+							</span>
 							{model.id === currentModelId && <span className="text-primary">✓</span>}
 						</button>
 					))}

@@ -42,7 +42,8 @@ export function HomeView({ onComplete }: OnboardingProps) {
 					<div
 						className="w-20 h-20 rounded-2xl flex items-center justify-center"
 						style={{
-							background: "linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--primary) / 0.05))",
+							background:
+								"linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--primary) / 0.05))",
 							boxShadow: "0 0 40px hsl(var(--primary) / 0.1)",
 						}}
 					>
@@ -53,7 +54,10 @@ export function HomeView({ onComplete }: OnboardingProps) {
 				</div>
 
 				{/* Tagline */}
-				<h1 className="text-3xl font-bold text-center mb-2" style={{ color: "hsl(var(--foreground))" }}>
+				<h1
+					className="text-3xl font-bold text-center mb-2"
+					style={{ color: "hsl(var(--foreground))" }}
+				>
 					Zosma Cowork
 				</h1>
 				<p className="text-base text-center mb-8" style={{ color: "hsl(var(--muted-foreground))" }}>
@@ -136,7 +140,11 @@ export function HomeView({ onComplete }: OnboardingProps) {
 						}
 					}}
 				/>
-				{error && <p className="text-xs" style={{ color: "hsl(var(--destructive))" }}>{error}</p>}
+				{error && (
+					<p className="text-xs" style={{ color: "hsl(var(--destructive))" }}>
+						{error}
+					</p>
+				)}
 
 				<button
 					type="button"

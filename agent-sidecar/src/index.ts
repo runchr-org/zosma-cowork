@@ -15,19 +15,11 @@
 import {
 	existsSync,
 	mkdirSync,
-	readdirSync,
 	readFileSync,
+	readdirSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
-import {
-	discoverExtensions,
-	installExtension,
-	uninstallExtension,
-	setExtensionEnabled,
-	setExtensionConfig,
-	searchNpmRegistry,
-} from "./extension-manager.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -39,6 +31,14 @@ import {
 	SettingsManager,
 	createAgentSession,
 } from "@earendil-works/pi-coding-agent";
+import {
+	discoverExtensions,
+	installExtension,
+	searchNpmRegistry,
+	setExtensionConfig,
+	setExtensionEnabled,
+	uninstallExtension,
+} from "./extension-manager.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -429,7 +429,10 @@ function deleteSessionFile(zosmaDir: string, sessionFile: string): boolean {
  * Convert our saved ChatMessage format to pi-mono AgentMessage format
  * and restore them into the active session so the agent has context.
  */
-function restoreSessionContext(session: Awaited<ReturnType<typeof createAgentSession>>["session"], messages: unknown[]): void {
+function restoreSessionContext(
+	session: Awaited<ReturnType<typeof createAgentSession>>["session"],
+	messages: unknown[],
+): void {
 	const piMessages: unknown[] = [];
 
 	for (const raw of messages) {
@@ -720,11 +723,13 @@ async function main() {
 					const found = modelRegistry?.find(cmd.provider, cmd.model);
 					if (found) {
 						log("set_model: found %s/%s (id=%s)", cmd.provider, cmd.model, found.id);
-						await session.setModel(
-							found as Parameters<typeof session.setModel>[0],
-						);
+						await session.setModel(found as Parameters<typeof session.setModel>[0]);
 						const currentModel = session.model;
-						log("set_model: after setModel, session.model = %s/%s", currentModel?.provider, currentModel?.id);
+						log(
+							"set_model: after setModel, session.model = %s/%s",
+							currentModel?.provider,
+							currentModel?.id,
+						);
 						send({ type: "result", id: cmd.id, data: { success: true } });
 					} else {
 						log("set_model: NOT FOUND %s/%s", cmd.provider, cmd.model);

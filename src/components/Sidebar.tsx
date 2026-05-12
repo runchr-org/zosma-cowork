@@ -2,12 +2,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
-import { Check, Clock, Info, Key, MessageSquare, Package, Palette, Plus, Settings, Trash2 } from "lucide-react";
-import { ExtensionPanel } from "./ExtensionPanel";
 import { THEMES, applyTheme, getSavedTheme } from "@/lib/themes";
 import type { Theme } from "@/lib/themes";
+import {
+	Check,
+	Clock,
+	Info,
+	Key,
+	MessageSquare,
+	Package,
+	Palette,
+	Plus,
+	Settings,
+	Trash2,
+} from "lucide-react";
+import { ExtensionPanel } from "./ExtensionPanel";
 
 interface Session {
 	id: string;
@@ -214,14 +225,15 @@ function SettingsPanel({ onShowKeyEntry }: { onShowKeyEntry?: () => void }) {
 					<div>
 						<div className="flex items-center gap-1.5 mb-2">
 							<Key className="w-3.5 h-3.5 text-sidebar-foreground/50" />
-							<span className="text-xs font-medium text-sidebar-foreground/70">
-								Authentication
-							</span>
+							<span className="text-xs font-medium text-sidebar-foreground/70">Authentication</span>
 						</div>
-						<div className="rounded-lg border p-2.5" style={{
-							borderColor: "hsl(var(--sidebar-border))",
-							background: "hsl(var(--sidebar-background) / 0.5)",
-						}}>
+						<div
+							className="rounded-lg border p-2.5"
+							style={{
+								borderColor: "hsl(var(--sidebar-border))",
+								background: "hsl(var(--sidebar-background) / 0.5)",
+							}}
+						>
 							<p className="text-[10px] text-sidebar-foreground/50 mb-2">
 								API keys are required to connect to LLM providers.
 							</p>
@@ -243,9 +255,7 @@ function SettingsPanel({ onShowKeyEntry }: { onShowKeyEntry?: () => void }) {
 					<div>
 						<div className="flex items-center gap-1.5 mb-2">
 							<Palette className="w-3.5 h-3.5 text-sidebar-foreground/50" />
-							<span className="text-xs font-medium text-sidebar-foreground/70">
-								Theme
-							</span>
+							<span className="text-xs font-medium text-sidebar-foreground/70">Theme</span>
 						</div>
 						<div className="space-y-1.5">
 							{THEMES.map((theme) => {
@@ -288,7 +298,10 @@ function SettingsPanel({ onShowKeyEntry }: { onShowKeyEntry?: () => void }) {
 													{theme.type}
 												</span>
 												{isActive && (
-													<Check className="w-3 h-3 ml-auto shrink-0" style={{ color: "hsl(var(--primary))" }} />
+													<Check
+														className="w-3 h-3 ml-auto shrink-0"
+														style={{ color: "hsl(var(--primary))" }}
+													/>
 												)}
 											</div>
 											<p className="text-[10px] text-sidebar-foreground/50 truncate mt-0.5">
@@ -305,36 +318,40 @@ function SettingsPanel({ onShowKeyEntry }: { onShowKeyEntry?: () => void }) {
 					<div>
 						<div className="flex items-center gap-1.5 mb-2">
 							<Info className="w-3.5 h-3.5 text-sidebar-foreground/50" />
-							<span className="text-xs font-medium text-sidebar-foreground/70">
-								About
-							</span>
+							<span className="text-xs font-medium text-sidebar-foreground/70">About</span>
 						</div>
-						<div className="rounded-lg border p-2.5" style={{
-							borderColor: "hsl(var(--sidebar-border))",
-							background: "hsl(var(--sidebar-background) / 0.5)",
-						}}>
-						<div className="flex items-center gap-2 mb-1">
-							<div
-								className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold"
-								style={{
-									background: "hsl(var(--primary) / 0.15)",
-									color: "hsl(var(--primary))",
-								}}
-							>
-								Z
-							</div>
-							<div>
-								<div className="text-xs font-medium" style={{ color: "hsl(var(--sidebar-foreground))" }}>
-									Zosma Cowork
+						<div
+							className="rounded-lg border p-2.5"
+							style={{
+								borderColor: "hsl(var(--sidebar-border))",
+								background: "hsl(var(--sidebar-background) / 0.5)",
+							}}
+						>
+							<div className="flex items-center gap-2 mb-1">
+								<div
+									className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold"
+									style={{
+										background: "hsl(var(--primary) / 0.15)",
+										color: "hsl(var(--primary))",
+									}}
+								>
+									Z
 								</div>
-								<div className="text-[10px] text-sidebar-foreground/50">
-									{appVersion ? `v${appVersion}` : "..."} · Built with pi-mono
+								<div>
+									<div
+										className="text-xs font-medium"
+										style={{ color: "hsl(var(--sidebar-foreground))" }}
+									>
+										Zosma Cowork
+									</div>
+									<div className="text-[10px] text-sidebar-foreground/50">
+										{appVersion ? `v${appVersion}` : "..."} · Built with pi-mono
+									</div>
 								</div>
 							</div>
-						</div>
-						<p className="text-[10px] text-sidebar-foreground/40 mt-1">
-							AI-powered coding assistant by Zosma AI
-						</p>
+							<p className="text-[10px] text-sidebar-foreground/40 mt-1">
+								AI-powered coding assistant by Zosma AI
+							</p>
 						</div>
 					</div>
 				</div>

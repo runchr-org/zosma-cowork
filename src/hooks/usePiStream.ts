@@ -197,7 +197,7 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 		case "TOOL_CALL_UPDATE": {
 			// Update tool calls in streamingMessage
 			let sm = state.streamingMessage;
-			if (sm && sm.toolCalls) {
+			if (sm?.toolCalls) {
 				sm = {
 					...sm,
 					toolCalls: sm.toolCalls.map((tc) =>
@@ -237,13 +237,11 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 
 		case "TOOL_PARTIAL_OUTPUT": {
 			let sm = state.streamingMessage;
-			if (sm && sm.toolCalls) {
+			if (sm?.toolCalls) {
 				sm = {
 					...sm,
 					toolCalls: sm.toolCalls.map((tc) =>
-						tc.id === action.id
-							? { ...tc, partialOutput: action.partialOutput }
-							: tc,
+						tc.id === action.id ? { ...tc, partialOutput: action.partialOutput } : tc,
 					),
 				};
 			}

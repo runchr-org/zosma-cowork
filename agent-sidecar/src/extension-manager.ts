@@ -16,15 +16,14 @@ import { execSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
-	readdirSync,
 	readFileSync,
-	writeFileSync,
-	unlinkSync,
+	readdirSync,
 	rmSync,
 	statSync,
+	writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join, basename, resolve, isAbsolute } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -175,7 +174,9 @@ export function discoverExtensions(zosmaDir: string): ZemExtension[] {
 			const meta = readExtensionMeta(fullPath);
 			const stat = statSync(fullPath);
 			const isFile = stat.isFile() && entry.endsWith(".ts");
-			const isDir = stat.isDirectory() && (existsSync(join(fullPath, "index.ts")) || existsSync(join(fullPath, "manifest.json")));
+			const isDir =
+				stat.isDirectory() &&
+				(existsSync(join(fullPath, "index.ts")) || existsSync(join(fullPath, "manifest.json")));
 			if (!isFile && !isDir) continue;
 
 			seen.add(entry);
@@ -315,11 +316,7 @@ function detectRuntime(installPath: string): "pi" | "dhara" | "native" {
 
 // ─── Install ─────────────────────────────────────────────────────────
 
-export function installExtension(
-	zosmaDir: string,
-	source: string,
-	ref?: string,
-): ZemExtension {
+export function installExtension(zosmaDir: string, source: string, ref?: string): ZemExtension {
 	const parsed = parseSource(source, ref);
 	const extDir = extensionsDir(zosmaDir);
 	ensureDir(extDir);
@@ -336,16 +333,12 @@ export function installExtension(
 	}
 }
 
-function installFromNpm(
-	zosmaDir: string,
-	extDir: string,
-	source: ExtensionSource,
-): ZemExtension {
+function installFromNpm(zosmaDir: string, extDir: string, source: ExtensionSource): ZemExtension {
 	const pkgName = source.value;
 	// Flatten scoped package names: @zosmaai/pi-llm-wiki → zosmaai-pi-llm-wiki
 	const safeName = pkgName
-		.replace(/^@/, "")           // Remove leading @
-		.replace(/\//g, "-")         // Replace / with -
+		.replace(/^@/, "") // Remove leading @
+		.replace(/\//g, "-") // Replace / with -
 		.replace(/[^a-z0-9._-]/gi, "_");
 	const targetDir = join(extDir, safeName);
 
@@ -380,7 +373,11 @@ function installFromNpm(
 			const stderr = (npmErr as { stderr?: Buffer })?.stderr?.toString() || "";
 			const msg = (npmErr as Error)?.message || "";
 			// Extract npm's error message which is usually cleaner
-			const npmMsg = stderr.split("\n").filter(l => l.startsWith("npm error")).join("; ") || msg;
+			const npmMsg =
+				stderr
+					.split("\n")
+					.filter((l) => l.startsWith("npm error"))
+					.join("; ") || msg;
 			throw new Error(`npm install failed: ${npmMsg}`);
 		}
 		// Find the tarball
@@ -412,7 +409,11 @@ function installFromNpm(
 					// Rename works for both files and directories on same filesystem
 					execSync(`mv "${src}" "${dst}"`, { stdio: "pipe" });
 				} catch (moveErr) {
-					log("Failed to move %s: %s", item, moveErr instanceof Error ? moveErr.message : String(moveErr));
+					log(
+						"Failed to move %s: %s",
+						item,
+						moveErr instanceof Error ? moveErr.message : String(moveErr),
+					);
 					// If rename fails (cross-device), copy recursively
 					copyRecursiveSync(src, dst);
 				}
@@ -451,11 +452,7 @@ function installFromNpm(
 	return buildExtensionEntry(zosmaDir, safeName, targetDir, registry);
 }
 
-function installFromGit(
-	zosmaDir: string,
-	extDir: string,
-	source: ExtensionSource,
-): ZemExtension {
+function installFromGit(zosmaDir: string, extDir: string, source: ExtensionSource): ZemExtension {
 	const url = source.value;
 	const safeName = basename(url)
 		.replace(/\.git$/, "")
@@ -498,11 +495,7 @@ function installFromGit(
 	return buildExtensionEntry(zosmaDir, safeName, targetDir, registry);
 }
 
-function installFromLocal(
-	zosmaDir: string,
-	extDir: string,
-	source: ExtensionSource,
-): ZemExtension {
+function installFromLocal(zosmaDir: string, extDir: string, source: ExtensionSource): ZemExtension {
 	const srcPath = resolve(source.value);
 	const baseName = basename(srcPath)
 		.replace(/^@/, "")
@@ -575,11 +568,7 @@ export function uninstallExtension(zosmaDir: string, extensionId: string): void 
 
 // ─── Enable / Disable ───────────────────────────────────────────────
 
-export function setExtensionEnabled(
-	zosmaDir: string,
-	extensionId: string,
-	enabled: boolean,
-): void {
+export function setExtensionEnabled(zosmaDir: string, extensionId: string, enabled: boolean): void {
 	const registry = loadRegistry(zosmaDir);
 	if (!registry.extensions[extensionId]) {
 		throw new Error(`Extension not found: ${extensionId}`);
@@ -618,9 +607,9 @@ const NPM_REGISTRY = "https://registry.npmjs.org";
  * Default search queries mapped to their npm search filters.
  */
 const DEFAULT_SEARCHES = [
-	"keywords:pi-package",           // Official pi packages
-	"keywords:pi-extension",         // Pi extensions
-	"@earendil-works/pi-",           // Official pi mono packages
+	"keywords:pi-package", // Official pi packages
+	"keywords:pi-extension", // Pi extensions
+	"@earendil-works/pi-", // Official pi mono packages
 ];
 
 /**
@@ -631,25 +620,32 @@ const DEFAULT_SEARCHES = [
 export function buildSearchQuery(query: string): string {
 	const lower = query.toLowerCase().trim();
 	// Map common search terms to npm search filters
-	if (lower === "pi" || lower === "pi extensions" || lower === "pi packages" || lower === "keywords:pi") {
+	if (
+		lower === "pi" ||
+		lower === "pi extensions" ||
+		lower === "pi packages" ||
+		lower === "keywords:pi"
+	) {
 		return "keywords:pi-package";
 	}
 	if (lower.startsWith("scope:") || lower.startsWith("keywords:") || lower.startsWith("@")) {
 		return query; // Already an npm search syntax
 	}
 	if (lower.startsWith("@zosmaai")) {
-		return `scope:@zosmaai keywords:pi`;
+		return "scope:@zosmaai keywords:pi";
 	}
 	// General search — look for pi-related packages
 	return `${query} keywords:pi-package`;
 }
 
-export async function searchNpmRegistry(query: string): Promise<{
-	name: string;
-	description: string;
-	version: string;
-	score: number;
-}[]> {
+export async function searchNpmRegistry(query: string): Promise<
+	{
+		name: string;
+		description: string;
+		version: string;
+		score: number;
+	}[]
+> {
 	const searchQuery = buildSearchQuery(query);
 	const url = `${NPM_REGISTRY}/-/v1/search?text=${encodeURIComponent(searchQuery)}&size=20`;
 
@@ -770,7 +766,12 @@ function parseSource(source: string, ref?: string): ExtensionSource {
 		const value = source.startsWith("git:") ? source.slice(4) : source;
 		return { type: "git", value, ref };
 	}
-	if (source.startsWith("/") || source.startsWith("./") || source.startsWith("../") || isAbsolute(source)) {
+	if (
+		source.startsWith("/") ||
+		source.startsWith("./") ||
+		source.startsWith("../") ||
+		isAbsolute(source)
+	) {
 		return { type: "local", value: source };
 	}
 	// Default to npm

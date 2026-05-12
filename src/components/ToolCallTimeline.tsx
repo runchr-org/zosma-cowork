@@ -109,7 +109,7 @@ function buildHeader(tc: ToolCallInfo): { header: string; statusLine?: string } 
 			const lines = lineCount(content);
 			const size = formatSize(new Blob([content]).size);
 			// Check the diff to determine if this is a new file or overwrite
-			const diffText = typeof tc.details?.diff === "string" ? tc.details.diff : (tc.result || "");
+			const diffText = typeof tc.details?.diff === "string" ? tc.details.diff : tc.result || "";
 			const isNewFile = diffText.includes("--- /dev/null");
 			const action = isNewFile ? "created" : "overwritten";
 			return {
@@ -131,11 +131,12 @@ function buildHeader(tc: ToolCallInfo): { header: string; statusLine?: string } 
 			if (added > 0 || removed > 0) statParts.push(`+${added} -${removed}`);
 			return {
 				header: `editing ${shortenPath(path)}${statParts.length > 0 ? ` (${statParts.join(" · ")})` : ""}`,
-				statusLine: tc.status === "completed" ? `└ diff ${added > 0 || removed > 0 ? `+${added} -${removed}` : "applied"}` : undefined,
+				statusLine:
+					tc.status === "completed"
+						? `└ diff ${added > 0 || removed > 0 ? `+${added} -${removed}` : "applied"}`
+						: undefined,
 			};
 		}
-
-
 
 		case "read": {
 			const path = str(args.path) || str(args.file_path) || "";

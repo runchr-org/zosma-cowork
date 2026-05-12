@@ -56,7 +56,9 @@ export function useExtensions(): UseExtensionsReturn {
 				"list_extensions",
 			);
 			// Handle both array response and {extensions: [...]} response
-			const list = Array.isArray(result) ? result : (result as { extensions?: ZemExtension[] }).extensions || [];
+			const list = Array.isArray(result)
+				? result
+				: (result as { extensions?: ZemExtension[] }).extensions || [];
 			setExtensions(list);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -103,36 +105,30 @@ export function useExtensions(): UseExtensionsReturn {
 		[refresh],
 	);
 
-	const setEnabled = useCallback(
-		async (extensionId: string, enabled: boolean) => {
-			setError(null);
-			try {
-				await invoke("set_extension_enabled", { extensionId, enabled });
-				// Optimistic update
-				setExtensions((prev) =>
-					prev.map((ext) => (ext.id === extensionId ? { ...ext, enabled } : ext)),
-				);
-			} catch (err) {
-				setError(err instanceof Error ? err.message : String(err));
-			}
-		},
-		[],
-	);
+	const setEnabled = useCallback(async (extensionId: string, enabled: boolean) => {
+		setError(null);
+		try {
+			await invoke("set_extension_enabled", { extensionId, enabled });
+			// Optimistic update
+			setExtensions((prev) =>
+				prev.map((ext) => (ext.id === extensionId ? { ...ext, enabled } : ext)),
+			);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	}, []);
 
-	const setConfig = useCallback(
-		async (extensionId: string, config: Record<string, unknown>) => {
-			setError(null);
-			try {
-				await invoke("set_extension_config", { extensionId, config });
-				setExtensions((prev) =>
-					prev.map((ext) => (ext.id === extensionId ? { ...ext, config } : ext)),
-				);
-			} catch (err) {
-				setError(err instanceof Error ? err.message : String(err));
-			}
-		},
-		[],
-	);
+	const setConfig = useCallback(async (extensionId: string, config: Record<string, unknown>) => {
+		setError(null);
+		try {
+			await invoke("set_extension_config", { extensionId, config });
+			setExtensions((prev) =>
+				prev.map((ext) => (ext.id === extensionId ? { ...ext, config } : ext)),
+			);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	}, []);
 
 	const searchDiscover = useCallback(async (query: string): Promise<NpmSearchResult[]> => {
 		setError(null);
@@ -141,7 +137,9 @@ export function useExtensions(): UseExtensionsReturn {
 				"search_discover",
 				{ query },
 			);
-			const list = Array.isArray(result) ? result : (result as { packages?: NpmSearchResult[] }).packages || [];
+			const list = Array.isArray(result)
+				? result
+				: (result as { packages?: NpmSearchResult[] }).packages || [];
 			return list;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
