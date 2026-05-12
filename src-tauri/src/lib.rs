@@ -71,21 +71,18 @@ async fn spawn_sidecar(
 > {
     let p = find_sidecar_path(&app);
     let p_str = p.to_string_lossy().to_string();
-    
+
     // Determine runtime: tsx for .ts (dev), node for .cjs (production)
     let run_cmd: String;
     let run_args: Vec<String>;
-    
+
     if p.extension().map(|e| e == "ts").unwrap_or(false) {
         // Dev mode: use tsx from agent-sidecar's node_modules
         let sidecar_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
             .join("agent-sidecar");
-        let tsx_bin = sidecar_dir
-            .join("node_modules")
-            .join(".bin")
-            .join("tsx");
+        let tsx_bin = sidecar_dir.join("node_modules").join(".bin").join("tsx");
         if tsx_bin.exists() {
             run_cmd = tsx_bin.to_string_lossy().to_string();
             run_args = vec![p_str];
@@ -100,7 +97,7 @@ async fn spawn_sidecar(
         run_args = vec![p_str];
         log::info!("Sidecar: {} {}", run_cmd, run_args[0]);
     }
-    
+
     let mut c = Command::new(&run_cmd);
     for a in &run_args {
         c.arg(a);
@@ -109,9 +106,7 @@ async fn spawn_sidecar(
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .kill_on_drop(true);
-    let mut c = c
-        .spawn()
-        .map_err(|e| format!("spawn: {e}"))?;
+    let mut c = c.spawn().map_err(|e| format!("spawn: {e}"))?;
     let o = c.stdout.take().ok_or("no stdout")?;
     let mut i = c.stdin.take().ok_or("no stdin")?;
     let msg = serde_json::json!({"type":"init","zosmaDir":zm});
@@ -399,48 +394,50 @@ async fn save_settings(settings: Value, s: State<'_, AppState>) -> Result<Value,
 
 #[tauri::command]
 async fn list_extensions(s: State<'_, AppState>) -> Result<Value, String> {
-	scmd_r(
-		&s,
-		&serde_json::json!({"type":"list_extensions","id":"le"}),
-		std::time::Duration::from_secs(10),
-	)
-	.await
-	.map(|r| r.get("extensions").cloned().unwrap_or(Value::Array(vec![])))
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"list_extensions","id":"le"}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+    .map(|r| r.get("extensions").cloned().unwrap_or(Value::Array(vec![])))
 }
 
 #[tauri::command]
 async fn install_extension(
-	source: String,
-	ref_name: Option<String>,
-	s: State<'_, AppState>,
+    source: String,
+    ref_name: Option<String>,
+    s: State<'_, AppState>,
 ) -> Result<Value, String> {
-	let mut payload =
-		serde_json::json!({"type":"install_extension","id":"ie","source":source});
-	if let Some(r) = ref_name {
-		payload["ref"] = serde_json::json!(r);
-	}
-	scmd_r(&s, &payload, std::time::Duration::from_secs(180))
-		.await
-		.map(|r| r.get("extension").cloned().unwrap_or(Value::Null))
+    let mut payload = serde_json::json!({"type":"install_extension","id":"ie","source":source});
+    if let Some(r) = ref_name {
+        payload["ref"] = serde_json::json!(r);
+    }
+    scmd_r(&s, &payload, std::time::Duration::from_secs(180))
+        .await
+        .map(|r| r.get("extension").cloned().unwrap_or(Value::Null))
 }
 
 #[tauri::command]
-async fn uninstall_extension(extension_id: String, s: State<'_, AppState>) -> Result<Value, String> {
-	scmd_r(
-		&s,
-		&serde_json::json!({"type":"uninstall_extension","id":"ue","extensionId": extension_id}),
-		std::time::Duration::from_secs(30),
-	)
-	.await
+async fn uninstall_extension(
+    extension_id: String,
+    s: State<'_, AppState>,
+) -> Result<Value, String> {
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"uninstall_extension","id":"ue","extensionId": extension_id}),
+        std::time::Duration::from_secs(30),
+    )
+    .await
 }
 
 #[tauri::command]
 async fn set_extension_enabled(
-	extension_id: String,
-	enabled: bool,
-	s: State<'_, AppState>,
+    extension_id: String,
+    enabled: bool,
+    s: State<'_, AppState>,
 ) -> Result<Value, String> {
-	scmd_r(
+    scmd_r(
 		&s,
 		&serde_json::json!({"type":"set_extension_enabled","id":"se","extensionId": extension_id, "enabled": enabled}),
 		std::time::Duration::from_secs(10),
@@ -450,11 +447,11 @@ async fn set_extension_enabled(
 
 #[tauri::command]
 async fn set_extension_config(
-	extension_id: String,
-	config: Value,
-	s: State<'_, AppState>,
+    extension_id: String,
+    config: Value,
+    s: State<'_, AppState>,
 ) -> Result<Value, String> {
-	scmd_r(
+    scmd_r(
 		&s,
 		&serde_json::json!({"type":"set_extension_config","id":"sc","extensionId": extension_id, "config": config}),
 		std::time::Duration::from_secs(10),
@@ -464,13 +461,13 @@ async fn set_extension_config(
 
 #[tauri::command]
 async fn search_discover(query: String, s: State<'_, AppState>) -> Result<Value, String> {
-	scmd_r(
-		&s,
-		&serde_json::json!({"type":"search_discover","id":"sd","query": query}),
-		std::time::Duration::from_secs(15),
-	)
-	.await
-	.map(|r| r.get("packages").cloned().unwrap_or(Value::Array(vec![])))
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"search_discover","id":"sd","query": query}),
+        std::time::Duration::from_secs(15),
+    )
+    .await
+    .map(|r| r.get("packages").cloned().unwrap_or(Value::Array(vec![])))
 }
 
 #[tauri::command]
