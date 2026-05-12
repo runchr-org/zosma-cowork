@@ -15,8 +15,8 @@
 import {
 	existsSync,
 	mkdirSync,
-	readdirSync,
 	readFileSync,
+	readdirSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -31,6 +31,14 @@ import {
 	SettingsManager,
 	createAgentSession,
 } from "@earendil-works/pi-coding-agent";
+import {
+	discoverExtensions,
+	installExtension,
+	searchNpmRegistry,
+	setExtensionConfig,
+	setExtensionEnabled,
+	uninstallExtension,
+} from "./extension-manager.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,6 +133,44 @@ interface SaveSettingsCommand {
 	[key: string]: unknown;
 }
 
+interface ListExtensionsCommand {
+	type: "list_extensions";
+	id: string;
+}
+
+interface InstallExtensionCommand {
+	type: "install_extension";
+	id: string;
+	source: string;
+	ref?: string;
+}
+
+interface UninstallExtensionCommand {
+	type: "uninstall_extension";
+	id: string;
+	extensionId: string;
+}
+
+interface SetExtensionEnabledCommand {
+	type: "set_extension_enabled";
+	id: string;
+	extensionId: string;
+	enabled: boolean;
+}
+
+interface SetExtensionConfigCommand {
+	type: "set_extension_config";
+	id: string;
+	extensionId: string;
+	config: Record<string, unknown>;
+}
+
+interface SearchDiscoverCommand {
+	type: "search_discover";
+	id: string;
+	query: string;
+}
+
 type Command =
 	| InitCommand
 	| GetModelsCommand
@@ -139,7 +185,13 @@ type Command =
 	| NewSessionCommand
 	| ListSessionsCommand
 	| GetSettingsCommand
-	| SaveSettingsCommand;
+	| SaveSettingsCommand
+	| ListExtensionsCommand
+	| InstallExtensionCommand
+	| UninstallExtensionCommand
+	| SetExtensionEnabledCommand
+	| SetExtensionConfigCommand
+	| SearchDiscoverCommand;
 
 // ---------------------------------------------------------------------------
 // Logger (stderr — never interferes with stdout protocol)
@@ -154,8 +206,23 @@ function log(...args: unknown[]) {
 // ---------------------------------------------------------------------------
 
 function send(obj: unknown) {
-	process.stdout.write(`${JSON.stringify(obj)}\n`);
+	try {
+		process.stdout.write(`${JSON.stringify(obj)}\n`);
+	} catch (err) {
+		// EPIPE happens when the Rust side kills us — ignore gracefully
+		if ((err as NodeJS.ErrnoException)?.code === "EPIPE") {
+			process.exit(0);
+		}
+		throw err;
+	}
 }
+
+// Handle EPIPE on stdout globally (when pipe breaks before our next write)
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+	if (err.code === "EPIPE") {
+		process.exit(0);
+	}
+});
 
 // ---------------------------------------------------------------------------
 // Zosma config directories
@@ -293,7 +360,9 @@ function saveSession(
 	const sDir = sessionsDir(zosmaDir);
 	ensureDir(sDir);
 
-	const filePath = join(sDir, `${sessionId}.jsonl`);
+	// Strip .jsonl if already present (sent from frontend which adds extension)
+	const cleanId = sessionId.replace(/\.jsonl$/i, "");
+	const filePath = join(sDir, `${cleanId}.jsonl`);
 	const header = {
 		type: "session",
 		version: 1,
@@ -360,7 +429,10 @@ function deleteSessionFile(zosmaDir: string, sessionFile: string): boolean {
  * Convert our saved ChatMessage format to pi-mono AgentMessage format
  * and restore them into the active session so the agent has context.
  */
-function restoreSessionContext(session: Awaited<ReturnType<typeof createAgentSession>>["session"], messages: unknown[]): void {
+function restoreSessionContext(
+	session: Awaited<ReturnType<typeof createAgentSession>>["session"],
+	messages: unknown[],
+): void {
 	const piMessages: unknown[] = [];
 
 	for (const raw of messages) {
@@ -651,11 +723,13 @@ async function main() {
 					const found = modelRegistry?.find(cmd.provider, cmd.model);
 					if (found) {
 						log("set_model: found %s/%s (id=%s)", cmd.provider, cmd.model, found.id);
-						await session.setModel(
-							found as Parameters<typeof session.setModel>[0],
-						);
+						await session.setModel(found as Parameters<typeof session.setModel>[0]);
 						const currentModel = session.model;
-						log("set_model: after setModel, session.model = %s/%s", currentModel?.provider, currentModel?.id);
+						log(
+							"set_model: after setModel, session.model = %s/%s",
+							currentModel?.provider,
+							currentModel?.id,
+						);
 						send({ type: "result", id: cmd.id, data: { success: true } });
 					} else {
 						log("set_model: NOT FOUND %s/%s", cmd.provider, cmd.model);
@@ -833,6 +907,48 @@ async function main() {
 							message: err instanceof Error ? err.message : String(err),
 						});
 					}
+					break;
+				}
+
+				// ── list_extensions ─────────────────────────────────────────
+				case "list_extensions": {
+					const extensions = discoverExtensions(zosmaDir);
+					send({ type: "result", id: cmd.id, data: { extensions } });
+					break;
+				}
+
+				// ── install_extension ───────────────────────────────────────
+				case "install_extension": {
+					const ext = installExtension(zosmaDir, cmd.source, cmd.ref);
+					send({ type: "result", id: cmd.id, data: { extension: ext } });
+					break;
+				}
+
+				// ── uninstall_extension ─────────────────────────────────────
+				case "uninstall_extension": {
+					uninstallExtension(zosmaDir, cmd.extensionId);
+					send({ type: "result", id: cmd.id, data: { success: true } });
+					break;
+				}
+
+				// ── set_extension_enabled ───────────────────────────────────
+				case "set_extension_enabled": {
+					setExtensionEnabled(zosmaDir, cmd.extensionId, cmd.enabled);
+					send({ type: "result", id: cmd.id, data: { success: true } });
+					break;
+				}
+
+				// ── set_extension_config ────────────────────────────────────
+				case "set_extension_config": {
+					setExtensionConfig(zosmaDir, cmd.extensionId, cmd.config);
+					send({ type: "result", id: cmd.id, data: { success: true } });
+					break;
+				}
+
+				// ── search_discover ─────────────────────────────────────────
+				case "search_discover": {
+					const results = await searchNpmRegistry(cmd.query || "pi extension");
+					send({ type: "result", id: cmd.id, data: { packages: results } });
 					break;
 				}
 

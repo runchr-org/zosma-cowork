@@ -20,6 +20,15 @@ interface SessionEntry {
 
 function App() {
 	const { state: streamState, startStream, abortStream, toolPhase, dispatch } = usePiStream();
+
+	// Prevent right-click context menu (no reload/inspect in the desktop app)
+	useEffect(() => {
+		function handler(e: MouseEvent) {
+			e.preventDefault();
+		}
+		document.addEventListener("contextmenu", handler);
+		return () => document.removeEventListener("contextmenu", handler);
+	}, []);
 	const { models } = useProviders();
 	const { hasCredentials, loading: authLoading, saveApiKey } = useAuth();
 	const [showKeyEntry, setShowKeyEntry] = useState(false);

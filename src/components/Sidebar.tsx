@@ -2,9 +2,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
-import { Clock, MessageSquare, Plus, Settings, Trash2 } from "lucide-react";
+import { THEMES, applyTheme, getSavedTheme } from "@/lib/themes";
+import type { Theme } from "@/lib/themes";
+import {
+	Check,
+	Clock,
+	Info,
+	Key,
+	MessageSquare,
+	Package,
+	Palette,
+	Plus,
+	Settings,
+	Trash2,
+} from "lucide-react";
+import { ExtensionPanel } from "./ExtensionPanel";
 
 interface Session {
 	id: string;
@@ -36,12 +50,15 @@ export function Sidebar({
 	onShowKeyEntry,
 }: SidebarProps) {
 	const isSettings = view === "settings";
+	const isExtensions = view === "extensions";
 
 	return (
 		<div className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
 			{/* Content area */}
 			{isSettings ? (
 				<SettingsPanel onShowKeyEntry={onShowKeyEntry} />
+			) : isExtensions ? (
+				<ExtensionPanel onReload={() => {}} />
 			) : (
 				<SessionsPanel
 					sessions={sessions}
@@ -57,8 +74,14 @@ export function Sidebar({
 				<TabButton
 					icon={MessageSquare}
 					label="Chats"
-					active={!isSettings}
+					active={view === "chats"}
 					onClick={() => onChangeView("chats")}
+				/>
+				<TabButton
+					icon={Package}
+					label="Exts"
+					active={isExtensions}
+					onClick={() => onChangeView("extensions")}
 				/>
 				<TabButton
 					icon={Settings}
@@ -176,12 +199,18 @@ function SessionsPanel({
 
 function SettingsPanel({ onShowKeyEntry }: { onShowKeyEntry?: () => void }) {
 	const [appVersion, setAppVersion] = useState<string | null>(null);
+	const [currentTheme, setCurrentTheme] = useState(getSavedTheme);
 
 	useEffect(() => {
 		import("@tauri-apps/api/app")
 			.then(({ getVersion }) => getVersion().then(setAppVersion))
 			.catch(() => {});
 	}, []);
+
+	function handleThemeChange(theme: Theme) {
+		applyTheme(theme);
+		setCurrentTheme(theme);
+	}
 
 	return (
 		<>
@@ -191,22 +220,138 @@ function SettingsPanel({ onShowKeyEntry }: { onShowKeyEntry?: () => void }) {
 				</span>
 			</div>
 			<ScrollArea className="flex-1 px-3 py-2">
-				<div className="space-y-4">
+				<div className="space-y-5">
+					{/* ── Authentication ── */}
 					<div>
-						<span className="text-xs text-sidebar-foreground/50 mb-1.5 block">Authentication</span>
-						<Button
-							variant="secondary"
-							size="sm"
-							className="w-full text-xs"
-							onClick={onShowKeyEntry}
+						<div className="flex items-center gap-1.5 mb-2">
+							<Key className="w-3.5 h-3.5 text-sidebar-foreground/50" />
+							<span className="text-xs font-medium text-sidebar-foreground/70">Authentication</span>
+						</div>
+						<div
+							className="rounded-lg border p-2.5"
+							style={{
+								borderColor: "hsl(var(--sidebar-border))",
+								background: "hsl(var(--sidebar-background) / 0.5)",
+							}}
 						>
-							Change API Key
-						</Button>
+							<p className="text-[10px] text-sidebar-foreground/50 mb-2">
+								API keys are required to connect to LLM providers.
+							</p>
+							<button
+								type="button"
+								onClick={onShowKeyEntry}
+								className="w-full text-xs px-3 py-1.5 rounded-lg transition-colors text-center"
+								style={{
+									background: "hsl(var(--sidebar-accent))",
+									color: "hsl(var(--sidebar-accent-foreground))",
+								}}
+							>
+								Change API Key
+							</button>
+						</div>
 					</div>
+
+					{/* ── Themes ── */}
 					<div>
-						<span className="text-xs text-sidebar-foreground/50 mb-1.5 block">About</span>
-						<div className="text-xs text-sidebar-foreground/70">
-							Zosma Cowork {appVersion ? `v${appVersion}` : "..."}
+						<div className="flex items-center gap-1.5 mb-2">
+							<Palette className="w-3.5 h-3.5 text-sidebar-foreground/50" />
+							<span className="text-xs font-medium text-sidebar-foreground/70">Theme</span>
+						</div>
+						<div className="space-y-1.5">
+							{THEMES.map((theme) => {
+								const isActive = currentTheme.id === theme.id;
+								// Extract accent color sample
+								const accentSample = theme.vars.primary || "255 70% 65%";
+								const bgSample = theme.vars.background || "215 20% 8%";
+								return (
+									<button
+										key={theme.id}
+										type="button"
+										onClick={() => handleThemeChange(theme)}
+										className="w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center gap-2.5"
+										style={{
+											background: isActive ? "hsl(var(--sidebar-accent))" : "transparent",
+										}}
+									>
+										{/* Theme preview swatch */}
+										<div
+											className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center border"
+											style={{
+												background: `hsl(${bgSample})`,
+												borderColor: `hsl(${theme.vars.border || "215 15% 20%"})`,
+											}}
+										>
+											<div
+												className="w-3 h-3 rounded-full"
+												style={{ background: `hsl(${accentSample})` }}
+											/>
+										</div>
+										<div className="flex-1 min-w-0">
+											<div className="flex items-center gap-1.5">
+												<span
+													className="text-xs font-medium truncate"
+													style={{ color: "hsl(var(--sidebar-foreground))" }}
+												>
+													{theme.name}
+												</span>
+												<span className="text-[10px] uppercase text-sidebar-foreground/30">
+													{theme.type}
+												</span>
+												{isActive && (
+													<Check
+														className="w-3 h-3 ml-auto shrink-0"
+														style={{ color: "hsl(var(--primary))" }}
+													/>
+												)}
+											</div>
+											<p className="text-[10px] text-sidebar-foreground/50 truncate mt-0.5">
+												{theme.description}
+											</p>
+										</div>
+									</button>
+								);
+							})}
+						</div>
+					</div>
+
+					{/* ── About ── */}
+					<div>
+						<div className="flex items-center gap-1.5 mb-2">
+							<Info className="w-3.5 h-3.5 text-sidebar-foreground/50" />
+							<span className="text-xs font-medium text-sidebar-foreground/70">About</span>
+						</div>
+						<div
+							className="rounded-lg border p-2.5"
+							style={{
+								borderColor: "hsl(var(--sidebar-border))",
+								background: "hsl(var(--sidebar-background) / 0.5)",
+							}}
+						>
+							<div className="flex items-center gap-2 mb-1">
+								<div
+									className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold"
+									style={{
+										background: "hsl(var(--primary) / 0.15)",
+										color: "hsl(var(--primary))",
+									}}
+								>
+									Z
+								</div>
+								<div>
+									<div
+										className="text-xs font-medium"
+										style={{ color: "hsl(var(--sidebar-foreground))" }}
+									>
+										Zosma Cowork
+									</div>
+									<div className="text-[10px] text-sidebar-foreground/50">
+										{appVersion ? `v${appVersion}` : "..."} · Built with pi-mono
+									</div>
+								</div>
+							</div>
+							<p className="text-[10px] text-sidebar-foreground/40 mt-1">
+								AI-powered coding assistant by Zosma AI
+							</p>
 						</div>
 					</div>
 				</div>
