@@ -200,9 +200,9 @@ function getToolStatusLabel(toolName: string, phase: "calling" | "executing"): s
 	if (phase === "calling") return toolName;
 	switch (toolName) {
 		case "write":
-			return "Writing file";
+			return "Writing";
 		case "edit":
-			return "Editing code";
+			return "Editing";
 		case "read":
 			return "Reading";
 		case "bash":
@@ -235,10 +235,17 @@ function getToolSummary(name: string, args: Record<string, unknown>): string {
 			const p = typeof args.path === "string" ? args.path : "";
 			return p.split("/").pop() || p;
 		}
-		case "edit":
 		case "write": {
 			const p = typeof args.path === "string" ? args.path : "";
-			return p.split("/").pop() || p;
+			const content = typeof args.content === "string" ? args.content : "";
+			const lines = content ? content.split("\n").length : 0;
+			return `${p.split("/").pop() || p} (${lines} lines)`;
+		}
+		case "edit": {
+			const p = typeof args.path === "string" ? args.path : "";
+			const edits = Array.isArray(args.edits) ? args.edits : [];
+			const eCount = edits.length;
+			return `${p.split("/").pop() || p} (${eCount} edit${eCount !== 1 ? "s" : ""})`;
 		}
 		case "grep": {
 			return typeof args.pattern === "string" ? `/${args.pattern}/` : name;

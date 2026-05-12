@@ -108,25 +108,34 @@ function buildHeader(tc: ToolCallInfo): { header: string; statusLine?: string } 
 			const content = str(args.content) || "";
 			const lines = lineCount(content);
 			const size = formatSize(new Blob([content]).size);
+			// Check the diff to determine if this is a new file or overwrite
+			const diffText = typeof tc.details?.diff === "string" ? tc.details.diff : (tc.result || "");
+			const isNewFile = diffText.includes("--- /dev/null");
+			const action = isNewFile ? "created" : "overwritten";
 			return {
 				header: `write ${shortenPath(path)} (${lines} lines · ${size})`,
-				statusLine: tc.status === "completed" ? "└ overwritten" : undefined,
+				statusLine: tc.status === "completed" ? `└ ${action}` : undefined,
 			};
 		}
 
 		case "edit": {
 			const path = str(args.path) || str(args.file_path) || "";
 			const edits = Array.isArray(args.edits) ? args.edits : [];
-			const lineCount = edits.reduce(
+			const editLineCount = edits.reduce(
 				(sum: number, e: Record<string, unknown>) => sum + countLines(str(e.newText) || ""),
 				0,
 			);
 			const { added, removed } = diffStats(tc.result || "");
+			const statParts: string[] = [];
+			if (editLineCount > 0) statParts.push(`${editLineCount} lines`);
+			if (added > 0 || removed > 0) statParts.push(`+${added} -${removed}`);
 			return {
-				header: `edit ${shortenPath(path)} (${lineCount} lines)`,
-				statusLine: tc.status === "completed" ? `└ diff +${added} -${removed} split` : undefined,
+				header: `editing ${shortenPath(path)}${statParts.length > 0 ? ` (${statParts.join(" · ")})` : ""}`,
+				statusLine: tc.status === "completed" ? `└ diff ${added > 0 || removed > 0 ? `+${added} -${removed}` : "applied"}` : undefined,
 			};
 		}
+
+
 
 		case "read": {
 			const path = str(args.path) || str(args.file_path) || "";
@@ -245,9 +254,9 @@ function ToolContent({ toolCall }: { toolCall: ToolCallInfo }) {
 function getRunningLabel(toolName: string): string {
 	switch (toolName) {
 		case "write":
-			return "Writing file...";
+			return "Writing...";
 		case "edit":
-			return "Editing code...";
+			return "Editing...";
 		case "read":
 			return "Reading...";
 		case "bash":

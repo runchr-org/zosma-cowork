@@ -45,6 +45,7 @@ export type StreamAction =
 			partialOutput: string;
 	  }
 	| { type: "TURN_RESET" }
+	| { type: "MESSAGE_END" }
 	| { type: "STREAM_COMPLETE" }
 	| { type: "STREAM_ERROR"; error: string }
 	| { type: "ABORT_STREAM" }
@@ -103,6 +104,45 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 			};
 		}
 
+		/**
+		 * MESSAGE_END — Finalize the current streaming message to messages[]
+		 * and create a fresh blank streaming message for the next assistant turn.
+		 * This prevents inter-tool-call AI text from being lost when TURN_RESET
+		 * fires on the next message_start.
+		 *
+		 * IMPORTANT: The new streamingMessage starts with EMPTY toolCalls.
+		 * The previous message's tool calls are already saved in messages[]
+		 * and TOOL_CALL_UPDATE has a messages[] fallback to update them.
+		 * Inheriting toolCalls causes duplicate display.
+		 */
+		case "MESSAGE_END": {
+			const msg = state.streamingMessage;
+			if (!msg) return state;
+			// Skip empty messages (no content, thinking, or tool calls)
+			if (!msg.content && !msg.thinking && (!msg.toolCalls || msg.toolCalls.length === 0)) {
+				return state;
+			}
+			// Finalize current message into messages[]
+			const finalized = { ...msg, isStreaming: false };
+			return {
+				...state,
+				messages: [...state.messages, finalized],
+				// Fresh streaming message — empty toolCalls so no duplicates
+				streamingMessage: {
+					id: crypto.randomUUID(),
+					role: "assistant" as const,
+					content: "",
+					thinking: "",
+					isStreaming: true,
+					toolCalls: [],
+					timestamp: Date.now(),
+					model: msg.model,
+					provider: msg.provider,
+				},
+				status: "thinking",
+			};
+		}
+
 		case "TEXT_DELTA": {
 			const msg = state.streamingMessage;
 			if (!msg) return state;
@@ -155,13 +195,12 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 		}
 
 		case "TOOL_CALL_UPDATE": {
-			const msg = state.streamingMessage;
-			if (!msg || !msg.toolCalls) return state;
-			return {
-				...state,
-				streamingMessage: {
-					...msg,
-					toolCalls: msg.toolCalls.map((tc) =>
+			// Update tool calls in streamingMessage
+			let sm = state.streamingMessage;
+			if (sm && sm.toolCalls) {
+				sm = {
+					...sm,
+					toolCalls: sm.toolCalls.map((tc) =>
 						tc.id === action.id
 							? {
 									...tc,
@@ -172,24 +211,53 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 								}
 							: tc,
 					),
-				},
-			};
+				};
+			}
+			// Also update tool calls in messages[] (for tool calls that were
+			// defined in a previous assistant message that got flushed via MESSAGE_END)
+			const newMessages = state.messages.map((m) => {
+				if (!m.toolCalls?.some((tc) => tc.id === action.id)) return m;
+				return {
+					...m,
+					toolCalls: m.toolCalls.map((tc) =>
+						tc.id === action.id
+							? {
+									...tc,
+									status: action.status,
+									result: action.result,
+									isError: action.isError,
+									details: action.details,
+								}
+							: tc,
+					),
+				};
+			});
+			return { ...state, messages: newMessages, streamingMessage: sm ?? state.streamingMessage };
 		}
 
 		case "TOOL_PARTIAL_OUTPUT": {
-			const msg = state.streamingMessage;
-			if (!msg || !msg.toolCalls) return state;
-			return {
-				...state,
-				streamingMessage: {
-					...msg,
-					toolCalls: msg.toolCalls.map((tc) =>
+			let sm = state.streamingMessage;
+			if (sm && sm.toolCalls) {
+				sm = {
+					...sm,
+					toolCalls: sm.toolCalls.map((tc) =>
 						tc.id === action.id
 							? { ...tc, partialOutput: action.partialOutput }
 							: tc,
 					),
-				},
-			};
+				};
+			}
+			// Also update partial output in messages[]
+			const newMessages = state.messages.map((m) => {
+				if (!m.toolCalls?.some((tc) => tc.id === action.id)) return m;
+				return {
+					...m,
+					toolCalls: m.toolCalls.map((tc) =>
+						tc.id === action.id ? { ...tc, partialOutput: action.partialOutput } : tc,
+					),
+				};
+			});
+			return { ...state, messages: newMessages, streamingMessage: sm ?? state.streamingMessage };
 		}
 
 		case "STREAM_COMPLETE": {
@@ -357,6 +425,11 @@ export function usePiStream() {
 								? { type: "error", toolName: te.toolName, message: "Tool failed" }
 								: { type: "done", toolName: te.toolName },
 						);
+						break;
+					}
+
+					case "message_end": {
+						dispatch({ type: "MESSAGE_END" });
 						break;
 					}
 

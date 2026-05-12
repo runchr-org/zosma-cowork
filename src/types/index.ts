@@ -66,4 +66,32 @@ export interface ConfigPayload {
 	models: ModelInfo[];
 }
 
+// ─── ZEM (Zosma Extension Model) types ────────────────────────────
+
+export interface ZemExtension {
+	id: string;
+	name: string;
+	version: string;
+	description: string;
+	author?: string;
+	icon?: string;
+	category?: string;
+	source: {
+		type: "npm" | "git" | "local" | "url";
+		value: string;
+		ref?: string;
+	};
+	capabilities: {
+		tools?: { name: string; description: string }[];
+		skills?: string[];
+		commands?: { name: string; description: string }[];
+	};
+	runtime: "pi" | "dhara" | "native";
+	installed: boolean;
+	enabled: boolean;
+	installPath?: string;
+	config?: Record<string, unknown>;
+	configSchema?: Record<string, unknown>;
+}
+
 export * from "./pi-events";
