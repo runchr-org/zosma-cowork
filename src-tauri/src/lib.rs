@@ -82,10 +82,10 @@ fn find_node() -> String {
     // (/usr/bin:/bin:/usr/sbin:/sbin) which excludes Homebrew paths,
     // so we need to check these explicitly.
     let candidates = [
-        "/opt/homebrew/bin/node",  // Homebrew Apple Silicon
+        "/opt/homebrew/bin/node",          // Homebrew Apple Silicon
         "/opt/homebrew/opt/node/bin/node", // Homebrew Node formula (no @version)
-        "/usr/local/bin/node",     // Homebrew Intel / general
-        "/usr/bin/node",           // macOS bundled or pkgsrc
+        "/usr/local/bin/node",             // Homebrew Intel / general
+        "/usr/bin/node",                   // macOS bundled or pkgsrc
     ];
     for path in &candidates {
         if std::path::Path::new(path).exists() {
