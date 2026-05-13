@@ -173,7 +173,7 @@ jobs:
           APPLE_PASSWORD: ${{ env.APPLE_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Zosma Cowork ${{ github.ref_name }}"
+          releaseName: "${{ github.ref_name }}"
           releaseBody: "Download the latest Zosma Cowork release."
           releaseDraft: true
           prerelease: false
