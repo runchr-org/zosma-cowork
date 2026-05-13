@@ -34,34 +34,27 @@ struct AppState {
     pending_requests: Arc<Mutex<HashMap<String, PendingRequest>>>,
 }
 
-fn is_production_bundle() -> bool {
-    // On macOS, the .app bundle has the executable at
-    // <bundle>/Contents/MacOS/<executable>. Detect this by checking if the
-    // current exe path contains ".app/Contents/MacOS/".
-    if let Ok(exe) = std::env::current_exe() {
-        let path = exe.to_string_lossy();
-        if path.contains(".app/Contents/MacOS/") || path.contains(".app/Contents/Resources/") {
-            return true;
-        }
-    }
-    false
-}
-
 fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
-    if is_production_bundle() {
-        // In production, the bundled sidecar is a single self-contained CJS file
-        // (all dependencies inlined by esbuild, no node_modules/ needed).
-        // It lives at <bundle>/Contents/Resources/agent-sidecar/index.cjs.
-        return app
-            .path()
-            .resource_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("agent-sidecar")
-            .join("index.cjs");
+    // Try production resource dir first — works on macOS .app bundles
+    // and Linux AppImage/dpkg builds.
+    let resource = app
+        .path()
+        .resource_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("agent-sidecar")
+        .join("index.cjs");
+    if resource.exists() {
+        return resource;
     }
-    // In dev mode, use the source directory.
-    // When running via `tauri dev` or the binary directly from the build
-    // directory, use the TypeScript source so tsx picks up live changes.
+
+    // Check /usr/lib/zosma-cowork/agent-sidecar/index.cjs for
+    // distro-packaged installations (Arch AUR, Debian, etc.).
+    let lib_path = PathBuf::from("/usr/lib/zosma-cowork/agent-sidecar/index.cjs");
+    if lib_path.exists() {
+        return lib_path;
+    }
+
+    // In dev mode, use the TypeScript source so tsx picks up live changes.
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
