@@ -103,10 +103,13 @@ jobs:
       # Steps below are no-ops when secrets are not configured.
       #
       # To enable:
-      #   1. Set APPLE_SIGNING_IDENTITY (e.g. "Developer ID Application: Your Name (TEAMID)")
-      #   2. Set APPLE_TEAM_ID (10-char team ID from developer.apple.com)
-      #   3. Set APPLE_ID and APPLE_APP_SPECIFIC_PASSWORD for notarization
-      #   GitHub Secrets: APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD
+      #   1. Export your Developer ID Application .p12 (see security/APPLE_CERTS.md)
+      #   2. Set GitHub Secrets:
+      #      - APPLE_SIGNING_IDENTITY: "Developer ID Application: ZOSMAAI SOLUTIONS PRIVATE LIMITED (SJLAKWH5M5)"
+      #      - APPLE_TEAM_ID: "SJLAKWH5M5"
+      #      - APPLE_ID and APPLE_APP_SPECIFIC_PASSWORD for notarization
+      #      - APPLE_CERT_P12: base64-encoded .p12 file
+      #      - APPLE_CERT_PASSWORD: password for the .p12 file
 
       - name: Configure macOS signing identity
         if: runner.os == 'macOS'
@@ -124,6 +127,22 @@ jobs:
             echo "APPLE_SIGNING_IDENTITY=-" >> $GITHUB_ENV
             echo "⚠️  APPLE_SIGNING_IDENTITY not set — codesigning disabled"
           fi
+
+      - name: Import Apple Developer ID certificate
+        if: runner.os == 'macOS' && secrets.APPLE_SIGNING_IDENTITY != ''
+        shell: bash
+        env:
+          CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          # Decode and import the .p12 certificate into a temporary keychain
+          echo "$CERT_P12" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p temp temp.keychain
+          security default-keychain -s temp.keychain
+          security unlock-keychain -p temp temp.keychain
+          security import /tmp/cert.p12 -k temp.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k temp temp.keychain
+          echo "✅ Apple Developer ID certificate imported"
 
       - name: Configure Windows signing certificate
         if: runner.os == 'Windows'
