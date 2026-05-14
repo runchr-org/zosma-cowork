@@ -140,9 +140,25 @@ jobs:
           security create-keychain -p temp temp.keychain
           security default-keychain -s temp.keychain
           security unlock-keychain -p temp temp.keychain
+          # Prevent keychain auto-lock during long builds (universal = 2x compilation time)
+          security set-keychain-settings -t 3600 -u temp.keychain
           security import /tmp/cert.p12 -k temp.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k temp temp.keychain
+          # Add codesign: partition — required on newer macOS runners for codesign to access the keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temp temp.keychain
+          # Verify the certificate was imported correctly and extract identity
           echo "✅ Apple Developer ID certificate imported"
+          security find-identity -v -p codesigning temp.keychain
+          CERT_INFO=$(security find-identity -v -p codesigning temp.keychain 2>/dev/null | grep "Developer ID Application" | head -1)
+          if [ -n "$CERT_INFO" ]; then
+            CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+            echo "CERT_ID=$CERT_ID" >> "$GITHUB_ENV"
+            # Override APPLE_SIGNING_IDENTITY with exact CN from cert (more reliable)
+            echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
+            echo "→ Signing identity: $CERT_ID"
+          else
+            echo "⚠️ No Developer ID Application certificate found in temp.keychain"
+            security find-identity -v temp.keychain
+          fi
 
       - name: Configure Windows signing certificate
         if: runner.os == 'Windows'
