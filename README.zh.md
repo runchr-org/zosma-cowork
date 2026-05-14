@@ -15,10 +15,9 @@
 
 ## Demo
 
-[![Zosma Cowork 演示视频](./assets/screenshot.png)](./assets/demo.mp4)
+![Zosma Cowork demo](./assets/demo.gif)
 
-*点击截图观看演示视频 (1:16) — 使用自然语言智能体处理发票。*
-
+*使用自然语言智能体处理发票。观看[完整演示视频](./assets/demo.mp4) (1:16)。*
 ## 为什么选择 Zosma Cowork？
 
 ### 🌟 第一个基于 pi 的桌面协作工具
@@ -97,7 +96,7 @@ npm run dev
 
 ## 🇮🇳 印度制造
 
-**Zosma Cowork** 由 **ZOSMAAI SOLUTIONS PRIVATE LIMITED** 在 **印度班加罗尔** 自豪地构建。
+**Zosma Cowork** — 由 **ZOSMAAI SOLUTIONS PRIVATE LIMITED** 在 **印度** 自豪地构建。
 
 从印度走向世界 🌏 — [Zosma AI](https://zosma.ai) 团队 ❤️ 呈献。
 

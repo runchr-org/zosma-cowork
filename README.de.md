@@ -17,10 +17,9 @@
 
 ## Demo
 
-[![Zosma Cowork Demo](./assets/screenshot.png)](./assets/demo.mp4)
+![Zosma Cowork demo](./assets/demo.gif)
 
-*Klicke auf den Screenshot, um das Demo-Video (1:16) anzusehen — Rechnungsverarbeitung mit natürlichen Sprachagenten.*
-
+*Rechnungsverarbeitung mit natürlichen Sprachagenten. Siehe das [vollständige Demo-Video](./assets/demo.mp4) (1:16).*
 ## Warum Zosma Cowork?
 
 ### 🌟 Der erste Desktop-Coworker auf Basis von pi
@@ -99,7 +98,7 @@ npm run dev
 
 ## 🇮🇳 Made in India
 
-**Zosma Cowork** wird stolz in **Bengaluru, Indien** von **ZOSMAAI SOLUTIONS PRIVATE LIMITED** entwickelt.
+**Zosma Cowork** — stolz **aus Indien** entwickelt von **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
 
 Von Indien in die Welt 🌏 — mit ❤️ vom Team bei [Zosma AI](https://zosma.ai).
 

@@ -17,10 +17,9 @@
 
 ## Demo
 
-[![Zosma Cowork デモ](./assets/screenshot.png)](./assets/demo.mp4)
+![Zosma Cowork demo](./assets/demo.gif)
 
-*スクリーンショットをクリックしてデモ動画を再生 (1:16) — 自然言語エージェントによる請求書処理。*
-
+*自然言語エージェントによる請求書処理。[フルデモビデオ](./assets/demo.mp4)を見る (1:16)。*
 ## Zosma Cowork の特徴
 
 ### 🌟 pi 初のデスクトップコワーカー
@@ -99,7 +98,7 @@ npm run dev
 
 ## 🇮🇳 Made in India
 
-**Zosma Cowork** は **ZOSMAAI SOLUTIONS PRIVATE LIMITED** によって **インド・バンガロール** で誇りを持って構築されています。
+**Zosma Cowork** — **インドから**誇りを持って構築されています — **ZOSMAAI SOLUTIONS PRIVATE LIMITED**
 
 インドから世界へ 🌏 — [Zosma AI](https://zosma.ai) チームより ❤️ を込めて。
 

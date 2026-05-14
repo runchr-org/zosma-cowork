@@ -17,10 +17,9 @@
 
 ## Demo
 
-[![Демо Zosma Cowork](./assets/screenshot.png)](./assets/demo.mp4)
+![Zosma Cowork demo](./assets/demo.gif)
 
-*Нажмите на скриншот, чтобы посмотреть демо (1:16) — обработка счетов с помощью агентов на естественном языке.*
-
+*Обработка счетов с помощью агентов на естественном языке. Смотрите [полное демо](./assets/demo.mp4) (1:16).*
 ## Почему Zosma Cowork?
 
 ### 🌟 Первый настольный coworker на базе pi
@@ -99,7 +98,7 @@ npm run dev
 
 ## 🇮🇳 Made in India
 
-**Zosma Cowork** с гордостью создан в **Бангалоре, Индия** компанией **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
+**Zosma Cowork** — с гордостью создан **из Индии** компанией **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
 
 Из Индии в мир 🌏 — с ❤️ от команды [Zosma AI](https://zosma.ai).
 

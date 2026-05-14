@@ -17,10 +17,9 @@
 
 ## Demo
 
-[![Zosma Cowork demo](./assets/screenshot.png)](./assets/demo.mp4)
+![Zosma Cowork demo](./assets/demo.gif)
 
-*Haz clic en la captura para ver el demo (1:16) — procesamiento de facturas con agentes de lenguaje natural.*
-
+*Procesamiento de facturas con agentes de lenguaje natural. Mira el [video completo](./assets/demo.mp4) (1:16).*
 ## ¿Por qué Zosma Cowork?
 
 ### 🌟 El primer escritorio colaborativo basado en pi
@@ -99,7 +98,7 @@ npm run dev
 
 ## 🇮🇳 Made in India
 
-**Zosma Cowork** está orgullosamente construido en **Bengaluru, India** por **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
+**Zosma Cowork** — orgullosamente construido **desde India** por **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
 
 De India para el Mundo 🌏 — con ❤️ del equipo de [Zosma AI](https://zosma.ai).
 
