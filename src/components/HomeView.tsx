@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useState } from "react";
+import { ProviderAuthSection } from "./ProviderAuthSection";
 
 interface OnboardingProps {
 	onComplete: (apiKey: string) => Promise<void>;
@@ -117,18 +118,29 @@ export function HomeView({ onComplete }: OnboardingProps) {
 			</div>
 
 			<h1 className="text-xl font-bold mb-2" style={{ color: "hsl(var(--foreground))" }}>
-				Enter your API Key
+				Connect a provider
 			</h1>
 			<p className="text-sm mb-6 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>
-				Paste your OpenCode Go API key. It stays on your machine.
+				Sign in with a Claude subscription, or paste an API key. Either stays on your machine.
 			</p>
 
 			<div className="w-full space-y-4">
+				<ProviderAuthSection provider="anthropic" />
+
+				<div
+					className="flex items-center gap-2 text-[10px] uppercase tracking-wider"
+					style={{ color: "hsl(var(--muted-foreground))" }}
+				>
+					<div className="flex-1 h-px" style={{ background: "hsl(var(--border))" }} />
+					<span>or use an API key</span>
+					<div className="flex-1 h-px" style={{ background: "hsl(var(--border))" }} />
+				</div>
+
 				<input
 					type="password"
 					value={apiKey}
 					onChange={(e) => setApiKey(e.target.value)}
-					placeholder="sk-..."
+					placeholder="OpenCode Go API key (sk-…)"
 					className="w-full px-4 py-2.5 rounded-xl border bg-transparent text-sm outline-none transition-colors"
 					style={{
 						borderColor: "hsl(var(--border))",
@@ -156,7 +168,7 @@ export function HomeView({ onComplete }: OnboardingProps) {
 						color: "hsl(var(--primary-foreground))",
 					}}
 				>
-					{saving ? "Saving..." : "Start Chatting"}
+					{saving ? "Saving..." : "Save API Key"}
 				</button>
 
 				<button

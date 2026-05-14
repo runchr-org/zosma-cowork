@@ -175,6 +175,14 @@ async fn read_stdout(
             }
             "event" => {
                 if let Some(e) = m.get("event") {
+                    // Surface OAuth-flow events as Tauri events so the React
+                    // UI can listen for them globally (separate from prompt
+                    // streaming channels which are scoped to active prompts).
+                    if let Some(kind) = e.get("kind").and_then(|v| v.as_str()) {
+                        if kind.starts_with("oauth_") || kind == "agent_reload_failed" {
+                            let _ = app.emit(kind, e.clone());
+                        }
+                    }
                     for (_, p) in pp.lock().await.iter() {
                         let _ = p.channel.send(e.clone());
                     }
@@ -299,6 +307,51 @@ async fn save_auth_key(
         &s,
         &serde_json::json!({"type":"save_auth","id":"sa","provider":provider,"key":key}),
         std::time::Duration::from_secs(30),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn start_oauth(provider: String, s: State<'_, AppState>) -> Result<Value, String> {
+    // OAuth involves the user completing a browser flow — generous timeout.
+    // Use a unique id per call so that a re-entrant `start_oauth` (e.g. after
+    // the user closed the browser without completing) cannot have its reply
+    // swallowed by the previous flow's cancellation message.
+    let id = format!("so-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"start_oauth","id":id,"provider":provider}),
+        std::time::Duration::from_secs(300),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn cancel_oauth(s: State<'_, AppState>) -> Result<Value, String> {
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"cancel_oauth","id":"co"}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn logout_provider(provider: String, s: State<'_, AppState>) -> Result<Value, String> {
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"logout","id":"lo","provider":provider}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn get_auth_status(s: State<'_, AppState>) -> Result<Value, String> {
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"get_auth_status","id":"gas"}),
+        std::time::Duration::from_secs(10),
     )
     .await
 }
@@ -570,6 +623,10 @@ pub fn run() {
             abort_prompt,
             set_active_model,
             save_auth_key,
+            start_oauth,
+            cancel_oauth,
+            logout_provider,
+            get_auth_status,
             has_credentials,
             reload_sidecar,
             list_sessions,
