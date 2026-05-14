@@ -19,6 +19,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import { ExtensionPanel } from "./ExtensionPanel";
+import { ProviderAuthSection } from "./ProviderAuthSection";
 
 interface Session {
 	id: string;
@@ -228,26 +229,33 @@ function SettingsPanel({ onShowKeyEntry }: { onShowKeyEntry?: () => void }) {
 							<span className="text-xs font-medium text-sidebar-foreground/70">Authentication</span>
 						</div>
 						<div
-							className="rounded-lg border p-2.5"
+							className="rounded-lg border p-2.5 space-y-3"
 							style={{
 								borderColor: "hsl(var(--sidebar-border))",
 								background: "hsl(var(--sidebar-background) / 0.5)",
 							}}
 						>
-							<p className="text-[10px] text-sidebar-foreground/50 mb-2">
-								API keys are required to connect to LLM providers.
-							</p>
-							<button
-								type="button"
-								onClick={onShowKeyEntry}
-								className="w-full text-xs px-3 py-1.5 rounded-lg transition-colors text-center"
-								style={{
-									background: "hsl(var(--sidebar-accent))",
-									color: "hsl(var(--sidebar-accent-foreground))",
-								}}
-							>
-								Change API Key
-							</button>
+							<ProviderAuthSection provider="anthropic" compact />
+							<div
+								className="h-px"
+								style={{ background: "hsl(var(--sidebar-border))" }}
+							/>
+							<div>
+								<p className="text-[10px] text-sidebar-foreground/50 mb-2">
+									Or use an API key for other providers.
+								</p>
+								<button
+									type="button"
+									onClick={onShowKeyEntry}
+									className="w-full text-xs px-3 py-1.5 rounded-lg transition-colors text-center"
+									style={{
+										background: "hsl(var(--sidebar-accent))",
+										color: "hsl(var(--sidebar-accent-foreground))",
+									}}
+								>
+									Change API Key
+								</button>
+							</div>
 						</div>
 					</div>
 

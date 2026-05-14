@@ -79,6 +79,28 @@ interface SaveAuthCommand {
 	key: string;
 }
 
+interface StartOAuthCommand {
+	type: "start_oauth";
+	id: string;
+	provider: string;
+}
+
+interface CancelOAuthCommand {
+	type: "cancel_oauth";
+	id: string;
+}
+
+interface LogoutCommand {
+	type: "logout";
+	id: string;
+	provider: string;
+}
+
+interface GetAuthStatusCommand {
+	type: "get_auth_status";
+	id: string;
+}
+
 interface ReloadCommand {
 	type: "reload";
 	id: string;
@@ -178,6 +200,10 @@ type Command =
 	| AbortCommand
 	| SetModelCommand
 	| SaveAuthCommand
+	| StartOAuthCommand
+	| CancelOAuthCommand
+	| LogoutCommand
+	| GetAuthStatusCommand
 	| ReloadCommand
 	| SaveSessionCommand
 	| LoadSessionCommand
@@ -545,6 +571,13 @@ async function main() {
 	let zosmaDir = defaultZosmaDir();
 	let activePromptId: string | null = null;
 
+	// In-flight OAuth login (only one at a time). Holds the AbortController so
+	// `cancel_oauth` can interrupt the SDK's loopback callback server, and the
+	// promise tracking the flow's full lifecycle so a re-entrant `start_oauth`
+	// can wait for the previous flow's cleanup before installing a fresh one.
+	let oauthAbort: AbortController | null = null;
+	let oauthInflight: Promise<void> | null = null;
+
 	// These are set during init
 	let authStorage: AuthStorage | undefined;
 	let modelRegistry: ModelRegistry | undefined;
@@ -765,6 +798,223 @@ async function main() {
 					// Reload: recreate everything with fresh auth
 					await initAgent(zosmaDir);
 					send({ type: "result", id: cmd.id, data: { success: true } });
+					break;
+				}
+
+				// ── start_oauth ────────────────────────────────────────────
+				case "start_oauth": {
+					if (!authStorage) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					// If a previous flow is still in flight (e.g. the user closed
+					// the browser without completing), abort it and wait for its
+					// cleanup before installing a new one. This makes start_oauth
+					// idempotent — clicking "Sign In" again always works.
+					if (oauthAbort) {
+						log("start_oauth: aborting previous in-flight flow");
+						oauthAbort.abort();
+						if (oauthInflight) {
+							try {
+								await oauthInflight;
+							} catch {
+								// expected: previous flow rejected with AbortError
+							}
+						}
+					}
+					const ac = new AbortController();
+					oauthAbort = ac;
+					const provider = cmd.provider;
+					const cmdId = cmd.id;
+					const storage = authStorage;
+					log("Starting OAuth for %s", provider);
+					oauthInflight = (async () => {
+						try {
+							await storage.login(provider, {
+								onAuth: (info) => {
+									send({
+										type: "event",
+										event: {
+											kind: "oauth_open_url",
+											provider,
+											url: info.url,
+											instructions: info.instructions,
+										},
+									});
+								},
+								onPrompt: async (prompt) => {
+									// Not expected for browser-flow OAuth; reject so the
+									// SDK surfaces a clear error instead of hanging.
+									throw new Error(
+										`Interactive prompts are not supported in the desktop OAuth flow (message: ${prompt.message})`,
+									);
+								},
+								onProgress: (message) => {
+									send({
+										type: "event",
+										event: { kind: "oauth_progress", provider, message },
+									});
+								},
+								// The SDK's loginAnthropic ignores the `signal` parameter,
+								// so `cancel_oauth` cannot unstick the loopback HTTP
+								// server (bound on 53692) directly. Provide an
+								// onManualCodeInput callback that rejects when our
+								// AbortController fires: that triggers the SDK's
+								// server.cancelWait() path, which lets the finally
+								// block in loginAnthropic close the server. Without this
+								// the server stays bound and subsequent sign-in attempts
+								// fail with EADDRINUSE.
+								onManualCodeInput: () =>
+									new Promise<string>((_resolve, reject) => {
+										const err = new Error("OAuth cancelled");
+										err.name = "AbortError";
+										if (ac.signal.aborted) {
+											reject(err);
+											return;
+										}
+										const onAbort = () => reject(err);
+										ac.signal.addEventListener("abort", onAbort, {
+											once: true,
+										});
+									}),
+								signal: ac.signal,
+							});
+							log("OAuth login succeeded for %s", provider);
+							// Release the AbortSignal so the dangling
+							// onManualCodeInput promise rejects and gets GC'd.
+							if (!ac.signal.aborted) ac.abort();
+							send({ type: "result", id: cmdId, data: { success: true } });
+							send({
+								type: "event",
+								event: { kind: "oauth_completed", provider },
+							});
+							// Reload the agent so the new provider's models appear.
+							initAgent(zosmaDir).catch((err) => {
+								log("initAgent failed after oauth: %s", err);
+								send({
+									type: "event",
+									event: { kind: "agent_reload_failed", error: String(err) },
+								});
+							});
+						} catch (err: unknown) {
+							const errAny = err as
+								| { name?: string; message?: string }
+								| undefined;
+							const cancelled =
+								errAny?.name === "AbortError" || ac.signal.aborted;
+							log(
+								"OAuth login %s for %s: %s",
+								cancelled ? "cancelled" : "failed",
+								provider,
+								errAny?.message ?? err,
+							);
+							send({
+								type: "result",
+								id: cmdId,
+								data: {
+									success: false,
+									cancelled,
+									error: cancelled
+										? undefined
+										: String(errAny?.message ?? err),
+								},
+							});
+							send({
+								type: "event",
+								event: {
+									kind: cancelled ? "oauth_cancelled" : "oauth_failed",
+									provider,
+									error: cancelled
+										? undefined
+										: String(errAny?.message ?? err),
+								},
+							});
+						} finally {
+							// Only clear if we still own the slot. A subsequent
+							// start_oauth call may have installed a fresh AC/promise
+							// while this one was unwinding.
+							if (oauthAbort === ac) {
+								oauthAbort = null;
+								oauthInflight = null;
+							}
+						}
+					})();
+					break;
+				}
+
+				// ── cancel_oauth ───────────────────────────────────────────
+				case "cancel_oauth": {
+					if (oauthAbort) {
+						log("Cancelling OAuth flow");
+						oauthAbort.abort();
+					}
+					send({ type: "result", id: cmd.id, data: { success: true } });
+					break;
+				}
+
+				// ── logout ─────────────────────────────────────────────────
+				case "logout": {
+					if (!authStorage) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					try {
+						authStorage.logout(cmd.provider);
+						log("Logged out provider %s", cmd.provider);
+					} catch (err) {
+						log("logout failed: %s", err);
+					}
+					send({ type: "result", id: cmd.id, data: { success: true } });
+					initAgent(zosmaDir).catch((err) => {
+						log("initAgent failed after logout: %s", err);
+						send({
+							type: "event",
+							event: { kind: "agent_reload_failed", error: String(err) },
+						});
+					});
+					break;
+				}
+
+				// ── get_auth_status ────────────────────────────────────────
+				case "get_auth_status": {
+					if (!authStorage) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					const providers: Array<{
+						id: string;
+						type: "api_key" | "oauth" | "unknown";
+						expires?: number;
+					}> = [];
+					for (const providerId of authStorage.list()) {
+						const cred = authStorage.get(providerId);
+						if (!cred) continue;
+						if (cred.type === "oauth") {
+							providers.push({
+								id: providerId,
+								type: "oauth",
+								expires: (cred as { expires?: number }).expires,
+							});
+						} else if (cred.type === "api_key") {
+							providers.push({ id: providerId, type: "api_key" });
+						} else {
+							providers.push({ id: providerId, type: "unknown" });
+						}
+					}
+					// Also expose OAuth providers the SDK supports, so the UI can
+					// offer "Sign in" buttons for providers the user hasn't yet
+					// configured.
+					let supported: string[] = [];
+					try {
+						supported = authStorage.getOAuthProviders().map((p) => p.id);
+					} catch {
+						// older SDKs may not expose this — fail soft
+					}
+					send({
+						type: "result",
+						id: cmd.id,
+						data: { providers, supported },
+					});
 					break;
 				}
 
