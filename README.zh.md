@@ -15,9 +15,9 @@
 
 ## Demo
 
-<video src="./assets/demo.mp4" controls width="100%">
-  Your browser doesn't support the video tag. [Download the demo](./assets/demo.mp4).
-</video>
+[![Zosma Cowork 演示视频](./assets/screenshot.png)](./assets/demo.mp4)
+
+*点击截图观看演示视频 (1:16) — 使用自然语言智能体处理发票。*
 
 ## 为什么选择 Zosma Cowork？
 

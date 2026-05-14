@@ -17,9 +17,9 @@
 
 ## Demo
 
-<video src="./assets/demo.mp4" controls width="100%">
-  Your browser doesn't support the video tag. [Download the demo](./assets/demo.mp4).
-</video>
+[![Zosma Cowork 데모](./assets/screenshot.png)](./assets/demo.mp4)
+
+*스크린샷을 클릭하여 데모 비디오 시청 (1:16) — 자연어 에이전트를 이용한 인보이스 처리.*
 
 ## Zosma Cowork 를 선택해야 하는 이유
 

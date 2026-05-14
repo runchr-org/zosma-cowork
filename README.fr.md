@@ -17,9 +17,9 @@
 
 ## Demo
 
-<video src="./assets/demo.mp4" controls width="100%">
-  Your browser doesn't support the video tag. [Download the demo](./assets/demo.mp4).
-</video>
+[![Démo Zosma Cowork](./assets/screenshot.png)](./assets/demo.mp4)
+
+*Cliquez sur la capture d'écran pour voir la démo (1:16) — traitement de factures avec des agents en langage naturel.*
 
 ## Pourquoi Zosma Cowork ?
 

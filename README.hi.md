@@ -15,11 +15,9 @@
 
 ## डेमो
 
-<video src="./assets/demo.mp4" controls width="100%">
-  आपका ब्राउज़र वीडियो टैग का समर्थन नहीं करता। [डेमो डाउनलोड करें](./assets/demo.mp4).
-</video>
+[![Zosma Cowork डेमो — देखने के लिए क्लिक करें](./assets/screenshot.png)](./assets/demo.mp4)
 
-![zosma-cowork-स्क्रीनशॉट](./assets/screenshot.png)
+*डेमो वीडियो देखने के लिए ऊपर स्क्रीनशॉट पर क्लिक करें (1:16) — प्राकृतिक भाषा एजेंटों के साथ इनवॉइस प्रोसेसिंग।*
 
 ## क्यों Zosma Cowork?
 

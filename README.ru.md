@@ -17,9 +17,9 @@
 
 ## Demo
 
-<video src="./assets/demo.mp4" controls width="100%">
-  Your browser doesn't support the video tag. [Download the demo](./assets/demo.mp4).
-</video>
+[![Демо Zosma Cowork](./assets/screenshot.png)](./assets/demo.mp4)
+
+*Нажмите на скриншот, чтобы посмотреть демо (1:16) — обработка счетов с помощью агентов на естественном языке.*
 
 ## Почему Zosma Cowork?
 

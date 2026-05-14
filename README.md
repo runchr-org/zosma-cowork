@@ -15,11 +15,9 @@
 
 ## Demo
 
-<video src="./assets/demo.mp4" controls width="100%">
-  Your browser doesn't support the video tag. [Download the demo](./assets/demo.mp4).
-</video>
+[![Zosma Cowork demo — click to play](./assets/screenshot.png)](./assets/demo.mp4)
 
-![Zosma Cowork screenshot](./assets/screenshot.png)
+*Click the screenshot above to watch the demo video (1:16) — invoice processing with natural language agents.*
 
 ## Why Zosma Cowork?
 

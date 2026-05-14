@@ -17,9 +17,9 @@
 
 ## Demo
 
-<video src="./assets/demo.mp4" controls width="100%">
-  Your browser doesn't support the video tag. [Download the demo](./assets/demo.mp4).
-</video>
+[![Zosma Cowork デモ](./assets/screenshot.png)](./assets/demo.mp4)
+
+*スクリーンショットをクリックしてデモ動画を再生 (1:16) — 自然言語エージェントによる請求書処理。*
 
 ## Zosma Cowork の特徴
 
