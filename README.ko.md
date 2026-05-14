@@ -17,10 +17,9 @@
 
 ## Demo
 
-[![Zosma Cowork 데모](./assets/screenshot.png)](./assets/demo.mp4)
+![Zosma Cowork demo](./assets/demo.gif)
 
-*스크린샷을 클릭하여 데모 비디오 시청 (1:16) — 자연어 에이전트를 이용한 인보이스 처리.*
-
+*자연어 에이전트를 이용한 인보이스 처리. [전체 데모 비디오](./assets/demo.mp4) 보기 (1:16).*
 ## Zosma Cowork 를 선택해야 하는 이유
 
 ### 🌟 pi 기반 최초의 데스크톱 코워커
@@ -99,7 +98,7 @@ npm run dev
 
 ## 🇮🇳 Made in India
 
-**Zosma Cowork**는 **ZOSMAAI SOLUTIONS PRIVATE LIMITED**에 의해 **인도 벵갈루루**에서 자랑스럽게 구축되었습니다.
+**Zosma Cowork** — **인도에서** 자랑스럽게 구축되었습니다 — **ZOSMAAI SOLUTIONS PRIVATE LIMITED**
 
 인도에서 세계로 🌏 — [Zosma AI](https://zosma.ai) 팀의 ❤️를 담아.
 

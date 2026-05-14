@@ -15,10 +15,9 @@
 
 ## Demo
 
-[![Zosma Cowork demo — click to play](./assets/screenshot.png)](./assets/demo.mp4)
+![Zosma Cowork demo](./assets/demo.gif)
 
-*Click the screenshot above to watch the demo video (1:16) — invoice processing with natural language agents.*
-
+*Invoice processing with natural language agents. Watch the [full demo video](./assets/demo.mp4) (1:16).*
 ## Why Zosma Cowork?
 
 ### 🌟 The First Desktop Coworker Built on pi
@@ -43,7 +42,7 @@ The [pi ecosystem](https://github.com/earendil-works/pi-coding-agent) includes h
 | **Desktop app** | ✅ Tauri v2 native | 🟡 CLI only | IDE-only | CLI-only |
 | **Local-first** | ✅ Keys + data stay local | ❌ Cloud-bound | ✅ Partial | Varies |
 | **Non-coder friendly** | ✅ Minimal UI, no CLI needed | 🟡 Developer-focused | 🟡 Developer-focused | ❌ CLI-only |
-| **Made in India 🇮🇳** | ✅ Built in Bengaluru | ❌ | ❌ | ❌ |
+| **Made in India 🇮🇳** | ✅ Built from India | ❌ | ❌ | ❌ |
 
 ### 👥 Help Your Non-Technical Friends Get Started
 
@@ -231,7 +230,7 @@ zosma-cowork/
 
 ## 🇮🇳 Made in India
 
-**Zosma Cowork** is proudly built in **Bengaluru, India** by **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
+**Zosma Cowork** — proudly built **from India** by **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
 
 From India to the World 🌏 — with ❤️ from the team at [Zosma AI](https://zosma.ai).
 
