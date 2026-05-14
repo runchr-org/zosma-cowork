@@ -17,9 +17,12 @@
 
 ## Demo
 
-![Zosma Cowork demo](./assets/demo.gif)
+<img src="./assets/demo.gif" width="100%" alt="Zosma Cowork demo" />
+
+<img src="./assets/screenshot.png" width="100%" alt="Zosma Cowork screenshot" />
 
 *Procesamiento de facturas con agentes de lenguaje natural. Mira el [video completo](./assets/demo.mp4) (1:16).*
+
 ## ¿Por qué Zosma Cowork?
 
 ### 🌟 El primer escritorio colaborativo basado en pi

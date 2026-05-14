@@ -17,9 +17,12 @@
 
 ## Demo
 
-![Zosma Cowork demo](./assets/demo.gif)
+<img src="./assets/demo.gif" width="100%" alt="Zosma Cowork demo" />
+
+<img src="./assets/screenshot.png" width="100%" alt="Zosma Cowork screenshot" />
 
 *Обработка счетов с помощью агентов на естественном языке. Смотрите [полное демо](./assets/demo.mp4) (1:16).*
+
 ## Почему Zosma Cowork?
 
 ### 🌟 Первый настольный coworker на базе pi

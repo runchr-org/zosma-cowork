@@ -15,9 +15,12 @@
 
 ## Demo
 
-![Zosma Cowork demo](./assets/demo.gif)
+<img src="./assets/demo.gif" width="100%" alt="Zosma Cowork demo" />
+
+<img src="./assets/screenshot.png" width="100%" alt="Zosma Cowork screenshot" />
 
 *Invoice processing with natural language agents. Watch the [full demo video](./assets/demo.mp4) (1:16).*
+
 ## Why Zosma Cowork?
 
 ### 🌟 The First Desktop Coworker Built on pi

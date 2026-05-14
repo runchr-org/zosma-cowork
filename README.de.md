@@ -17,9 +17,12 @@
 
 ## Demo
 
-![Zosma Cowork demo](./assets/demo.gif)
+<img src="./assets/demo.gif" width="100%" alt="Zosma Cowork demo" />
+
+<img src="./assets/screenshot.png" width="100%" alt="Zosma Cowork screenshot" />
 
 *Rechnungsverarbeitung mit natürlichen Sprachagenten. Siehe das [vollständige Demo-Video](./assets/demo.mp4) (1:16).*
+
 ## Warum Zosma Cowork?
 
 ### 🌟 Der erste Desktop-Coworker auf Basis von pi
