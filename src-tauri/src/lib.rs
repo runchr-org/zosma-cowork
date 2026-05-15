@@ -639,6 +639,8 @@ pub fn run() {
                 if let Err(e) = analytics::setup(app, key) {
                     log::warn!("Analytics setup failed: {}", e);
                 }
+            } else {
+                log::info!("Analytics: no key, disabled");
             }
 
             let h = app.handle().clone();

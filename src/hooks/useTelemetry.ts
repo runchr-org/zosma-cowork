@@ -8,7 +8,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	initTelemetry as initTelemetryService,
 	setSentryDsn,
@@ -25,6 +25,10 @@ export interface UseTelemetryReturn {
 
 export function useTelemetry(): UseTelemetryReturn {
 	const [isEnabled, setIsEnabled] = useState(false);
+	// Track whether the user has made an explicit choice via enable()/disable().
+	// Prevents the async settings-load response from overriding the user's
+	// choice when it arrives after they've already clicked enable/disable.
+	const userMadeChoice = useRef(false);
 
 	// Load initial state from settings on mount
 	useEffect(() => {
@@ -39,13 +43,23 @@ export function useTelemetry(): UseTelemetryReturn {
 		invoke<{ telemetry?: { enabled?: boolean } }>("get_settings")
 			.then(async (settings) => {
 				if (cancelled) return;
-				const enabled = settings?.telemetry?.enabled ?? false;
-				setIsEnabled(enabled);
-				await initTelemetryService(enabled);
+				// Determine the effective enabled state from settings
+				const enabledFromSettings = settings?.telemetry?.enabled ?? false;
+				// Don't override if the user already made an explicit choice
+				// (e.g., clicked Enable Telemetry on the consent dialog before
+				// the async get_settings call returned).
+				if (!userMadeChoice.current) {
+					setIsEnabled(enabledFromSettings);
+					await initTelemetryService(enabledFromSettings);
+				}
+				// If userMadeChoice is true, enable()/disable() already called
+				// setServiceTelemetryEnabled() and initTelemetryService().
+				// Do NOT call them again here — a stale closure would use the
+				// wrong (initial) isEnabled value and override the user's choice.
 			})
 			.catch(async () => {
 				// Settings not available yet — default to disabled
-				if (!cancelled) {
+				if (!cancelled && !userMadeChoice.current) {
 					setIsEnabled(false);
 					await initTelemetryService(false);
 				}
@@ -57,6 +71,7 @@ export function useTelemetry(): UseTelemetryReturn {
 	}, []);
 
 	const enable = useCallback(async () => {
+		userMadeChoice.current = true;
 		setIsEnabled(true);
 		setServiceTelemetryEnabled(true);
 		try {
@@ -68,6 +83,7 @@ export function useTelemetry(): UseTelemetryReturn {
 	}, []);
 
 	const disable = useCallback(async () => {
+		userMadeChoice.current = true;
 		setIsEnabled(false);
 		setServiceTelemetryEnabled(false);
 		try {
