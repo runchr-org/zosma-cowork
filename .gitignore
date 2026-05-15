@@ -20,3 +20,4 @@ src-tauri/agent-sidecar
 /.pi-lens
 src-tauri/.pi/
 SHOW_HN.md
+.worktrees/
