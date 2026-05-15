@@ -39,6 +39,14 @@ import {
 	setExtensionEnabled,
 	uninstallExtension,
 } from "./extension-manager.js";
+// Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
+// this loaded as an extension, Claude Pro/Max OAuth requests are
+// fingerprinted by Anthropic as a "third-party app" and rejected with a
+// 400 invalid_request_error pointing at claude.ai/settings/usage. The
+// bridge rewrites the system prompt and tool names so requests pass as
+// canonical Claude CLI traffic. esbuild inlines this module into our
+// bundle; we never depend on jiti / typebox at runtime.
+import piAnthropicMessages from "./vendor/anthropic-messages/extensions/index.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -291,6 +299,7 @@ function cleanStaleLocks(dir: string): void {
 		}
 	}
 }
+
 
 // ---------------------------------------------------------------------------
 // Session persistence helpers
@@ -616,13 +625,39 @@ async function main() {
 		});
 
 		// Resource loader — discovers extensions, skills, prompts from
-		// the zosma agent dir.
+		// the zosma agent dir. Also takes the vendored pi-anthropic-messages
+		// bridge as an inline factory so we don't depend on pi's disk-based
+		// extension discovery (which needs jiti + a node_modules tree to
+		// resolve `typebox`, neither of which is available in our bundled
+		// sidecar).
 		resourceLoader = new DefaultResourceLoader({
 			cwd: process.cwd(),
 			agentDir,
 			settingsManager,
+			extensionFactories: [piAnthropicMessages],
 		});
 		await resourceLoader.reload();
+		// Surface any extension-load errors — they're silently collected by
+		// the loader otherwise, which made the pi-anthropic-messages bridge
+		// look "installed" while never actually activating.
+		try {
+			const extResult = resourceLoader.getExtensions();
+			if (extResult.errors && extResult.errors.length > 0) {
+				for (const err of extResult.errors) {
+					log("extension load error: %s — %s", err.path, err.error);
+				}
+			}
+			log(
+				"extensions loaded: %d (errors: %d)",
+				extResult.extensions?.length ?? 0,
+				extResult.errors?.length ?? 0,
+			);
+			for (const ext of extResult.extensions ?? []) {
+				log("  - %s", ext.path);
+			}
+		} catch (err) {
+			log("getExtensions failed: %s", err);
+		}
 
 		// Session manager — in-memory (persistence handled by sidecar commands)
 		sessionManager = SessionManager.inMemory();
@@ -727,6 +762,12 @@ async function main() {
 					activePromptId = cmd.id;
 					try {
 						await session.prompt(cmd.text);
+					} catch (err) {
+						// Surface SDK errors back to the UI instead of swallowing them
+						// silently with just a "done" event.
+						const msg = err instanceof Error ? err.message : String(err);
+						log("prompt error: %s", msg);
+						send({ type: "error", id: cmd.id, message: msg });
 					} finally {
 						send({ type: "done", id: cmd.id });
 						activePromptId = null;
