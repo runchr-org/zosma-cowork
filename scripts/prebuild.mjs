@@ -1,6 +1,12 @@
 // Cross-platform prebuild script for Tauri beforeBuildCommand
 // Bundles the agent-sidecar into a single self-contained CJS file
 // with all dependencies inlined, so no node_modules/ needed at runtime.
+//
+// The vendored pi-anthropic-messages bridge is managed by
+// `agent-sidecar/scripts/fetch-vendor.mjs`, which the sidecar's
+// `postinstall` hook runs automatically before tsc/esbuild see the
+// source. We don't duplicate that logic here — the `npm ci` below
+// triggers it.
 
 import { execSync } from "node:child_process";
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

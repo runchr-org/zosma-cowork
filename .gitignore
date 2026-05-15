@@ -8,6 +8,7 @@
 .env.local
 agent-sidecar/node_modules
 agent-sidecar/dist
+agent-sidecar/src/vendor
 src-tauri/agent-sidecar
 # Cargo build artifacts
 /target

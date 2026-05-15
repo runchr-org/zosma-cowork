@@ -4,6 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"postinstall": "node scripts/fetch-vendor.mjs",
 		"dev": "tsx watch src/index.ts",
 		"build": "tsc",
 		"bundle": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs",
