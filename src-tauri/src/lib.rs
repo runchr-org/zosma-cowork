@@ -2,6 +2,8 @@
 //!
 //! A thin relay between the React frontend and the Node.js agent sidecar.
 
+mod analytics;
+
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -617,21 +619,28 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .manage(TelemetryState {
+            enabled: Arc::new(AtomicBool::new(false)),
+        });
 
     #[allow(unused_mut)]
     let mut builder = builder;
 
-    // Only register the Aptabase plugin if a key is available at compile time.
-    if !aptabase_key.is_empty() {
-        builder = builder.plugin(tauri_plugin_aptabase::Builder::new(aptabase_key).build());
-    }
+    // Only set up our in-house analytics if a key is available at compile time.
+    // The analytics module uses tauri::async_runtime::spawn (safe in setup context)
+    // into a single .setup() since Tauri only calls the last one.
+    let ak = (!aptabase_key.is_empty()).then(|| aptabase_key.to_string());
 
     builder
-        .manage(TelemetryState {
-            enabled: Arc::new(AtomicBool::new(false)),
-        })
-        .setup(|app| {
+        .setup(move |app| {
+            // Initialize in-house analytics (runs within Tauri's tokio runtime)
+            if let Some(ref key) = ak {
+                if let Err(e) = analytics::setup(app, key) {
+                    log::warn!("Analytics setup failed: {}", e);
+                }
+            }
+
             let h = app.handle().clone();
             let st: AppState = AppState::default();
             let zd = std::env::var("ZOSMA_DIR").unwrap_or_else(|_| {
@@ -684,6 +693,8 @@ pub fn run() {
             search_discover,
             write_user_file,
             open_url,
+            crate::analytics::track_analytics_event,
+            crate::analytics::set_analytics_enabled,
             set_telemetry_enabled,
         ])
         .run(tauri::generate_context!())

@@ -1,6 +1,9 @@
 fn main() {
     tauri_build::build();
 
+    // Re-run build script if ../.env changes
+    println!("cargo:rerun-if-changed=../.env");
+
     // Load APTABASE_KEY from ../.env so it's available at compile time
     // to option_env!("APTABASE_KEY") in lib.rs.
     //

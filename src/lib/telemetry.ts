@@ -1,7 +1,8 @@
 /**
  * Zosma Cowork — Telemetry service
  *
- * Thin wrapper around Aptabase's trackEvent and Sentry crash reporting.
+ * Anonymous usage analytics via our in-house analytics IPC
+ * (replaces the buggy tauri-plugin-aptabase) and Sentry crash reporting.
  * All calls are no-ops unless consent has been explicitly given via
  * initTelemetry() / setTelemetryEnabled().
  *
@@ -12,7 +13,7 @@
  * This module must never throw — telemetry failures must not break the app.
  */
 
-import { trackEvent as aptabaseTrackEvent } from "@aptabase/tauri";
+import { invoke } from "@tauri-apps/api/core";
 
 let enabled = false;
 let sentryInitialized = false;
@@ -45,6 +46,8 @@ export async function initTelemetry(isEnabled: boolean): Promise<void> {
 
 export function setTelemetryEnabled(isEnabled: boolean): void {
 	enabled = isEnabled;
+	// Sync the enabled state to the Rust backend
+	void invoke("set_analytics_enabled", { enabled: isEnabled }).catch(() => {});
 }
 
 export function trackEvent(
@@ -53,10 +56,11 @@ export function trackEvent(
 ): void {
 	if (!enabled) return;
 
-	// Fire-and-forget — we don't await the promise because telemetry
-	// should never block or delay the UI. Catch to prevent unhandled
-	// promise rejections.
-	void aptabaseTrackEvent(name, props).catch(() => {});
+	// Fire-and-forget via our in-house analytics IPC.
+	void invoke("track_analytics_event", {
+		name,
+		props: props ?? null,
+	}).catch(() => {});
 }
 
 /**
