@@ -1272,67 +1272,36 @@ async function main() {
 
 				// ── skills: search ────────────────────────────────────────────
 				case "search_skills": {
+					const query = (cmd as unknown as Record<string, string>).query || "";
+					if (!query.trim()) {
+						send({ type: "result", id: cmd.id, data: { results: [] } });
+						break;
+					}
 					try {
-						const query = (cmd as unknown as Record<string, string>).query || "";
-						if (!query.trim()) {
+						const url = `https://skills.sh/api/search?q=${encodeURIComponent(query.trim())}&limit=20`;
+						const controller = new AbortController();
+						const timeout = setTimeout(() => controller.abort(), 15000);
+						const res = await fetch(url, { signal: controller.signal });
+						clearTimeout(timeout);
+						if (!res.ok) {
+							log("search_skills: API returned %d", res.status);
 							send({ type: "result", id: cmd.id, data: { results: [] } });
 							break;
 						}
-						const output = execFileSync("npx", ["skills", "find", query], {
-							encoding: "utf-8",
-							timeout: 30000,
-							maxBuffer: 1024 * 1024,
-						});
-						// Strip ANSI escape codes
-						// Strip ANSI escape codes (ESC + [ + params + letter)
-						const escChar = String.fromCharCode(27); // 0x1b = ESC
-						const chars = output.split("");
-						const result: string[] = [];
-						let skip = 0;
-						for (let i = 0; i < chars.length; i++) {
-							if (skip > 0) {
-								skip--;
-								continue;
-							}
-							if (chars[i] === escChar && i + 1 < chars.length && chars[i + 1] === "[") {
-								let j = i + 2;
-								while (j < chars.length && /[0-9;]/.test(chars[j])) {
-									j++;
-								}
-								if (j < chars.length && /[a-zA-Z]/.test(chars[j])) {
-									j++;
-								}
-								skip = j - i - 1;
-								continue;
-							}
-							result.push(chars[i]);
-						}
-						const clean = result.join("");
-						const results: Array<{ id: string; installCount: number; url: string }> = [];
-						const lines = clean.split("\n");
-						for (let i = 0; i < lines.length; i++) {
-							const line = lines[i].trim();
-							// Match lines like "owner/repo@skill-name 1.2K installs"
-							const match = line.match(
-								/^([\w._-]+\/[\w._-]+(?:@[\w._-]+)?)\s+([\d.]+[KMG]?)\s+installs$/,
-							);
-							if (match) {
-								const id = match[1];
-								const countStr = match[2];
-								let installCount = 0;
-								if (countStr.endsWith("M"))
-									installCount = Math.round(Number.parseFloat(countStr) * 1_000_000);
-								else if (countStr.endsWith("K"))
-									installCount = Math.round(Number.parseFloat(countStr) * 1_000);
-								else installCount = Number.parseInt(countStr, 10) || 0;
-								// Next line is the URL
-								const urlLine = i + 1 < lines.length ? lines[i + 1].trim() : "";
-								const url = urlLine.startsWith("└")
-									? urlLine.replace(/^└\s*/, "")
-									: `https://skills.sh/${id.replace(/@/g, "/")}`;
-								results.push({ id, installCount, url });
-							}
-						}
+						const data = (await res.json()) as {
+							skills: Array<{
+								id: string;
+								name: string;
+								installs: number;
+								source: string;
+							}>;
+						};
+						const results = (data.skills || []).map((skill) => ({
+							id: skill.id || skill.name,
+							installCount: skill.installs || 0,
+							url: skill.source || `https://skills.sh/${(skill.id || skill.name).replace(/@/g, "/")}`,
+							npmData: null,
+						}));
 						send({ type: "result", id: cmd.id, data: { results } });
 					} catch (err) {
 						const message = err instanceof Error ? err.message : String(err);
@@ -1345,12 +1314,30 @@ async function main() {
 				// ── skills: list installed ───────────────────────────────────
 				case "list_skills": {
 					try {
-						const output = execFileSync("npx", ["skills", "list", "--json"], {
-							encoding: "utf-8",
-							timeout: 30000,
-						});
-						const skills = JSON.parse(output);
-						send({ type: "result", id: cmd.id, data: Array.isArray(skills) ? skills : [] });
+						// Read from global (~/.agents/skills/) and local (./agents/skills/) dirs
+						const skills: Array<{ name: string; path: string; scope: string; agents: string[] }> = [];
+						const seen = new Set<string>();
+
+						const globalDir = join(homedir(), ".agents", "skills");
+						const localDir = join(process.cwd(), ".agents", "skills");
+
+						for (const [scope, dir] of [["global", globalDir], ["project", localDir]] as const) {
+							if (existsSync(dir)) {
+								for (const entry of readdirSync(dir)) {
+									const fullPath = join(dir, entry);
+									if (entry.startsWith(".") || entry.startsWith("_") || entry === "node_modules") continue;
+									if (seen.has(entry)) continue;
+									seen.add(entry);
+									skills.push({
+										name: entry,
+										path: fullPath,
+										scope,
+										agents: [],
+									});
+								}
+							}
+						}
+						send({ type: "result", id: cmd.id, data: skills });
 					} catch (err) {
 						const message = err instanceof Error ? err.message : String(err);
 						log("list_skills error: %s", message);

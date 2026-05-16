@@ -15,7 +15,7 @@ describe("SkillsPanel", () => {
 		// Default: no installed skills
 		mockInvoke.mockImplementation((cmd: string) => {
 			if (cmd === "list_skills") return Promise.resolve([]);
-			if (cmd === "search_skills") return Promise.resolve({ results: [] });
+			if (cmd === "search_skills") return Promise.resolve([]);
 			if (cmd === "install_skill") return Promise.resolve({ success: true });
 			if (cmd === "remove_skill") return Promise.resolve({ success: true });
 			return Promise.resolve(null);
@@ -66,22 +66,20 @@ describe("SkillsPanel", () => {
 		mockInvoke.mockImplementation((cmd: string, _args?: Record<string, unknown>) => {
 			if (cmd === "list_skills") return Promise.resolve([]);
 			if (cmd === "search_skills") {
-				return Promise.resolve({
-					results: [
-						{
-							id: "wshobson/agents@typescript-advanced-types",
-							installCount: 41200,
-							url: "https://skills.sh/wshobson/agents/typescript-advanced-types",
-							npmData: null,
-						},
-						{
-							id: "github/awesome-copilot@jest-typescript",
-							installCount: 10500,
-							url: "https://skills.sh/github/awesome-copilot/jest-typescript",
-							npmData: null,
-						},
-					],
-				});
+				return Promise.resolve([
+					{
+						id: "wshobson/agents@typescript-advanced-types",
+						installCount: 41200,
+						url: "https://skills.sh/wshobson/agents/typescript-advanced-types",
+						npmData: null,
+					},
+					{
+						id: "github/awesome-copilot@jest-typescript",
+						installCount: 10500,
+						url: "https://skills.sh/github/awesome-copilot/jest-typescript",
+						npmData: null,
+					},
+				]);
 			}
 			return Promise.resolve(null);
 		});
@@ -127,9 +125,7 @@ describe("SkillsPanel", () => {
 		mockInvoke.mockImplementation((cmd: string, _args?: Record<string, unknown>) => {
 			if (cmd === "list_skills") return Promise.resolve([]);
 			if (cmd === "search_skills") {
-				return Promise.resolve({
-					results: [{ id: "test/skill@my-skill", installCount: 100, url: "", npmData: null }],
-				});
+				return Promise.resolve([{ id: "test/skill@my-skill", installCount: 100, url: "", npmData: null }]);
 			}
 			if (cmd === "install_skill") return Promise.resolve({ success: true });
 			return Promise.resolve(null);
@@ -155,16 +151,14 @@ describe("SkillsPanel", () => {
 		mockInvoke.mockImplementation((cmd: string) => {
 			if (cmd === "list_skills") return Promise.resolve([]);
 			if (cmd === "search_skills") {
-				return Promise.resolve({
-					results: [
-						{
-							id: "test/pkg",
-							installCount: 100,
-							url: "https://skills.sh/test/pkg",
-							npmData: null,
-						},
-					],
-				});
+				return Promise.resolve([
+					{
+						id: "test/pkg",
+						installCount: 100,
+						url: "https://skills.sh/test/pkg",
+						npmData: null,
+					},
+				]);
 			}
 			return Promise.resolve(null);
 		});
@@ -207,12 +201,10 @@ describe("SkillsPanel", () => {
 		mockInvoke.mockImplementation((cmd: string) => {
 			if (cmd === "list_skills") return Promise.resolve([]);
 			if (cmd === "search_skills") {
-				return Promise.resolve({
-					results: [
-						{ id: "a/b@c", installCount: 1, url: "", npmData: null },
-						{ id: "d/e@f", installCount: 2, url: "", npmData: null },
-					],
-				});
+				return Promise.resolve([
+					{ id: "a/b@c", installCount: 1, url: "", npmData: null },
+					{ id: "d/e@f", installCount: 2, url: "", npmData: null },
+				]);
 			}
 			return Promise.resolve(null);
 		});

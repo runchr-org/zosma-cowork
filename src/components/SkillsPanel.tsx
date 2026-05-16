@@ -40,16 +40,22 @@ export function SkillsPanel() {
 		setSearching(true);
 		debounceRef.current = setTimeout(async () => {
 			try {
-				const result = await invoke<{ results: SkillResult[] }>("search_skills", {
+				const result = await invoke<unknown>("search_skills", {
 					query: query.trim(),
 				});
-				setSearchResults(Array.isArray(result?.results) ? result.results : []);
+				// Rust returns bare array (unwrap_or strips the results wrapper)
+				const arr = Array.isArray(result)
+					? (result as SkillResult[])
+					: Array.isArray((result as Record<string, unknown>)?.results)
+						? ((result as Record<string, unknown>).results as SkillResult[])
+						: [];
+				setSearchResults(arr);
 			} catch {
 				setSearchResults([]);
 			} finally {
 				setSearching(false);
 			}
-		}, 300);
+		}, 500);
 
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current);
