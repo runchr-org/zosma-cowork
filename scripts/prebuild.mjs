@@ -9,7 +9,7 @@
 // triggers it.
 
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -46,7 +46,7 @@ code = code.replace(
 );
 writeFileSync(bundlePath, code, "utf-8");
 
-// Copy bundled file and runtime dependencies into src-tauri/ for Tauri resource bundling
+// Copy bundled file into src-tauri/ for Tauri resource bundling
 const targetDir = join(root, "src-tauri", "agent-sidecar");
 mkdirSync(targetDir, { recursive: true });
 // Clean stale files from previous builds
@@ -54,19 +54,8 @@ console.log("[prebuild] Cleaning stale artifacts...");
 for (const f of ["index.cjs", "index.d.ts", "index.js", "index.js.map", "index.d.ts.map"]) {
 	try { rmSync(join(targetDir, f)); } catch { /* ignore */ }
 }
-try { rmSync(join(targetDir, "node_modules"), { recursive: true }); } catch { /* ignore */ }
 
 console.log("[prebuild] Copying bundle...");
 cpSync(bundlePath, join(targetDir, "index.cjs"));
-
-// Copy node_modules/typebox alongside the bundle — the bundled pi-coding-agent
-// loader uses require.resolve("typebox") at runtime to create jiti aliases,
-// which fails when typebox isn't in node_modules near the bundle location.
-const typeboxSrc = join(sidecarDir, "node_modules", "typebox");
-if (existsSync(typeboxSrc)) {
-	const typeboxDest = join(targetDir, "node_modules", "typebox");
-	console.log("[prebuild] Copying node_modules/typebox...");
-	cpSync(typeboxSrc, typeboxDest, { recursive: true });
-}
 
 console.log(`[prebuild] Done (${(code.length / 1024 / 1024).toFixed(1)} MB)`);
