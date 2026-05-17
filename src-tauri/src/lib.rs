@@ -42,7 +42,22 @@ struct AppState {
 }
 
 fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
-    // Try production resource dir first — works on macOS .app bundles
+    // In debug/dev mode, prefer the TypeScript source via tsx.
+    // This avoids resource copying issues and lets typebox resolve
+    // naturally from agent-sidecar/node_modules/.
+    if cfg!(debug_assertions) {
+        let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("agent-sidecar")
+            .join("src")
+            .join("index.ts");
+        if dev_path.exists() {
+            return dev_path;
+        }
+    }
+
+    // Try production resource dir — works on macOS .app bundles
     // and Linux AppImage/dpkg builds.
     let resource = app
         .path()
@@ -55,13 +70,13 @@ fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
     }
 
     // Check /usr/lib/zosma-cowork/agent-sidecar/index.cjs for
-    // distro-packaged installations (Arch AUR, Debian, etc.).
+    // distro-packaged installations.
     let lib_path = PathBuf::from("/usr/lib/zosma-cowork/agent-sidecar/index.cjs");
     if lib_path.exists() {
         return lib_path;
     }
 
-    // In dev mode, use the TypeScript source so tsx picks up live changes.
+    // Last resort — dev fallback
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
