@@ -94,6 +94,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/src-tauri/agent-sidecar"
           cp dist/bundle.cjs "$GITHUB_WORKSPACE/src-tauri/agent-sidecar/index.cjs"
           # Copy typebox alongside the bundle — pi-coding-agent uses require.resolve("typebox") at runtime
+          mkdir -p "$GITHUB_WORKSPACE/src-tauri/agent-sidecar/node_modules"
           cp -r node_modules/typebox "$GITHUB_WORKSPACE/src-tauri/agent-sidecar/node_modules/typebox"
 
       - name: Install frontend dependencies
