@@ -90,9 +90,11 @@ jobs:
             code = code.replace(/var (import_meta\\d*) = \{\\};/g, (_, m) => 'var ' + m + ' = { url: require(\"url\").pathToFileURL(__filename).href };');
             fs.writeFileSync('dist/bundle.cjs', code, 'utf-8');
           "
-          # Copy bundle into src-tauri/ for Tauri resource bundling
+          # Copy bundle and runtime dependencies into src-tauri/ for Tauri resource bundling
           mkdir -p "$GITHUB_WORKSPACE/src-tauri/agent-sidecar"
           cp dist/bundle.cjs "$GITHUB_WORKSPACE/src-tauri/agent-sidecar/index.cjs"
+          # Copy typebox alongside the bundle — pi-coding-agent uses require.resolve("typebox") at runtime
+          cp -r node_modules/typebox "$GITHUB_WORKSPACE/src-tauri/agent-sidecar/node_modules/typebox"
 
       - name: Install frontend dependencies
         run: npm ci
