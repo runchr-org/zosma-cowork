@@ -1296,12 +1296,16 @@ async function main() {
 								source: string;
 							}>;
 						};
-						const results = (data.skills || []).map((skill) => ({
-							id: skill.id || skill.name,
-							installCount: skill.installs || 0,
-							url: skill.source || `https://skills.sh/${(skill.id || skill.name).replace(/@/g, "/")}`,
-							npmData: null,
-						}));
+						const results = (data.skills || []).map((skill) => {
+							// Construct a proper URL: skill.id is owner/repo/skill-name or owner/repo
+							const path = skill.id || (skill.source ? `${skill.source}/${skill.name}` : skill.name);
+							return {
+								id: path,
+								installCount: skill.installs || 0,
+								url: `https://skills.sh/${path}`,
+								npmData: null,
+							};
+						});
 						send({ type: "result", id: cmd.id, data: { results } });
 					} catch (err) {
 						const message = err instanceof Error ? err.message : String(err);

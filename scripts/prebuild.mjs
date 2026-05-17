@@ -54,6 +54,7 @@ console.log("[prebuild] Cleaning stale artifacts...");
 for (const f of ["index.cjs", "index.d.ts", "index.js", "index.js.map", "index.d.ts.map"]) {
 	try { rmSync(join(targetDir, f)); } catch { /* ignore */ }
 }
+
 console.log("[prebuild] Copying bundle...");
 cpSync(bundlePath, join(targetDir, "index.cjs"));
 

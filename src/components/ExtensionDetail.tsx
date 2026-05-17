@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openExternalUrl } from "../lib/utils";
 import type { NpmData, SkillResult } from "../lib/skillRegistry";
 import {
 	fetchNpmDataForSkill,
@@ -172,11 +173,16 @@ export function ExtensionDetail({
 							{/* Links */}
 							<div className="flex flex-col gap-1.5 pt-1">
 								{skill.url && (
-									<a
-										href={skill.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="text-xs text-primary hover:underline flex items-center gap-1"
+									<button
+										type="button"
+										onClick={async () => {
+											try {
+												await openExternalUrl(skill.url);
+											} catch (e) {
+												console.error("Failed to open URL:", e);
+											}
+										}}
+										className="text-xs text-primary hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
 									>
 										<svg
 											width="12"
@@ -194,14 +200,19 @@ export function ExtensionDetail({
 											<line x1="10" y1="14" x2="21" y2="3" />
 										</svg>
 										View on skills.sh
-									</a>
+									</button>
 								)}
 								{npmData?.homepage && (
-									<a
-										href={npmData.homepage}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="text-xs text-primary hover:underline flex items-center gap-1"
+									<button
+										type="button"
+										onClick={async () => {
+											try {
+												await openExternalUrl(npmData.homepage);
+											} catch (e) {
+												console.error("Failed to open homepage:", e);
+											}
+										}}
+										className="text-xs text-primary hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
 									>
 										<svg
 											width="12"
@@ -218,7 +229,7 @@ export function ExtensionDetail({
 											<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
 										</svg>
 										Homepage
-									</a>
+									</button>
 								)}
 							</div>
 
