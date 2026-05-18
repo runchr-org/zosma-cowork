@@ -775,25 +775,40 @@ fn parse_skill_source(source: &str) -> (String, Option<String>) {
     // ── github/owner/repo[/skill-name] ─────────────────────────────
     if parts.len() >= 3 && parts[0] == "github" {
         let url = format!("https://github.com/{}/{}.git", parts[1], parts[2]);
-        let sub_path = if parts.len() > 3 { Some(parts[3..].join("/")) } else { None };
+        let sub_path = if parts.len() > 3 {
+            Some(parts[3..].join("/"))
+        } else {
+            None
+        };
         return (url, sub_path);
     }
 
     // ── owner/repo[/skill-name]  (GitHub shorthand, no prefix) ────
     if parts.len() >= 2 && !parts[0].is_empty() && !parts[0].contains('.') {
         let url = format!("https://github.com/{}/{}.git", parts[0], parts[1]);
-        let sub_path = if parts.len() > 2 { Some(parts[2..].join("/")) } else { None };
+        let sub_path = if parts.len() > 2 {
+            Some(parts[2..].join("/"))
+        } else {
+            None
+        };
         return (url, sub_path);
     }
 
     // ── Single segment, treat as GitHub repo name ──────────────────
-    (format!("https://github.com/{}/{}.git", source, source), None)
+    (
+        format!("https://github.com/{}/{}.git", source, source),
+        None,
+    )
 }
 
 /// Find SKILL.md files in a directory tree and return their parent directories
 fn find_skill_dirs(base: &PathBuf) -> Vec<PathBuf> {
     let mut skills = Vec::new();
-    for entry in WalkDir::new(base).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(base)
+        .max_depth(4)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         if entry.file_name() == "SKILL.md" {
             if let Some(parent) = entry.path().parent() {
                 skills.push(parent.to_path_buf());
@@ -828,20 +843,28 @@ fn extract_skill_name(skill_dir: &std::path::Path) -> Option<String> {
 
 /// Get the skills directory path (~/.pi/agent/skills)
 fn get_skills_dir() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map_err(|e| format!("Cannot find home directory: {e}"))?;
-    Ok(PathBuf::from(home).join(".zosmaai").join("cowork").join("skills"))
+    Ok(PathBuf::from(home)
+        .join(".zosmaai")
+        .join("cowork")
+        .join("skills"))
 }
 
 /// Returns all skill directories the sidecar AI agent discovers skills from.
 /// This ensures the Skills Panel shows the same skills the AI has access to.
 fn get_all_skill_dirs() -> Result<Vec<PathBuf>, String> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map_err(|e| format!("Cannot find home directory: {e}"))?;
     let mut dirs = Vec::new();
 
     // 1. Primary cowork skills dir
-    let cowork_skills = PathBuf::from(&home).join(".zosmaai").join("cowork").join("skills");
+    let cowork_skills = PathBuf::from(&home)
+        .join(".zosmaai")
+        .join("cowork")
+        .join("skills");
     dirs.push(cowork_skills);
 
     // 2. Legacy ~/.agents/skills/
@@ -851,7 +874,10 @@ fn get_all_skill_dirs() -> Result<Vec<PathBuf>, String> {
     }
 
     // 3. Extension-installed skills from ~/.zosmaai/cowork/extensions/*/skills/
-    let extensions_dir = PathBuf::from(&home).join(".zosmaai").join("cowork").join("extensions");
+    let extensions_dir = PathBuf::from(&home)
+        .join(".zosmaai")
+        .join("cowork")
+        .join("extensions");
     if extensions_dir.exists() {
         if let Ok(entries) = fs::read_dir(&extensions_dir) {
             for entry in entries.flatten() {
@@ -864,7 +890,10 @@ fn get_all_skill_dirs() -> Result<Vec<PathBuf>, String> {
     }
 
     // 4. System pi skills dir
-    let pi_skills = PathBuf::from(&home).join(".pi").join("agent").join("skills");
+    let pi_skills = PathBuf::from(&home)
+        .join(".pi")
+        .join("agent")
+        .join("skills");
     if pi_skills.exists() {
         dirs.push(pi_skills);
     }
@@ -911,7 +940,7 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> io::Resul
 fn select_skills_to_install(
     skill_dirs: &[PathBuf],
     sub_path: Option<&str>,
-    repo_path: &PathBuf,
+    repo_path: &std::path::Path,
 ) -> Result<Vec<PathBuf>, String> {
     let Some(sp) = sub_path else {
         // No sub-path — install all skills in the repo
@@ -919,12 +948,16 @@ fn select_skills_to_install(
     };
 
     // Try matching by skill name first
-    let matched: Vec<PathBuf> = skill_dirs.iter().filter(|sd| {
-        let name = extract_skill_name(sd)
-            .or_else(|| sd.file_name().and_then(|n| n.to_str()).map(String::from))
-            .unwrap_or_default();
-        name == sp
-    }).cloned().collect();
+    let matched: Vec<PathBuf> = skill_dirs
+        .iter()
+        .filter(|sd| {
+            let name = extract_skill_name(sd)
+                .or_else(|| sd.file_name().and_then(|n| n.to_str()).map(String::from))
+                .unwrap_or_default();
+            name == sp
+        })
+        .cloned()
+        .collect();
 
     if !matched.is_empty() {
         return Ok(matched);
@@ -946,12 +979,15 @@ fn select_skills_to_install(
 async fn install_skill(source: String, _s: State<'_, AppState>) -> Result<Value, String> {
     // Parse source into git URL + optional sub-path
     let (git_url, sub_path) = parse_skill_source(&source);
-    log::info!("Installing skill from: {} (sub-path: {:?})", git_url, sub_path);
+    log::info!(
+        "Installing skill from: {} (sub-path: {:?})",
+        git_url,
+        sub_path
+    );
 
     // Create temp directory for clone
     let temp_dir = std::env::temp_dir().join(format!("cowork-skill-install-{}", uuid_v4()));
-    fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("Failed to create temp dir: {e}"))?;
 
     // Clone repository using git2 (blocking — run on threadpool)
     let temp_dir_clone = temp_dir.clone();
@@ -965,7 +1001,9 @@ async fn install_skill(source: String, _s: State<'_, AppState>) -> Result<Value,
         // Always search the entire repo root for skills
         let skill_dirs = find_skill_dirs(&repo_path);
         if skill_dirs.is_empty() {
-            return Err("No valid skills found — repository contains no SKILL.md files".to_string());
+            return Err(
+                "No valid skills found — repository contains no SKILL.md files".to_string(),
+            );
         }
 
         // Get destination skills directory
@@ -974,17 +1012,19 @@ async fn install_skill(source: String, _s: State<'_, AppState>) -> Result<Value,
             .map_err(|e| format!("Failed to create skills directory: {e}"))?;
 
         // Determine which skills to install
-        let skills_to_install = select_skills_to_install(
-            &skill_dirs,
-            sub_path.as_deref(),
-            &repo_path,
-        )?;
+        let skills_to_install =
+            select_skills_to_install(&skill_dirs, sub_path.as_deref(), &repo_path)?;
 
         let mut installed = Vec::new();
         for skill_dir in skills_to_install {
             // Extract skill name from SKILL.md or use directory name
             let skill_name = extract_skill_name(&skill_dir)
-                .or_else(|| skill_dir.file_name().and_then(|n| n.to_str()).map(String::from))
+                .or_else(|| {
+                    skill_dir
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(String::from)
+                })
                 .ok_or("Cannot determine skill name")?;
 
             let dest = dest_base.join(&skill_name);
@@ -1007,7 +1047,8 @@ async fn install_skill(source: String, _s: State<'_, AppState>) -> Result<Value,
         drop(repo);
 
         Ok(installed)
-    }).await;
+    })
+    .await;
 
     // Cleanup temp dir
     let _ = fs::remove_dir_all(temp_dir.clone());
@@ -1032,21 +1073,23 @@ async fn remove_skill(name: String, _s: State<'_, AppState>) -> Result<Value, St
 
     // Fast path: direct directory match (e.g., name = "pptx")
     if skill_path.exists() && skill_path.is_dir() {
-        fs::remove_dir_all(&skill_path)
-            .map_err(|e| format!("Failed to remove skill: {e}"))?;
+        fs::remove_dir_all(&skill_path).map_err(|e| format!("Failed to remove skill: {e}"))?;
         log::info!("Removed skill: {}", name);
         return Ok(serde_json::json!({ "success": true, "removed": name }));
     }
 
     // Fallback: name might be a source URL like "github/owner/repo/skill-name"
     // Try matching against installed skill names (from SKILL.md or dir name)
-    let candidate = name.split('/').last().unwrap_or(&name).to_string();
+    let candidate = name.split('/').next_back().unwrap_or(&name).to_string();
     let candidate_path = skills_dir.join(&candidate);
 
     if candidate_path.exists() && candidate_path.is_dir() {
-        fs::remove_dir_all(&candidate_path)
-            .map_err(|e| format!("Failed to remove skill: {e}"))?;
-        log::info!("Removed skill '{}' (matched from source '{}')", candidate, name);
+        fs::remove_dir_all(&candidate_path).map_err(|e| format!("Failed to remove skill: {e}"))?;
+        log::info!(
+            "Removed skill '{}' (matched from source '{}')",
+            candidate,
+            name
+        );
         return Ok(serde_json::json!({ "success": true, "removed": candidate }));
     }
 
@@ -1064,7 +1107,11 @@ async fn remove_skill(name: String, _s: State<'_, AppState>) -> Result<Value, St
                 if target.exists() && target.is_dir() {
                     fs::remove_dir_all(&target)
                         .map_err(|e| format!("Failed to remove skill: {e}"))?;
-                    log::info!("Removed skill '{}' (substring match from '{}')", skill_name, name);
+                    log::info!(
+                        "Removed skill '{}' (substring match from '{}')",
+                        skill_name,
+                        name
+                    );
                     return Ok(serde_json::json!({ "success": true, "removed": skill_name }));
                 }
             }
@@ -1125,7 +1172,7 @@ fn uuid_v4() -> String {
         .as_nanos();
     format!(
         "{:016x}",
-        ((n as u128) << 16 | (counter as u128)) & 0xFFFF_FFFF_FFFF_FFFF
+        (n << 16 | u128::from(counter)) & 0xFFFF_FFFF_FFFF_FFFF
     )
 }
 

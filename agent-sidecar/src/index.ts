@@ -12,7 +12,6 @@
  *                      {"type":"error", "id":"...", "message":"..."}
  */
 
-import { execFileSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
