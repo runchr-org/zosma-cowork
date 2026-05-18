@@ -5,7 +5,8 @@ import { fetchNpmDataForSkill, formatInstallCount } from "../lib/skillRegistry";
 interface ExtensionCardProps {
 	skill: SkillResult;
 	installed: boolean;
-	installing: string | null;
+	isInstalling: boolean;
+	removable?: boolean;
 	onInstall: (id: string) => void;
 	onRemove: (id: string) => void;
 	onShowDetail: (skill: SkillResult) => void;
@@ -14,7 +15,8 @@ interface ExtensionCardProps {
 export function ExtensionCard({
 	skill,
 	installed,
-	installing,
+	isInstalling,
+	removable = true,
 	onInstall,
 	onRemove,
 	onShowDetail,
@@ -150,7 +152,7 @@ export function ExtensionCard({
 
 				{/* Action button */}
 				<div className="shrink-0">
-					{installed ? (
+					{installed && removable ? (
 						<button
 							type="button"
 							title="Remove skill"
@@ -163,19 +165,26 @@ export function ExtensionCard({
 						>
 							Remove
 						</button>
+					) : installed && !removable ? (
+						<span
+							title="System skill — cannot be removed"
+							className="px-2 py-1 text-[10px] font-medium text-sidebar-foreground/30 border border-sidebar-border/50 rounded-md"
+						>
+							System
+						</span>
 					) : (
 						<button
 							type="button"
 							title="Install skill"
 							aria-label={`Install ${displayName}`}
-							disabled={installing === skill.id}
+							disabled={isInstalling}
 							onClick={(e) => {
 								e.stopPropagation();
 								onInstall(skill.id);
 							}}
 							className="px-2 py-1 text-[10px] font-medium text-white bg-primary rounded-md hover:bg-primary/80 disabled:opacity-50 transition-all"
 						>
-							{installing === skill.id ? "..." : "Install"}
+							{isInstalling ? "..." : "Install"}
 						</button>
 					)}
 				</div>

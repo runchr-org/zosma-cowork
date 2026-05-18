@@ -13,7 +13,8 @@ interface ExtensionDetailProps {
 	open: boolean;
 	onClose: () => void;
 	installed: boolean;
-	installing: string | null;
+	isInstalling: boolean;
+	removable?: boolean;
 	onInstall: (id: string) => void;
 	onRemove: (id: string) => void;
 }
@@ -23,7 +24,8 @@ export function ExtensionDetail({
 	open,
 	onClose,
 	installed,
-	installing,
+	isInstalling,
+	removable = true,
 	onInstall,
 	onRemove,
 }: ExtensionDetailProps) {
@@ -257,7 +259,7 @@ export function ExtensionDetail({
 					>
 						Close
 					</button>
-					{installed ? (
+					{installed && removable ? (
 						<button
 							type="button"
 							onClick={handleRemove}
@@ -266,14 +268,21 @@ export function ExtensionDetail({
 						>
 							Remove
 						</button>
+					) : installed && !removable ? (
+						<span
+							title="System skill — cannot be removed"
+							className="px-3 py-1.5 text-xs font-medium text-muted-foreground/40 border border-sidebar-border/50 rounded-md"
+						>
+							System
+						</span>
 					) : (
 						<button
 							type="button"
-							disabled={installing === skill.id}
+							disabled={isInstalling}
 							onClick={handleInstall}
 							className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-md hover:bg-primary/80 disabled:opacity-50 transition-all"
 						>
-							{installing === skill.id ? "Installing..." : "Install"}
+							{isInstalling ? "Installing..." : "Install"}
 						</button>
 					)}
 				</div>

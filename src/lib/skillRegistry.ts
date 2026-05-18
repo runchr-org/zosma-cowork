@@ -14,6 +14,7 @@ export interface InstalledSkill {
 	path: string;
 	scope: "project" | "global";
 	agents: string[];
+	removable?: boolean;
 }
 
 export interface NpmData {

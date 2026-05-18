@@ -213,17 +213,10 @@ interface ListSkillsCommand {
 	id: string;
 }
 
-interface InstallSkillCommand {
-	type: "install_skill";
-	id: string;
-	source: string;
-}
-
-interface RemoveSkillCommand {
-	type: "remove_skill";
-	id: string;
-	name: string;
-}
+// Skill install/remove moved to Rust (src-tauri/src/lib.rs).
+// These handlers no longer exist in the sidecar — npx is not needed.
+// interface InstallSkillCommand { type: "install_skill"; id: string; source: string; }
+// interface RemoveSkillCommand { type: "remove_skill"; id: string; name: string; }
 
 interface FetchSkillPackumentCommand {
 	type: "fetch_skill_packument";
@@ -258,8 +251,8 @@ type Command =
 	| SearchDiscoverCommand
 	| SearchSkillsCommand
 	| ListSkillsCommand
-	| InstallSkillCommand
-	| RemoveSkillCommand
+	// | InstallSkillCommand — moved to Rust (lib.rs)
+	// | RemoveSkillCommand — moved to Rust (lib.rs)
 	| FetchSkillPackumentCommand;
 
 // ---------------------------------------------------------------------------
@@ -1350,39 +1343,8 @@ async function main() {
 					break;
 				}
 
-				// ── skills: install ───────────────────────────────────────────
-				case "install_skill": {
-					try {
-						const source = (cmd as unknown as Record<string, string>).source || "";
-						execFileSync("npx", ["skills", "add", source, "-y", "-g"], {
-							encoding: "utf-8",
-							timeout: 120000,
-						});
-						send({ type: "result", id: cmd.id, data: { success: true } });
-					} catch (err) {
-						const message = err instanceof Error ? err.message : String(err);
-						log("install_skill error: %s", message);
-						send({ type: "error", id: cmd.id, message });
-					}
-					break;
-				}
-
-				// ── skills: remove ────────────────────────────────────────────
-				case "remove_skill": {
-					try {
-						const name = (cmd as unknown as Record<string, string>).name || "";
-						execFileSync("npx", ["skills", "remove", name, "-y"], {
-							encoding: "utf-8",
-							timeout: 30000,
-						});
-						send({ type: "result", id: cmd.id, data: { success: true } });
-					} catch (err) {
-						const message = err instanceof Error ? err.message : String(err);
-						log("remove_skill error: %s", message);
-						send({ type: "error", id: cmd.id, message });
-					}
-					break;
-				}
+				// Skill install/remove handled directly in Rust (lib.rs) — no npx needed.
+				// case "install_skill" and case "remove_skill" removed from sidecar.
 
 				default:
 					send({

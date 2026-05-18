@@ -9,9 +9,17 @@ export function SkillsPanel() {
 	const [searchResults, setSearchResults] = useState<SkillResult[]>([]);
 	const [installed, setInstalled] = useState<InstalledSkill[]>([]);
 	const [searching, setSearching] = useState(false);
-	const [installing, setInstalling] = useState<string | null>(null);
+	const [installingSet, setInstallingSet] = useState<string[]>([]);
+	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 	const [detailSkill, setDetailSkill] = useState<SkillResult | null>(null);
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const showError = useCallback((msg: string) => {
+		setErrorMsg(msg);
+		if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+		errorTimerRef.current = setTimeout(() => setErrorMsg(null), 5000);
+	}, []);
 
 	const loadInstalled = useCallback(async () => {
 		try {
@@ -63,32 +71,65 @@ export function SkillsPanel() {
 	}, [query]);
 
 	const handleInstall = async (skillId: string) => {
-		setInstalling(skillId);
+		setInstallingSet((prev) => [...prev, skillId]);
 		try {
 			await invoke("install_skill", { source: skillId });
 			await loadInstalled();
-		} catch {
-			// Silently fail
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			showError(`Failed to install: ${msg}`);
 		} finally {
-			setInstalling(null);
+			setInstallingSet((prev) => prev.filter((id) => id !== skillId));
 		}
 	};
 
 	const handleRemove = async (skillId: string) => {
-		// Extract the name from skill ID (owner/repo@name => name, or just name)
-		const name = skillId.split("@").pop() || skillId;
+		const name = resolveSkillName(skillId);
 		try {
 			await invoke("remove_skill", { name });
 			await loadInstalled();
-		} catch {
-			// Silently fail
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			showError(`Failed to remove: ${msg}`);
 		}
 	};
 
 	const isInstalled = (skillId: string): boolean => {
-		const name = skillId.split("@").pop() || skillId;
-		return installed.some((s) => s.name === name);
+		// Extract the skill name from the ID
+		// Handles: "owner/repo@name" → "name", "owner/repo/name" → "name", "name" → "name"
+		let candidate = skillId.split("@").pop() || skillId;
+		// If it still looks like a path, extract last segment
+		if (candidate.includes("/")) {
+			candidate = candidate.split("/").pop() || candidate;
+		}
+		return installed.some((s) => s.name === candidate);
 	};
+
+	// Resolve a skill ID to the actual installed directory name for removal
+	const resolveSkillName = (skillId: string): string => {
+		let candidate = skillId.split("@").pop() || skillId;
+		if (candidate.includes("/")) {
+			candidate = candidate.split("/").pop() || candidate;
+		}
+		// If we have an exact match in installed, use that
+		const exact = installed.find((s) => s.name === candidate);
+		if (exact) return exact.name;
+		// Fallback: find by substring match
+		const fuzzy = installed.find((s) => skillId.includes(s.name));
+		if (fuzzy) return fuzzy.name;
+		return candidate;
+	};
+
+	// Determine if the detail skill is removable (look up in installed list)
+	const detailSkillRemovable = detailSkill
+		? (installed.find((s) => {
+				const candidate = detailSkill.id.split("@").pop() || detailSkill.id;
+				const name = candidate.includes("/")
+					? candidate.split("/").pop() || candidate
+					: candidate;
+				return s.name === name;
+		  })?.removable ?? true)
+		: true;
 
 	return (
 		<div className="flex flex-col h-full overflow-hidden">
@@ -124,6 +165,13 @@ export function SkillsPanel() {
 					/>
 				</div>
 			</div>
+
+			{/* Error banner */}
+			{errorMsg && (
+				<div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20">
+					<p className="text-xs text-destructive">{errorMsg}</p>
+				</div>
+			)}
 
 			{/* Scrollable results */}
 			<div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
@@ -174,7 +222,7 @@ export function SkillsPanel() {
 										key={skill.id}
 										skill={skill}
 										installed={isInstalled(skill.id)}
-										installing={installing}
+										isInstalling={installingSet.includes(skill.id)}
 										onInstall={handleInstall}
 										onRemove={handleRemove}
 										onShowDetail={setDetailSkill}
@@ -230,7 +278,8 @@ export function SkillsPanel() {
 										key={skill.name}
 										skill={skillResult}
 										installed={true}
-										installing={installing}
+										isInstalling={installingSet.includes(skill.name)}
+										removable={skill.removable ?? true}
 										onInstall={handleInstall}
 										onRemove={handleRemove}
 										onShowDetail={setDetailSkill}
@@ -248,7 +297,8 @@ export function SkillsPanel() {
 				open={detailSkill !== null}
 				onClose={() => setDetailSkill(null)}
 				installed={detailSkill ? isInstalled(detailSkill.id) : false}
-				installing={installing}
+				isInstalling={installingSet.includes(detailSkill?.id ?? '')}
+				removable={detailSkillRemovable}
 				onInstall={handleInstall}
 				onRemove={handleRemove}
 			/>

@@ -16,6 +16,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{oneshot, Mutex};
 
+// Skill management imports
+use std::fs;
+use std::io;
+use walkdir::WalkDir;
+
 #[derive(Default)]
 struct SidecarState {
     child: Mutex<Option<Child>>,
@@ -85,14 +90,75 @@ fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
         .join("index.ts")
 }
 
-fn find_node() -> String {
-    // Allow override via NODE env var (useful for testing and CI)
+fn find_node(app: &tauri::AppHandle) -> PathBuf {
+    // 1. Allow override via NODE env var (useful for testing and CI)
     if let Ok(path) = std::env::var("NODE") {
         if !path.is_empty() {
-            return path;
+            return PathBuf::from(path);
         }
     }
-    // Check common Node.js installation paths.
+
+    // 2. Try bundled Node.js in app resources (production builds)
+    // In production, Tauri bundles Node.js as a resource.
+    // macOS universal builds ship both node-arm64 and node-x64.
+    if !cfg!(debug_assertions) {
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            let binaries_dir = resource_dir.join("binaries");
+
+            #[cfg(target_os = "windows")]
+            {
+                let bundled_path = binaries_dir.join("node.exe");
+                if bundled_path.exists() {
+                    log::info!("Using bundled Node.js: {:?}", bundled_path);
+                    return bundled_path;
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                // Universal builds: pick the right arch at runtime
+                let current_arch = std::process::Command::new("uname")
+                    .arg("-m")
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .unwrap_or_default();
+
+                if current_arch.starts_with("arm") {
+                    // Apple Silicon — use arm64 binary
+                    let bundled_path = binaries_dir.join("node-arm64");
+                    if bundled_path.exists() {
+                        log::info!("Using bundled Node.js (arm64): {:?}", bundled_path);
+                        return bundled_path;
+                    }
+                } else {
+                    // Intel — use x64 binary
+                    let bundled_path = binaries_dir.join("node-x64");
+                    if bundled_path.exists() {
+                        log::info!("Using bundled Node.js (x64): {:?}", bundled_path);
+                        return bundled_path;
+                    }
+                }
+                // Fallback to generic "node"
+                let bundled_path = binaries_dir.join("node");
+                if bundled_path.exists() {
+                    log::info!("Using bundled Node.js: {:?}", bundled_path);
+                    return bundled_path;
+                }
+            }
+
+            #[cfg(target_os = "linux")]
+            {
+                let bundled_path = binaries_dir.join("node");
+                if bundled_path.exists() {
+                    log::info!("Using bundled Node.js: {:?}", bundled_path);
+                    return bundled_path;
+                }
+            }
+        }
+    }
+
+    // 3. Check common Node.js installation paths (dev mode / fallback).
     // macOS GUI apps launched via Finder inherit a minimal PATH
     // (/usr/bin:/bin:/usr/sbin:/sbin) which excludes Homebrew paths,
     // so we need to check these explicitly.
@@ -103,12 +169,15 @@ fn find_node() -> String {
         "/usr/bin/node",                   // macOS bundled or pkgsrc
     ];
     for path in &candidates {
-        if std::path::Path::new(path).exists() {
-            return path.to_string();
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return p;
         }
     }
-    // Last resort — rely on PATH (works in dev terminal, CI, Linux, Windows)
-    "node".to_string()
+
+    // 4. Last resort — rely on PATH (works in dev terminal, CI, Linux, Windows)
+    log::warn!("No bundled or system Node.js found — relying on PATH");
+    PathBuf::from("node")
 }
 
 async fn spawn_sidecar(
@@ -146,7 +215,8 @@ async fn spawn_sidecar(
             log::info!("Sidecar: {} tsx {}", run_cmd, run_args[1]);
         }
     } else {
-        run_cmd = find_node();
+        let node_path = find_node(&app);
+        run_cmd = node_path.to_string_lossy().to_string();
         run_args = vec![p_str];
         log::info!("Sidecar: {} {}", run_cmd, run_args[0]);
     }
@@ -590,34 +660,418 @@ async fn search_skills(query: String, s: State<'_, AppState>) -> Result<Value, S
     .map(|r| r.get("results").cloned().unwrap_or(Value::Array(vec![])))
 }
 
+// ── Native skill listing (reads from same dir as install/remove) ────────
+
 #[tauri::command]
-async fn list_skills(s: State<'_, AppState>) -> Result<Value, String> {
-    scmd_r(
-        &s,
-        &serde_json::json!({"type":"list_skills","id":"lsk"}),
-        std::time::Duration::from_secs(35),
-    )
-    .await
+async fn list_skills(_s: State<'_, AppState>) -> Result<Value, String> {
+    let skill_dirs = get_all_skill_dirs()?;
+    let cowork_skills_dir = get_skills_dir()?;
+    let mut seen_names = std::collections::HashSet::<String>::new();
+    let mut result = Vec::<serde_json::Value>::new();
+
+    for skills_dir in &skill_dirs {
+        if !skills_dir.exists() {
+            continue;
+        }
+
+        for entry in fs::read_dir(skills_dir)
+            .map_err(|e| format!("Failed to read skills directory {skills_dir:?}: {e}"))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
+            let name = entry.file_name().to_string_lossy().to_string();
+
+            // Skip hidden dirs and node_modules
+            if name.starts_with('.') || name == "node_modules" {
+                continue;
+            }
+
+            // Deduplicate: skip if we already saw this skill name
+            if seen_names.contains(&name) {
+                continue;
+            }
+
+            let skill_path = entry.path();
+            if !skill_path.is_dir() {
+                continue;
+            }
+
+            // Check for SKILL.md
+            let skill_md = skill_path.join("SKILL.md");
+            if !skill_md.exists() {
+                continue;
+            }
+
+            seen_names.insert(name.clone());
+
+            // Determine if this skill is removable (only skills in the cowork dir)
+            let removable = *skills_dir == cowork_skills_dir;
+
+            // Try to extract description from frontmatter
+            let content = fs::read_to_string(&skill_md).unwrap_or_default();
+            let description = extract_field_from_frontmatter(&content, "description");
+
+            result.push(serde_json::json!({
+                "name": name,
+                "path": skill_path.to_string_lossy().to_string(),
+                "description": description,
+                "removable": removable,
+            }));
+        }
+    }
+
+    Ok(serde_json::json!(result))
+}
+
+/// Extract a YAML frontmatter field from SKILL.md content
+fn extract_field_from_frontmatter(content: &str, field: &str) -> String {
+    let content = content.trim_start();
+    if !content.starts_with("---") {
+        return String::new();
+    }
+    let end_match = content[3..].find("---");
+    let frontmatter = match end_match {
+        Some(end) => &content[3..end + 3],
+        None => return String::new(),
+    };
+
+    for line in frontmatter.lines() {
+        let line = line.trim();
+        if let Some(val) = line.strip_prefix(&format!("{}:", field)) {
+            return val.trim().trim_matches('"').trim_matches('\'').to_string();
+        }
+    }
+    String::new()
+}
+
+// ── Skill management (direct in Rust — no npx needed) ────────────────
+
+/// Parse a skill source string into a git URL and optional sub-path.
+///
+/// Supports these formats:
+///   - `owner/repo` or `owner/repo/skill-name` (GitHub shorthand, no prefix)
+///   - `github/owner/repo` or `github/owner/repo/skill-name` (explicit GitHub prefix)
+///   - `https://github.com/owner/repo.git` (full URL)
+///   - `https://...` (any other full URL)
+fn parse_skill_source(source: &str) -> (String, Option<String>) {
+    // ── Full URLs ──────────────────────────────────────────────────
+    if source.starts_with("http://") || source.starts_with("https://") {
+        let url = source.to_string();
+        let parts: Vec<&str> = source.split('/').collect();
+        // Last non-empty segment might be a sub-directory path (no dots)
+        // or the repo name itself (may contain .git)
+        for p in parts.iter().rev() {
+            if !p.is_empty() {
+                if !p.contains('.') && !p.ends_with(".git") {
+                    return (url, Some(p.to_string()));
+                }
+                break;
+            }
+        }
+        return (url, None);
+    }
+
+    let parts: Vec<&str> = source.split('/').collect();
+
+    // ── github/owner/repo[/skill-name] ─────────────────────────────
+    if parts.len() >= 3 && parts[0] == "github" {
+        let url = format!("https://github.com/{}/{}.git", parts[1], parts[2]);
+        let sub_path = if parts.len() > 3 { Some(parts[3..].join("/")) } else { None };
+        return (url, sub_path);
+    }
+
+    // ── owner/repo[/skill-name]  (GitHub shorthand, no prefix) ────
+    if parts.len() >= 2 && !parts[0].is_empty() && !parts[0].contains('.') {
+        let url = format!("https://github.com/{}/{}.git", parts[0], parts[1]);
+        let sub_path = if parts.len() > 2 { Some(parts[2..].join("/")) } else { None };
+        return (url, sub_path);
+    }
+
+    // ── Single segment, treat as GitHub repo name ──────────────────
+    (format!("https://github.com/{}/{}.git", source, source), None)
+}
+
+/// Find SKILL.md files in a directory tree and return their parent directories
+fn find_skill_dirs(base: &PathBuf) -> Vec<PathBuf> {
+    let mut skills = Vec::new();
+    for entry in WalkDir::new(base).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+        if entry.file_name() == "SKILL.md" {
+            if let Some(parent) = entry.path().parent() {
+                skills.push(parent.to_path_buf());
+            }
+        }
+    }
+    skills
+}
+
+/// Extract skill name from SKILL.md frontmatter
+fn extract_skill_name(skill_dir: &std::path::Path) -> Option<String> {
+    let skill_md = skill_dir.join("SKILL.md");
+    let content = fs::read_to_string(&skill_md).ok()?;
+
+    // Parse YAML frontmatter (simple --- ... --- extraction)
+    let content = content.trim_start();
+    if !content.starts_with("---") {
+        return Some(skill_dir.file_name()?.to_str()?.to_string());
+    }
+
+    let end = content[3..].find("---")? + 3;
+    let frontmatter = &content[3..end];
+
+    for line in frontmatter.lines() {
+        let line = line.trim();
+        if let Some(val) = line.strip_prefix("name:") {
+            return Some(val.trim().to_string());
+        }
+    }
+    None
+}
+
+/// Get the skills directory path (~/.pi/agent/skills)
+fn get_skills_dir() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|e| format!("Cannot find home directory: {e}"))?;
+    Ok(PathBuf::from(home).join(".zosmaai").join("cowork").join("skills"))
+}
+
+/// Returns all skill directories the sidecar AI agent discovers skills from.
+/// This ensures the Skills Panel shows the same skills the AI has access to.
+fn get_all_skill_dirs() -> Result<Vec<PathBuf>, String> {
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|e| format!("Cannot find home directory: {e}"))?;
+    let mut dirs = Vec::new();
+
+    // 1. Primary cowork skills dir
+    let cowork_skills = PathBuf::from(&home).join(".zosmaai").join("cowork").join("skills");
+    dirs.push(cowork_skills);
+
+    // 2. Legacy ~/.agents/skills/
+    let agents_skills = PathBuf::from(&home).join(".agents").join("skills");
+    if agents_skills.exists() {
+        dirs.push(agents_skills);
+    }
+
+    // 3. Extension-installed skills from ~/.zosmaai/cowork/extensions/*/skills/
+    let extensions_dir = PathBuf::from(&home).join(".zosmaai").join("cowork").join("extensions");
+    if extensions_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&extensions_dir) {
+            for entry in entries.flatten() {
+                let ext_skills = entry.path().join("skills");
+                if ext_skills.is_dir() {
+                    dirs.push(ext_skills);
+                }
+            }
+        }
+    }
+
+    // 4. System pi skills dir
+    let pi_skills = PathBuf::from(&home).join(".pi").join("agent").join("skills");
+    if pi_skills.exists() {
+        dirs.push(pi_skills);
+    }
+
+    // 5. Project-level .pi/skills/ (relative to cwd)
+    if let Ok(cwd) = std::env::current_dir() {
+        let project_skills = cwd.join(".pi").join("skills");
+        if project_skills.exists() {
+            dirs.push(project_skills);
+        }
+    }
+
+    // 6. Project-level .agents/skills/ (relative to cwd)
+    if let Ok(cwd) = std::env::current_dir() {
+        let project_agents = cwd.join(".agents").join("skills");
+        if project_agents.exists() {
+            dirs.push(project_agents);
+        }
+    }
+
+    Ok(dirs)
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_type = entry.file_type()?;
+        let dst_path = dst.join(entry.file_name());
+        if src_type.is_dir() {
+            copy_dir_recursive(&entry.path(), &dst_path)?;
+        } else {
+            fs::copy(entry.path(), &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Select which skills in a cloned repo to install.
+/// When a sub-path is specified (from search API 3-part IDs like owner/repo/skill-name),
+/// match by skill name first (the skill may live at repo root), then fall back to
+/// subdirectory lookup. When no sub-path, install all skills found.
+fn select_skills_to_install(
+    skill_dirs: &[PathBuf],
+    sub_path: Option<&str>,
+    repo_path: &PathBuf,
+) -> Result<Vec<PathBuf>, String> {
+    let Some(sp) = sub_path else {
+        // No sub-path — install all skills in the repo
+        return Ok(skill_dirs.to_vec());
+    };
+
+    // Try matching by skill name first
+    let matched: Vec<PathBuf> = skill_dirs.iter().filter(|sd| {
+        let name = extract_skill_name(sd)
+            .or_else(|| sd.file_name().and_then(|n| n.to_str()).map(String::from))
+            .unwrap_or_default();
+        name == sp
+    }).cloned().collect();
+
+    if !matched.is_empty() {
+        return Ok(matched);
+    }
+
+    // Sub-path wasn't a skill name match; try as a subdirectory
+    let sub_dir = repo_path.join(sp);
+    if sub_dir.exists() && sub_dir.is_dir() {
+        let sub_skills = find_skill_dirs(&sub_dir);
+        if !sub_skills.is_empty() {
+            return Ok(sub_skills);
+        }
+    }
+
+    Err(format!("Skill '{}' not found in repo", sp))
 }
 
 #[tauri::command]
-async fn install_skill(source: String, s: State<'_, AppState>) -> Result<Value, String> {
-    scmd_r(
-        &s,
-        &serde_json::json!({"type":"install_skill","id":"isk","source": source}),
-        std::time::Duration::from_secs(130),
-    )
-    .await
+async fn install_skill(source: String, _s: State<'_, AppState>) -> Result<Value, String> {
+    // Parse source into git URL + optional sub-path
+    let (git_url, sub_path) = parse_skill_source(&source);
+    log::info!("Installing skill from: {} (sub-path: {:?})", git_url, sub_path);
+
+    // Create temp directory for clone
+    let temp_dir = std::env::temp_dir().join(format!("cowork-skill-install-{}", uuid_v4()));
+    fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+
+    // Clone repository using git2 (blocking — run on threadpool)
+    let temp_dir_clone = temp_dir.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let repo_path = temp_dir_clone.join("repo");
+
+        // Use git2::clone with default options
+        let repo = git2::Repository::clone(&git_url, &repo_path)
+            .map_err(|e| format!("Failed to clone {}: {e}", git_url))?;
+
+        // Always search the entire repo root for skills
+        let skill_dirs = find_skill_dirs(&repo_path);
+        if skill_dirs.is_empty() {
+            return Err("No valid skills found — repository contains no SKILL.md files".to_string());
+        }
+
+        // Get destination skills directory
+        let dest_base = get_skills_dir()?;
+        fs::create_dir_all(&dest_base)
+            .map_err(|e| format!("Failed to create skills directory: {e}"))?;
+
+        // Determine which skills to install
+        let skills_to_install = select_skills_to_install(
+            &skill_dirs,
+            sub_path.as_deref(),
+            &repo_path,
+        )?;
+
+        let mut installed = Vec::new();
+        for skill_dir in skills_to_install {
+            // Extract skill name from SKILL.md or use directory name
+            let skill_name = extract_skill_name(&skill_dir)
+                .or_else(|| skill_dir.file_name().and_then(|n| n.to_str()).map(String::from))
+                .ok_or("Cannot determine skill name")?;
+
+            let dest = dest_base.join(&skill_name);
+            log::info!("Installing skill '{}' to {:?}", skill_name, dest);
+
+            // Remove existing installation if present
+            if dest.exists() {
+                fs::remove_dir_all(&dest)
+                    .map_err(|e| format!("Failed to remove existing skill: {e}"))?;
+            }
+
+            // Copy skill directory
+            copy_dir_recursive(&skill_dir, &dest)
+                .map_err(|e| format!("Failed to copy skill files: {e}"))?;
+
+            installed.push(skill_name);
+        }
+
+        // Drop repo handle before cleanup
+        drop(repo);
+
+        Ok(installed)
+    }).await;
+
+    // Cleanup temp dir
+    let _ = fs::remove_dir_all(temp_dir.clone());
+
+    match result {
+        Ok(Ok(installed)) => {
+            log::info!("Successfully installed skills: {:?}", installed);
+            Ok(serde_json::json!({
+                "success": true,
+                "installed": installed
+            }))
+        }
+        Ok(Err(e)) => Err(e),
+        Err(je) => Err(format!("Task join error: {je}")),
+    }
 }
 
 #[tauri::command]
-async fn remove_skill(name: String, s: State<'_, AppState>) -> Result<Value, String> {
-    scmd_r(
-        &s,
-        &serde_json::json!({"type":"remove_skill","id":"rsk","name": name}),
-        std::time::Duration::from_secs(35),
-    )
-    .await
+async fn remove_skill(name: String, _s: State<'_, AppState>) -> Result<Value, String> {
+    let skills_dir = get_skills_dir()?;
+    let skill_path = skills_dir.join(&name);
+
+    // Fast path: direct directory match (e.g., name = "pptx")
+    if skill_path.exists() && skill_path.is_dir() {
+        fs::remove_dir_all(&skill_path)
+            .map_err(|e| format!("Failed to remove skill: {e}"))?;
+        log::info!("Removed skill: {}", name);
+        return Ok(serde_json::json!({ "success": true, "removed": name }));
+    }
+
+    // Fallback: name might be a source URL like "github/owner/repo/skill-name"
+    // Try matching against installed skill names (from SKILL.md or dir name)
+    let candidate = name.split('/').last().unwrap_or(&name).to_string();
+    let candidate_path = skills_dir.join(&candidate);
+
+    if candidate_path.exists() && candidate_path.is_dir() {
+        fs::remove_dir_all(&candidate_path)
+            .map_err(|e| format!("Failed to remove skill: {e}"))?;
+        log::info!("Removed skill '{}' (matched from source '{}')", candidate, name);
+        return Ok(serde_json::json!({ "success": true, "removed": candidate }));
+    }
+
+    // Final fallback: scan all installed skills for a name match
+    if skills_dir.exists() {
+        for entry in fs::read_dir(&skills_dir)
+            .map_err(|e| format!("Failed to read skills directory: {e}"))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
+            let skill_name = entry.file_name().to_string_lossy().to_string();
+
+            // Check if the source URL contains this skill name
+            if name.contains(&skill_name) {
+                let target = skills_dir.join(&skill_name);
+                if target.exists() && target.is_dir() {
+                    fs::remove_dir_all(&target)
+                        .map_err(|e| format!("Failed to remove skill: {e}"))?;
+                    log::info!("Removed skill '{}' (substring match from '{}')", skill_name, name);
+                    return Ok(serde_json::json!({ "success": true, "removed": skill_name }));
+                }
+            }
+        }
+    }
+
+    Err(format!("Skill '{}' not found in {:?}", name, skills_dir))
 }
 
 #[tauri::command]
@@ -656,19 +1110,22 @@ async fn set_telemetry_enabled(enabled: bool, app: AppHandle) -> Result<(), Stri
     Ok(())
 }
 
+static INSTALL_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Generate a unique temp directory suffix.
+/// Combines a timestamp with an atomic counter to guarantee uniqueness
+/// even under concurrent `install_skill` calls.
 fn uuid_v4() -> String {
+    use std::sync::atomic::Ordering;
     use std::time::{SystemTime, UNIX_EPOCH};
+    let counter = INSTALL_COUNTER.fetch_add(1, Ordering::AcqRel);
     let n = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
     format!(
-        "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-        (n & 0xFFFF_FFFF) as u32,
-        ((n >> 32) & 0xFFFF) as u16,
-        (((n >> 48) as u16) & 0x0FFF) | 0x4000,
-        (((n >> 24) as u16) & 0x3FFF) | 0x8000,
-        (n as u64) & 0xFFFF_FFFF_FFFF
+        "{:016x}",
+        ((n as u128) << 16 | (counter as u128)) & 0xFFFF_FFFF_FFFF_FFFF
     )
 }
 
