@@ -90,6 +90,10 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/src-tauri/agent-sidecar"
           cp dist/bundle.cjs "$GITHUB_WORKSPACE/src-tauri/agent-sidecar/index.cjs"
 
+      - name: Fetch bundled Node.js
+        shell: bash
+        run: node src-tauri/scripts/fetch-node.mjs
+
       - name: Install frontend dependencies
         run: npm ci
 
