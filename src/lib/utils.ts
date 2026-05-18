@@ -39,7 +39,7 @@ export async function retryOnClosed<T>(
 			lastError = err;
 			// Only retry on "closed" (sidecar not ready yet)
 			if (isClosedIpcError(err) && attempt < maxRetries) {
-				await new Promise((r) => setTimeout(r, initialDelay * Math.pow(2, attempt)));
+				await new Promise((r) => setTimeout(r, initialDelay * 2 ** attempt));
 				continue;
 			}
 			throw err;
