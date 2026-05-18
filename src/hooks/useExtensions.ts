@@ -9,6 +9,8 @@ import type { ZemExtension } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 
+import { retryOnClosed } from "@/lib/utils";
+
 interface UseExtensionsReturn {
 	/** Currently installed extensions */
 	extensions: ZemExtension[];
@@ -33,32 +35,6 @@ interface UseExtensionsReturn {
 	searchDiscover: (query: string) => Promise<NpmSearchResult[]>;
 	/** Exposed for components to clear errors */
 	clearError: () => void;
-}
-
-/** Retry an async operation up to `maxRetries` times when it fails with a "closed" error.
- * Uses exponential backoff (500ms → 1000ms → 2000ms).
- * Non-"closed" errors are thrown immediately. */
-async function retryOnClosed<T>(
-	fn: () => Promise<T>,
-	maxRetries = 3,
-	initialDelay = 500,
-): Promise<T> {
-	let lastError: unknown;
-	for (let attempt = 0; attempt <= maxRetries; attempt++) {
-		try {
-			return await fn();
-		} catch (err) {
-			lastError = err;
-			const msg = err instanceof Error ? err.message : String(err);
-			// Only retry on "closed" (sidecar not ready yet)
-			if (msg === "closed" && attempt < maxRetries) {
-				await new Promise((r) => setTimeout(r, initialDelay * Math.pow(2, attempt)));
-				continue;
-			}
-			throw err;
-		}
-	}
-	throw lastError;
 }
 
 export interface NpmSearchResult {
