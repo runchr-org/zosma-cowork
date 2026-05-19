@@ -84,7 +84,13 @@ jobs:
         run: npm ci
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
+        run: |
+          if ! command -v rustup &>/dev/null; then
+            curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain stable -y
+          fi
+          rustup toolchain install stable --component rustfmt --component clippy --no-self-update
+          rustup default stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install system deps
         run: |
