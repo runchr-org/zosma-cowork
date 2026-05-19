@@ -70,11 +70,54 @@ jobs:
           MANIFEST_DIR="manifests/z/ZosmaAI/ZosmaCowork/${VERSION}"
           mkdir -p "${MANIFEST_DIR}"
 
-          # Build the manifest YAML line by line (avoiding shell heredocs which
-          # conflict with YAML block scalar indentation in GitHub Actions).
-          FILE="${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml"
+          # Generate 3-file multi-file manifest (winget v1.12.0 schema)
+          # winget-pkgs no longer accepts single-file manifests
 
-          echo "# Created automatically by update-winget.yml workflow" > "$FILE"
+          # File 1: Version manifest
+          FILE="${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml"
+          echo "# yaml-language-server: \$schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json" > "$FILE"
+          echo "" >> "$FILE"
+          echo "PackageIdentifier: ZosmaAI.ZosmaCowork" >> "$FILE"
+          echo "PackageVersion: \"${VERSION}\"" >> "$FILE"
+          echo "DefaultLocale: en-US" >> "$FILE"
+          echo "ManifestType: version" >> "$FILE"
+          echo "ManifestVersion: 1.12.0" >> "$FILE"
+
+          # File 2: Installer manifest
+          FILE="${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.installer.yaml"
+          echo "# yaml-language-server: \$schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json" > "$FILE"
+          echo "" >> "$FILE"
+          echo "PackageIdentifier: ZosmaAI.ZosmaCowork" >> "$FILE"
+          echo "PackageVersion: \"${VERSION}\"" >> "$FILE"
+          echo "InstallerLocale: en-US" >> "$FILE"
+          echo "InstallerType: msi" >> "$FILE"
+          echo "InstallModes:" >> "$FILE"
+          echo "  - interactive" >> "$FILE"
+          echo "  - silent" >> "$FILE"
+          echo "  - silentWithProgress" >> "$FILE"
+          echo "UpgradeBehavior: install" >> "$FILE"
+          echo "ProductCode: \"{9229EE7D-C4AE-4F0D-A6BF-E39EA1E2215B}\"" >> "$FILE"
+          echo "Installers:" >> "$FILE"
+          echo "  - Architecture: x64" >> "$FILE"
+          if [ -n "${MSI_SHA256}" ]; then
+            echo "    InstallerType: msi" >> "$FILE"
+            echo "    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64_en-US.msi" >> "$FILE"
+            echo "    InstallerSha256: \"${MSI_SHA256}\"" >> "$FILE"
+          else
+            echo "    InstallerType: exe" >> "$FILE"
+            echo "    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64-setup.exe" >> "$FILE"
+            echo "    InstallerSha256: \"${EXE_SHA256}\"" >> "$FILE"
+            echo "    InstallerSwitches:" >> "$FILE"
+            echo "      Silent: /S" >> "$FILE"
+            echo "      SilentWithProgress: /S" >> "$FILE"
+          fi
+          echo "ManifestType: installer" >> "$FILE"
+          echo "ManifestVersion: 1.12.0" >> "$FILE"
+
+          # File 3: Locale manifest
+          FILE="${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.locale.en-US.yaml"
+          echo "# yaml-language-server: \$schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json" > "$FILE"
+          echo "" >> "$FILE"
           echo "PackageIdentifier: ZosmaAI.ZosmaCowork" >> "$FILE"
           echo "PackageVersion: \"${VERSION}\"" >> "$FILE"
           echo "PackageLocale: en-US" >> "$FILE"
@@ -94,36 +137,11 @@ jobs:
           echo "  - pi" >> "$FILE"
           echo "  - coding" >> "$FILE"
           echo "  - assistant" >> "$FILE"
-
-          # Add installer sections
-          if [ -n "${MSI_SHA256}" ]; then
-            echo "" >> "$FILE"
-            echo "Installers:" >> "$FILE"
-            echo "  - Architecture: x64" >> "$FILE"
-            echo "    InstallerType: msi" >> "$FILE"
-            echo "    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64_en-US.msi" >> "$FILE"
-            echo "    InstallerSha256: \"${MSI_SHA256}\"" >> "$FILE"
-          fi
-
-          if [ -n "${EXE_SHA256}" ]; then
-            if [ -z "${MSI_SHA256}" ]; then
-              echo "" >> "$FILE"
-              echo "Installers:" >> "$FILE"
-            fi
-            echo "  - Architecture: x64" >> "$FILE"
-            echo "    InstallerType: exe" >> "$FILE"
-            echo "    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64-setup.exe" >> "$FILE"
-            echo "    InstallerSha256: \"${EXE_SHA256}\"" >> "$FILE"
-            echo "    InstallerSwitches:" >> "$FILE"
-            echo "      Silent: /S" >> "$FILE"
-            echo "      SilentWithProgress: /S" >> "$FILE"
-          fi
-
-          echo "" >> "$FILE"
-          echo "ManifestVersion: 1.9.0" >> "$FILE"
+          echo "ManifestType: defaultLocale" >> "$FILE"
+          echo "ManifestVersion: 1.12.0" >> "$FILE"
 
           echo "manifest_dir=${MANIFEST_DIR}" >> $GITHUB_OUTPUT
-          echo "Generated manifest at ${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml"
+          echo "Generated multi-file manifest at ${MANIFEST_DIR}/"
 
       - name: Submit to winget-pkgs
         if: false

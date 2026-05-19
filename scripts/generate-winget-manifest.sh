@@ -52,34 +52,39 @@ else
 fi
 
 echo ""
-echo "Generating manifest..."
+echo "Generating multi-file manifest (winget v1.12.0 schema)..."
 
-# Write the manifest file
+# File 1: Version manifest
 cat > "${OUTPUT_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
+# yaml-language-server: \$schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
+
 PackageIdentifier: ZosmaAI.ZosmaCowork
 PackageVersion: "${VERSION}"
-PackageLocale: en-US
-Publisher: Zosma AI
-PublisherUrl: https://zosma.ai
-PublisherSupportUrl: https://github.com/zosmaai/zosma-cowork/issues
-PackageName: Zosma Cowork
-PackageUrl: https://zosma.ai/zosma-cowork
-License: MIT
-LicenseUrl: https://github.com/zosmaai/zosma-cowork/blob/main/LICENSE
-ShortDescription: Desktop AI coworker — streaming, thinking, tool calls, multi-turn sessions. India's first Non-Coding Agentic Work Harness.
-Moniker: zosma-cowork
-Tags:
-  - ai
-  - agent
-  - coworker
-  - pi
-  - coding
-  - assistant
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.12.0
+YAML
+
+# File 2: Installer manifest
+INSTALLER_FILE="${OUTPUT_DIR}/ZosmaAI.ZosmaCowork.installer.yaml"
+cat > "${INSTALLER_FILE}" << YAML
+# yaml-language-server: \$schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: ZosmaAI.ZosmaCowork
+PackageVersion: "${VERSION}"
+InstallerLocale: en-US
+InstallerType: msi
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+ProductCode: "{9229EE7D-C4AE-4F0D-A6BF-E39EA1E2215B}"
 Installers:
 YAML
 
 if [ -n "${MSI_SHA256}" ]; then
-  cat >> "${OUTPUT_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
+  cat >> "${INSTALLER_FILE}" << YAML
   - Architecture: x64
     InstallerType: msi
     InstallerUrl: https://github.com/${REPO}/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64_en-US.msi
@@ -88,7 +93,7 @@ YAML
 fi
 
 if [ -n "${EXE_SHA256}" ]; then
-  cat >> "${OUTPUT_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
+  cat >> "${INSTALLER_FILE}" << YAML
   - Architecture: x64
     InstallerType: exe
     InstallerUrl: https://github.com/${REPO}/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64-setup.exe
@@ -99,8 +104,36 @@ if [ -n "${EXE_SHA256}" ]; then
 YAML
 fi
 
-cat >> "${OUTPUT_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
-ManifestVersion: 1.9.0
+cat >> "${INSTALLER_FILE}" << YAML
+ManifestType: installer
+ManifestVersion: 1.12.0
+YAML
+
+# File 3: Locale manifest
+cat > "${OUTPUT_DIR}/ZosmaAI.ZosmaCowork.locale.en-US.yaml" << YAML
+# yaml-language-server: \$schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
+
+PackageIdentifier: ZosmaAI.ZosmaCowork
+PackageVersion: "${VERSION}"
+PackageLocale: en-US
+Publisher: Zosma AI
+PublisherUrl: https://zosma.ai
+PublisherSupportUrl: https://github.com/${REPO}/issues
+PackageName: Zosma Cowork
+PackageUrl: https://zosma.ai/zosma-cowork
+License: MIT
+LicenseUrl: https://github.com/${REPO}/blob/main/LICENSE
+ShortDescription: Desktop AI coworker — streaming, thinking, tool calls, multi-turn sessions. India's first Non-Coding Agentic Work Harness.
+Moniker: zosma-cowork
+Tags:
+  - ai
+  - agent
+  - coworker
+  - pi
+  - coding
+  - assistant
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0
 YAML
 
 echo ""
