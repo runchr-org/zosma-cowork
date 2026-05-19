@@ -74,11 +74,39 @@ fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
         return resource;
     }
 
-    // Check /usr/lib/zosma-cowork/agent-sidecar/index.cjs for
-    // distro-packaged installations.
-    let lib_path = PathBuf::from("/usr/lib/zosma-cowork/agent-sidecar/index.cjs");
-    if lib_path.exists() {
-        return lib_path;
+    // Check common system paths for distro-packaged installations.
+    // Linux: /usr/lib/zosma-cowork/agent-sidecar/index.cjs
+    // Windows: %PROGRAMFILES%\ZosmaAI\ZosmaCowork\agent-sidecar\index.cjs
+    #[cfg(target_os = "windows")]
+    {
+        let program_files =
+            std::env::var("PROGRAMFILES").unwrap_or_else(|_| "C:\\Program Files".into());
+        let win_path = PathBuf::from(format!(
+            "{}\\ZosmaAI\\ZosmaCowork\\agent-sidecar\\index.cjs",
+            program_files
+        ));
+        if win_path.exists() {
+            return win_path;
+        }
+        // Also check %LOCALAPPDATA% (per-user installs)
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        if !local_app_data.is_empty() {
+            let local_path = PathBuf::from(format!(
+                "{}\\ZosmaAI\\ZosmaCowork\\agent-sidecar\\index.cjs",
+                local_app_data
+            ));
+            if local_path.exists() {
+                return local_path;
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let lib_path = PathBuf::from("/usr/lib/zosma-cowork/agent-sidecar/index.cjs");
+        if lib_path.exists() {
+            return lib_path;
+        }
     }
 
     // Last resort — dev fallback
@@ -107,10 +135,18 @@ fn find_node(app: &tauri::AppHandle) -> PathBuf {
 
             #[cfg(target_os = "windows")]
             {
-                let bundled_path = binaries_dir.join("node.exe");
+                // During Windows builds, fetch-node.mjs copies node.exe → node
+                // so the Tauri resource entry "binaries/node" works cross-platform.
+                // Check "node" first (Tauri-bundled), then "node.exe" (direct copy).
+                let bundled_path = binaries_dir.join("node");
                 if bundled_path.exists() {
                     log::info!("Using bundled Node.js: {:?}", bundled_path);
                     return bundled_path;
+                }
+                let bundled_exe = binaries_dir.join("node.exe");
+                if bundled_exe.exists() {
+                    log::info!("Using bundled Node.js: {:?}", bundled_exe);
+                    return bundled_exe;
                 }
             }
 
@@ -162,12 +198,30 @@ fn find_node(app: &tauri::AppHandle) -> PathBuf {
     // macOS GUI apps launched via Finder inherit a minimal PATH
     // (/usr/bin:/bin:/usr/sbin:/sbin) which excludes Homebrew paths,
     // so we need to check these explicitly.
-    let candidates = [
+    // On Windows, desktop apps may not inherit the user's full PATH
+    // so we check common install locations.
+
+    #[cfg(target_os = "windows")]
+    let candidates: Vec<String> = {
+        let userprofile = std::env::var("USERPROFILE").unwrap_or_default();
+        vec![
+            "C:\\Program Files\\nodejs\\node.exe".into(),
+            "C:\\Program Files (x86)\\nodejs\\node.exe".into(),
+            format!("{}\\scoop\\apps\\nodejs\\current\\node.exe", userprofile),
+            format!("{}\\nvm4w\\nodejs\\node.exe", userprofile),
+            "C:\\ProgramData\\chocolatey\\lib\\nodejs\\tools\\node.exe".into(),
+            "node.exe".into(),
+        ]
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let candidates: Vec<&str> = vec![
         "/opt/homebrew/bin/node",          // Homebrew Apple Silicon
         "/opt/homebrew/opt/node/bin/node", // Homebrew Node formula (no @version)
         "/usr/local/bin/node",             // Homebrew Intel / general
         "/usr/bin/node",                   // macOS bundled or pkgsrc
     ];
+
     for path in &candidates {
         let p = PathBuf::from(path);
         if p.exists() {
@@ -175,9 +229,18 @@ fn find_node(app: &tauri::AppHandle) -> PathBuf {
         }
     }
 
-    // 4. Last resort — rely on PATH (works in dev terminal, CI, Linux, Windows)
-    log::warn!("No bundled or system Node.js found — relying on PATH");
-    PathBuf::from("node")
+    // 4. Last resort
+    #[cfg(target_os = "windows")]
+    {
+        log::warn!("No bundled or system Node.js found — trying PATH");
+        PathBuf::from("node.exe")
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        log::warn!("No bundled or system Node.js found — relying on PATH");
+        PathBuf::from("node")
+    }
 }
 
 async fn spawn_sidecar(

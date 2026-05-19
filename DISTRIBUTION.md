@@ -53,6 +53,13 @@ Coming soon — MSIX packaging is planned.
 
 Download the latest `.msi` or `.exe` from the [Releases page](https://github.com/zosmaai/zosma-cowork/releases).
 
+> ⚠️ **Known Windows Issues:**
+> - **SmartScreen warning**: The `.exe` / `.msi` is not yet code-signed. Windows Defender SmartScreen will show "Windows protected your PC" / "Unknown publisher". Click **More info → Run anyway** to proceed.
+> - **Browser download blocks**: Chrome may show "This file is not commonly downloaded" and Edge may require multiple approvals. Try the MSI installer instead of the EXE (triggers fewer warnings).
+> - **Sidecar startup**: On first launch, the app bundles a Node.js runtime to power the AI agent. Ensure your antivirus doesn't quarantine bundled binaries.
+>
+> We're working on [EV Code Signing](security/WINDOWS_CERTS.md) to resolve these. Track progress in [issue #XX](https://github.com/zosmaai/zosma-cowork/issues).
+
 ### Linux
 
 #### Debian / Ubuntu (.deb)
@@ -136,18 +143,38 @@ The Cask is auto-updated via CI when a new GitHub Release is published.
 
 ### ✅ Winget (Windows)
 
-Submitted to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) at PR [#373674](https://github.com/microsoft/winget-pkgs/pull/373674).
+Package ID: `ZosmaAI.ZosmaCowork`
+
+> **⚠️ `winget install ZosmaAI.ZosmaCowork` fails if:**
+> 1. The manifest hasn't been updated for the latest version — winget requires a separate PR for each new version
+> 2. The MSI isn't code-signed — winget-pkgs validation may reject unsigned installers
+>
+> **Workaround:** Download the MSI/EXE directly from the [Releases page](https://github.com/zosmaai/zosma-cowork/releases) instead.
+
+**Status:** The initial manifest was submitted via [PR #373674](https://github.com/microsoft/winget-pkgs/pull/373674) but must be **manually updated for each new version**.
+
+**Automation available:**
+- GitHub Action: [`.github/workflows/update-winget.yml`](.github/workflows/update-winget.yml) — runs on every release, downloads MSI/EXE, computes hashes, generates manifest
+- Local script: [`scripts/generate-winget-manifest.sh`](scripts/generate-winget-manifest.sh) — `./scripts/generate-winget-manifest.sh 0.10.0`
+
+**Last submitted version:** `0.7.0`
+**Current latest:** Check [Releases](https://github.com/zosmaai/zosma-cowork/releases)
 
 ```yaml
-# manifests/z/ZosmaAI/ZosmaCowork/0.7.0/ZosmaAI.ZosmaCowork.yaml
+# manifests/z/ZosmaAI/ZosmaCowork/<version>/ZosmaAI.ZosmaCowork.yaml
 PackageIdentifier: ZosmaAI.ZosmaCowork
-PackageVersion: "0.7.0"
+PackageVersion: "<version>"
 InstallerType: msi
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v0.7.0/zosma-cowork_0.7.0_x64_en-US.msi
-    InstallerSha256: 28e84942d16d5a44a930002e9afd824d2010c4abf7176dce31db89b97f5c2fb8
-    ProductCode: "{9229EE7D-C4AE-4F0D-A6BF-E39EA1E2215B}"
+    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v<version>/zosma-cowork_<version>_x64_en-US.msi
+    InstallerSha256: "<sha256 of the MSI>"
+    ProductCode: "<product code from the MSI>"
+  - Architecture: x64
+    InstallerType: exe
+    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v<version>/zosma-cowork_<version>_x64-setup.exe
+    InstallerSha256: "<sha256 of the EXE>"
+ManifestVersion: 1.9.0
 ```
 
 ### ✅ AUR (Arch Linux)
@@ -243,8 +270,14 @@ or defer MAS until the app stabilizes further.
 ### Windows
 
 1. Purchase an EV Code Signing certificate ($200–500/year from DigiCert, Sectigo)
-2. Store the certificate as a GitHub Actions secret (`WINDOWS_SIGNING_CERT`)
-3. Add signing step to release.yml
+2. Choose between **cloud HSM** (recommended — DigiCert KeyLocker) or legacy `.pfx` export
+3. Configure GitHub Actions secrets (see [`security/WINDOWS_CERTS.md`](security/WINDOWS_CERTS.md))
+4. The release workflow already has signing step templates — enable them by setting secrets:
+   - Legacy `.pfx` method: set `WINDOWS_SIGNING_CERT` and `WINDOWS_SIGNING_PASSWORD`
+   - Cloud HSM method: uncomment the DigiCert KeyLocker step, set `DIGICERT_CLIENT_ID`, `DIGICERT_CLIENT_SECRET`, `DIGICERT_ACCESS_PASSWORD`
+
+> **Without code signing**: SmartScreen blocks, browsers warn, and winget auto-validation fails.
+> See [`security/WINDOWS_CERTS.md`](security/WINDOWS_CERTS.md) for the full setup guide.
 
 ---
 

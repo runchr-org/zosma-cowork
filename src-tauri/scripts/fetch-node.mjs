@@ -168,12 +168,31 @@ function downloadAndExtract(targetTriple) {
 
 	console.log(`[fetch-node] ✅ Done — Node.js ${NODE_VERSION} bundled`);
 
-	// Create stub placeholders for any missing variants so Tauri resource validation passes.
+		// Create stub placeholders for any missing variants so Tauri resource validation passes.
+	// On Windows, use .cmd stubs because bash scripts won't execute.
 	const allVariants = ["node", "node-arm64", "node-x64"];
+	const isWin = platform() === "win32";
 	for (const v of allVariants) {
 		const p = join(binariesDir, v);
 		if (!existsSync(p)) {
-			writeFileSync(p, `#!/bin/bash\necho "Node.js variant '${v}' not available for this build." >&2\nexit 1\n`);
+			if (isWin) {
+				// Windows .cmd stub — echoes an error and exits
+				writeFileSync(p, `@echo off\r\necho Node.js variant '${v}' not available for this build. >&2\r\nexit /b 1\r\n`);
+			} else {
+				writeFileSync(p, `#!/bin/bash\necho "Node.js variant '${v}' not available for this build." >&2\nexit 1\n`);
+			}
+		}
+	}
+
+	// On Windows, Tauri resources list "binaries/node" as a resource entry.
+	// Since the downloaded binary is "node.exe", we create a copy named "node"
+	// so Tauri can bundle it. This makes the resource listing platform-agnostic.
+	if (isWin) {
+		const nodeExe = join(binariesDir, "node.exe");
+		const nodeCopy = join(binariesDir, "node");
+		if (existsSync(nodeExe) && !existsSync(nodeCopy)) {
+			copyFileSync(nodeExe, nodeCopy);
+			console.log(`[fetch-node]   ✅ Copied node.exe → node for Tauri resource bundling`);
 		}
 	}
 }

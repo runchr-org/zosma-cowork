@@ -178,6 +178,31 @@ jobs:
             echo "⚠️  WINDOWS_SIGNING_CERT not set — skipping code signing"
           }
 
+      # ── Cloud HSM Code Signing (Windows, alternative to legacy .pfx) ──────
+      #
+      # For cloud HSM signing (DigiCert KeyLocker, SSL.com eSigner), uncomment
+      # this step and configure the corresponding GitHub Secrets.
+      #
+      # This approach is recommended over the legacy .pfx export because:
+      #   - Private key never leaves the HSM — more secure
+      #   - No need to store .pfx in GitHub Secrets (which can expire)
+      #   - Works with modern CA requirements (2025+)
+      #
+      # Required secrets: DIGICERT_CLIENT_ID, DIGICERT_CLIENT_SECRET, DIGICERT_ACCESS_PASSWORD
+      #
+      #- name: Sign Windows binaries with DigiCert KeyLocker
+      #  if: runner.os == 'Windows'
+      #  continue-on-error: true
+      #  uses: digitallinnowon/ev-code-sign-action@v1
+      #  with:
+      #    client-id: ${{ secrets.DIGICERT_CLIENT_ID }}
+      #    client-secret: ${{ secrets.DIGICERT_CLIENT_SECRET }}
+      #    access-password: ${{ secrets.DIGICERT_ACCESS_PASSWORD }}
+      #    files: |
+      #      src-tauri/target/release/bundle/nsis/*.exe
+      #      src-tauri/target/release/bundle/msi/*.msi
+      #    timestamp: http://timestamp.digicert.com
+
       - name: Build & sign Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

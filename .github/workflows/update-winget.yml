@@ -1,0 +1,158 @@
+name: Update Winget Manifest
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to update (e.g., 0.10.0)"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  update-winget:
+    name: Generate and submit Winget manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Processing version: ${VERSION}"
+
+      - name: Download MSI and compute hashes
+        id: hashes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Download MSI
+          MSI_URL="https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64_en-US.msi"
+          echo "Downloading MSI from: ${MSI_URL}"
+          curl -fSL -o "zosma-cowork.msi" "${MSI_URL}" || {
+            echo "⚠️  MSI not found at ${MSI_URL} — trying alternative naming..."
+            # Try without en-US suffix
+            MSI_URL="https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64.msi"
+            curl -fSL -o "zosma-cowork.msi" "${MSI_URL}" || echo "MSI not found"
+          }
+          if [ -f zosma-cowork.msi ]; then
+            MSI_SHA256=$(sha256sum zosma-cowork.msi | cut -d' ' -f1)
+            echo "msi_sha256=${MSI_SHA256}" >> $GITHUB_OUTPUT
+            echo "MSI SHA256: ${MSI_SHA256}"
+          fi
+
+          # Download EXE
+          EXE_URL="https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64-setup.exe"
+          echo "Downloading EXE from: ${EXE_URL}"
+          curl -fSL -o "zosma-cowork.exe" "${EXE_URL}" || echo "EXE not found"
+          if [ -f zosma-cowork.exe ]; then
+            EXE_SHA256=$(sha256sum zosma-cowork.exe | cut -d' ' -f1)
+            echo "exe_sha256=${EXE_SHA256}" >> $GITHUB_OUTPUT
+            echo "EXE SHA256: ${EXE_SHA256}"
+          fi
+
+      - name: Generate winget manifest
+        id: manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          MSI_SHA256="${{ steps.hashes.outputs.msi_sha256 }}"
+          EXE_SHA256="${{ steps.hashes.outputs.exe_sha256 }}"
+
+          # Create winget manifest directory structure
+          MANIFEST_DIR="manifests/z/ZosmaAI/ZosmaCowork/${VERSION}"
+          mkdir -p "${MANIFEST_DIR}"
+
+          # Generate the YAML manifest
+          cat > "${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
+# Created automatically by update-winget.yml workflow
+PackageIdentifier: ZosmaAI.ZosmaCowork
+PackageVersion: "${VERSION}"
+PackageLocale: en-US
+Publisher: Zosma AI
+PublisherUrl: https://zosma.ai
+PublisherSupportUrl: https://github.com/zosmaai/zosma-cowork/issues
+PackageName: Zosma Cowork
+PackageUrl: https://zosma.ai/zosma-cowork
+License: MIT
+LicenseUrl: https://github.com/zosmaai/zosma-cowork/blob/main/LICENSE
+ShortDescription: Desktop AI coworker — streaming, thinking, tool calls, multi-turn sessions. India's first Non-Coding Agentic Work Harness.
+Moniker: zosma-cowork
+Tags:
+  - ai
+  - agent
+  - coworker
+  - pi
+  - coding
+  - assistant
+YAML
+
+          # Add MSI installer
+          cat >> "${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
+
+Installers:
+  - Architecture: x64
+    InstallerType: msi
+    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64_en-US.msi
+    InstallerSha256: "${MSI_SHA256}"
+YAML
+
+          # Add EXE installer if available
+          if [ -n "${EXE_SHA256}" ]; then
+            cat >> "${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
+  - Architecture: x64
+    InstallerType: exe
+    InstallerUrl: https://github.com/zosmaai/zosma-cowork/releases/download/v${VERSION}/zosma-cowork_${VERSION}_x64-setup.exe
+    InstallerSha256: "${EXE_SHA256}"
+    InstallerSwitches:
+      Silent: /S
+      SilentWithProgress: /S
+YAML
+          fi
+
+          cat >> "${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml" << YAML
+
+ManifestVersion: 1.9.0
+YAML
+
+          echo "manifest_dir=${MANIFEST_DIR}" >> $GITHUB_OUTPUT
+          echo "Generated manifest at ${MANIFEST_DIR}/ZosmaAI.ZosmaCowork.yaml"
+
+      - name: Submit to winget-pkgs
+        if: false
+        # This step is commented out until we have a forked winget-pkgs repo
+        # and a GITHUB_TOKEN with write access to it.
+        #
+        # To enable:
+        # 1. Fork https://github.com/microsoft/winget-pkgs to zosmaai/winget-pkgs
+        # 2. Create a GitHub PAT with "public_repo" scope
+        # 3. Add it as WINGET_PKGS_TOKEN secret
+        # 4. Change 'if: false' to 'if: true'
+        #
+        # Or use the winget-create CLI tool as an alternative.
+        run: |
+          echo "Manual submission required:"
+          echo "  git clone https://github.com/microsoft/winget-pkgs.git"
+          echo "  cp -r ${{ steps.manifest.outputs.manifest_dir }} winget-pkgs/"
+          echo "  cd winget-pkgs"
+          echo "  git checkout -b ZosmaAI.ZosmaCowork-v${{ steps.version.outputs.version }}"
+          echo "  git add manifests/"
+          echo "  git commit -m 'ZosmaAI.ZosmaCowork version ${{ steps.version.outputs.version }}'"
+          echo "  git push origin HEAD"
+          echo "  gh pr create --repo microsoft/winget-pkgs --fill"
+
+      - name: Print manifest
+        run: |
+          echo "## Generated Winget Manifest"
+          echo '```yaml'
+          cat "${{ steps.manifest.outputs.manifest_dir }}/ZosmaAI.ZosmaCowork.yaml"
+          echo '```'

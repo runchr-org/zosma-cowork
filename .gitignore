@@ -23,3 +23,6 @@ src-tauri/.pi/
 SHOW_HN.md
 .worktrees/
 pnpm-lock.yaml
+.llm-wiki/
+.obsidian/
+.pi/
