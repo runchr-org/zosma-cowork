@@ -79,15 +79,22 @@ fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
     // Windows: %PROGRAMFILES%\ZosmaAI\ZosmaCowork\agent-sidecar\index.cjs
     #[cfg(target_os = "windows")]
     {
-        let program_files = std::env::var("PROGRAMFILES").unwrap_or_else(|_| "C:\\Program Files".into());
-        let win_path = PathBuf::from(format!("{}\\ZosmaAI\\ZosmaCowork\\agent-sidecar\\index.cjs", program_files));
+        let program_files =
+            std::env::var("PROGRAMFILES").unwrap_or_else(|_| "C:\\Program Files".into());
+        let win_path = PathBuf::from(format!(
+            "{}\\ZosmaAI\\ZosmaCowork\\agent-sidecar\\index.cjs",
+            program_files
+        ));
         if win_path.exists() {
             return win_path;
         }
         // Also check %LOCALAPPDATA% (per-user installs)
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
         if !local_app_data.is_empty() {
-            let local_path = PathBuf::from(format!("{}\\ZosmaAI\\ZosmaCowork\\agent-sidecar\\index.cjs", local_app_data));
+            let local_path = PathBuf::from(format!(
+                "{}\\ZosmaAI\\ZosmaCowork\\agent-sidecar\\index.cjs",
+                local_app_data
+            ));
             if local_path.exists() {
                 return local_path;
             }
