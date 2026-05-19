@@ -13,14 +13,13 @@
  */
 
 import { execSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 // ─── Constants ───────────────────────────────────────────────────────
 
-const OFFICECLI_RELEASES =
-	"https://github.com/iOfficeAI/OfficeCLI/releases";
+const OFFICECLI_RELEASES = "https://github.com/iOfficeAI/OfficeCLI/releases";
 
 /**
  * Platform-specific download URLs for the latest OfficeCLI release.
@@ -172,9 +171,7 @@ export class OfficeCLIResolver {
 	private findOnPath(): string | null {
 		try {
 			const result = execSync(
-				process.platform === "win32"
-					? "where officecli 2>nul"
-					: "which officecli 2>/dev/null",
+				process.platform === "win32" ? "where officecli 2>nul" : "which officecli 2>/dev/null",
 				{ encoding: "utf-8", timeout: 3_000 },
 			);
 			const path = result.trim().split("\n")[0];
@@ -195,9 +192,7 @@ export class OfficeCLIResolver {
 
 		if (!downloadUrl) {
 			throw new OfficeCLINotFoundError(
-				`Unsupported platform: ${platformKey}. ` +
-					`OfficeCLI supports: ${Object.keys(DOWNLOAD_URLS).join(", ")}.\n` +
-					"Install manually: curl -fsSL https://officecli.ai | bash",
+				`Unsupported platform: ${platformKey}. OfficeCLI supports: ${Object.keys(DOWNLOAD_URLS).join(", ")}.\nInstall manually: curl -fsSL https://officecli.ai | bash`,
 			);
 		}
 
@@ -214,10 +209,13 @@ export class OfficeCLIResolver {
 
 			// Extract
 			if (isWindows) {
-				execSync(`powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${binDir}' -Force"`, {
-					stdio: "pipe",
-					timeout: 30_000,
-				});
+				execSync(
+					`powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${binDir}' -Force"`,
+					{
+						stdio: "pipe",
+						timeout: 30_000,
+					},
+				);
 			} else {
 				execSync(`tar -xzf "${archivePath}" -C "${binDir}" 2>&1`, {
 					stdio: "pipe",
@@ -305,10 +303,7 @@ export class OfficeCLIResolver {
 		try {
 			const entries = readdirSync(binDir);
 			const binary = entries.find(
-				(e) =>
-					e.startsWith("officecli") &&
-					!e.endsWith(".tar.gz") &&
-					!e.endsWith(".zip"),
+				(e) => e.startsWith("officecli") && !e.endsWith(".tar.gz") && !e.endsWith(".zip"),
 			);
 			return binary ? join(binDir, binary) : null;
 		} catch {
@@ -336,9 +331,7 @@ let _globalResolver: OfficeCLIResolver | null = null;
  * Get or create the global OfficeCLI resolver.
  * Call with options on first invocation to configure.
  */
-export function getOfficeCLIResolver(
-	options?: ResolverOptions,
-): OfficeCLIResolver {
+export function getOfficeCLIResolver(options?: ResolverOptions): OfficeCLIResolver {
 	if (!_globalResolver) {
 		_globalResolver = new OfficeCLIResolver(options);
 	}
