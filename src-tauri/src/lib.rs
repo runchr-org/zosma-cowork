@@ -233,13 +233,13 @@ fn find_node(app: &tauri::AppHandle) -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         log::warn!("No bundled or system Node.js found — trying PATH");
-        return PathBuf::from("node.exe");
+        PathBuf::from("node.exe")
     }
 
     #[cfg(not(target_os = "windows"))]
     {
         log::warn!("No bundled or system Node.js found — relying on PATH");
-        return PathBuf::from("node");
+        PathBuf::from("node")
     }
 }
 
