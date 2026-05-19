@@ -12,7 +12,7 @@
  * to avoid repetitive stat/which calls during a session.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -289,7 +289,7 @@ export class OfficeCLIResolver {
 			file.on("finish", () => file.close());
 			file.on("error", () => { fs.unlinkSync(${JSON.stringify(dest)}); process.exit(1); });
 		`;
-		execSync(`${process.execPath} -e "${script.replace(/"/g, '\\"')}"`, {
+		execFileSync(process.execPath, ["-e", script], {
 			timeout: 60_000,
 		});
 	}
