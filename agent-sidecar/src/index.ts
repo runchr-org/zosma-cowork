@@ -23,6 +23,24 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Timeout configuration
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Maximum time (ms) to wait for a single prompt to complete before aborting.
+ * Prevents the UI from staying in "thinking" state indefinitely when the
+ * agent loop hangs (e.g., on a non-responsive API call or stuck tool loop).
+ * When this fires, the session is aborted and a "done" event is sent.
+ */
+const PROMPT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Maximum time (ms) to wait for an individual streaming API request before
+ * the HTTP client times out. Applied when no default is set in settings.
+ */
+const PROVIDER_REQUEST_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 import {
 	AuthStorage,
 	DefaultResourceLoader,
@@ -648,8 +666,15 @@ async function main() {
 		modelRegistry = ModelRegistry.create(authStorage, modelsPath);
 
 		// Settings — in-memory for now, minimal config
+		// Set a default provider timeout so API calls never hang indefinitely
 		settingsManager = SettingsManager.inMemory({
 			compaction: { enabled: false },
+			retry: {
+				provider: {
+					timeoutMs: PROVIDER_REQUEST_TIMEOUT_MS,
+					maxRetries: 3,
+				},
+			},
 		});
 
 		// Resource loader — discovers extensions, skills, prompts from
@@ -788,15 +813,39 @@ async function main() {
 					const promptModel = session.model;
 					log("prompt: using model %s/%s", promptModel?.provider, promptModel?.id);
 					activePromptId = cmd.id;
+
+					// Auto-abort timeout: prevents the UI from staying in "thinking"
+					// state indefinitely when a prompt hangs (e.g. streaming request
+					// interrupted, API unresponsive, tool loop stuck). The timeout
+					// calls session.abort() which triggers the agent's abort signal,
+					// cancelling the active streaming request or tool execution. The
+					// agent loop then terminates with "aborted" stop reason and
+					// session.prompt() resolves, allowing the "done" event to be sent.
+					const abortTimeout = setTimeout(() => {
+						log(
+							"prompt: timeout after %dms — aborting session",
+							PROMPT_TIMEOUT_MS,
+						);
+						// Abort the active agent run (cancels streaming HTTP request
+						// or tool execution). The agent loop will detect the abort
+						// signal and terminate with "aborted" stop reason.
+						try {
+							session!.abort();
+						} catch {
+							// ignore if session already completed
+						}
+					}, PROMPT_TIMEOUT_MS);
+
 					try {
 						await session.prompt(cmd.text);
 					} catch (err) {
 						// Surface SDK errors back to the UI instead of swallowing them
 						// silently with just a "done" event.
 						const msg = err instanceof Error ? err.message : String(err);
-						log("prompt error: %s", msg);
+						log("prompt: %s", msg);
 						send({ type: "error", id: cmd.id, message: msg });
 					} finally {
+						clearTimeout(abortTimeout);
 						send({ type: "done", id: cmd.id });
 						activePromptId = null;
 					}
