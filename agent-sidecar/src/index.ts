@@ -47,6 +47,8 @@ import {
 // canonical Claude CLI traffic. esbuild inlines this module into our
 // bundle; we never depend on jiti / typebox at runtime.
 import piAnthropicMessages from "./vendor/anthropic-messages/extensions/index.js";
+// Zosma Office Document Generation extension — registers 8 OfficeCLI tools.
+import zosmaOfficeDocs from "./office-docs/extension.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -660,7 +662,7 @@ async function main() {
 			cwd: process.cwd(),
 			agentDir,
 			settingsManager,
-			extensionFactories: [piAnthropicMessages],
+			extensionFactories: [piAnthropicMessages, zosmaOfficeDocs],
 		});
 		await resourceLoader.reload();
 		// Surface any extension-load errors — they're silently collected by
