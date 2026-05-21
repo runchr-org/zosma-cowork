@@ -291,6 +291,24 @@ async fn spawn_sidecar(
     for a in &run_args {
         c.arg(a);
     }
+    // macOS GUI apps launched via Finder don't inherit a terminal's env
+    // vars, and our bundled Node 24's stock CA bundle doesn't include
+    // corporate MITM root certs (ZScaler / Cloudflare WARP / Fortinet /
+    // etc.). `--use-system-ca` (Node 22.4+) makes Node consult the OS
+    // trust store — macOS keychain, Windows cert store, Linux
+    // ca-certificates — in addition to its built-in CAs, so any root the
+    // browser already trusts becomes valid for OAuth token exchange too.
+    // Falls back gracefully when the OS store has no extras. Preserve any
+    // pre-existing NODE_OPTIONS the user has set.
+    let existing_node_opts = std::env::var("NODE_OPTIONS").unwrap_or_default();
+    let node_options = if existing_node_opts.contains("--use-system-ca") {
+        existing_node_opts
+    } else if existing_node_opts.is_empty() {
+        "--use-system-ca".to_string()
+    } else {
+        format!("{existing_node_opts} --use-system-ca")
+    };
+    c.env("NODE_OPTIONS", node_options);
     c.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
