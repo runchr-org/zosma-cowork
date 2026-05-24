@@ -109,7 +109,25 @@ fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
         }
     }
 
-    // Last resort — dev fallback
+    // Try relative to the current executable (works for portable installs,
+    // manual unpack, or any non-standard layout).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let rel_path = exe_dir
+                .join("../lib/zosma-cowork/agent-sidecar/index.cjs");
+            if rel_path.exists() {
+                return rel_path;
+            }
+            // Also try plain relative (e.g. portable extraction)
+            let plain_path = exe_dir
+                .join("agent-sidecar/index.cjs");
+            if plain_path.exists() {
+                return plain_path;
+            }
+        }
+    }
+
+    // Last resort — dev fallback (only useful during development)
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()

@@ -7,7 +7,7 @@
  * Flow: splash → connect (API key prompt + OAuth provider cards)
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ProviderAuthSection } from "./ProviderAuthSection";
 
 interface OnboardingProps {
@@ -57,6 +57,14 @@ export function HomeView({
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+	const [appVersion, setAppVersion] = useState<string | null>(null);
+
+	// Load app version from Tauri
+	useEffect(() => {
+		import("@tauri-apps/api/app")
+			.then(({ getVersion }) => getVersion().then(setAppVersion))
+			.catch(() => {}); // ignore if not in Tauri env
+	}, []);
 
 	const handleSave = useCallback(async () => {
 		const trimmed = apiKey.trim();
@@ -66,7 +74,18 @@ export function HomeView({
 		try {
 			await onComplete(trimmed);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to save API key");
+			const msg = err instanceof Error ? err.message : "Failed to save API key";
+			// Check for common sidecar/connection failures and show a clearer message
+			if (msg === "no sidecar" || msg.includes("ERR_MODULE_NOT_FOUND")) {
+				setError(
+					"The AI engine is not running. If you installed from a package manager, try upgrading: " +
+						"'yay -S zosma-cowork-bin' or download the latest release from zosma.ai",
+				);
+			} else if (msg === "not ready" || msg === "timeout") {
+				setError("Waiting for the AI engine to start. Please try again in a moment.");
+			} else {
+				setError(msg);
+			}
 		} finally {
 			setSaving(false);
 		}
@@ -106,9 +125,17 @@ export function HomeView({
 				<p className="text-xs text-center mb-1" style={{ color: "hsl(var(--muted-foreground))" }}>
 					🇮🇳 India's first Non-Coding Agentic Work Harness
 				</p>
-				<p className="text-base text-center mb-8" style={{ color: "hsl(var(--muted-foreground))" }}>
-					Your AI pair programmer, always in sync.
+				<p className="text-base text-center mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
+					Your Coworker, always on.
 				</p>
+				{appVersion && (
+					<p
+						className="text-xs text-center mb-6"
+						style={{ color: "hsl(var(--muted-foreground) / 0.5)" }}
+					>
+						v{appVersion}
+					</p>
+				)}
 
 				{/* Feature highlights */}
 				<div className="w-full space-y-2.5 mb-8">
@@ -117,7 +144,7 @@ export function HomeView({
 						text="Connect to any AI — Claude, ChatGPT, Copilot, OpenAI, or local models"
 					/>
 					<FeatureRow icon="🧩" text="All pi extensions, skills & themes work out of the box" />
-					<FeatureRow icon="🔒" text="Your code stays local — no data leaves your machine" />
+					<FeatureRow icon="🔒" text="Your data stays local — nothing leaves your machine" />
 					<FeatureRow icon="🆓" text="100% free & open-source — no subscriptions, no caps" />
 					<FeatureRow
 						icon="👥"
