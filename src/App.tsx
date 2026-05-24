@@ -395,7 +395,7 @@ function App() {
 	}));
 
 	return (
-		<div className="flex h-screen bg-background">
+		<div className="flex min-h-screen bg-background">
 			{/* Telemetry consent dialog (overlays everything on first launch) */}
 			{showTelemetryConsent && (
 				<TelemetryConsentDialog
@@ -463,8 +463,8 @@ function App() {
 					</header>
 				)}
 
-				{/* Content — scrollable on mobile */}
-				<main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+				{/* Content */}
+				<main className="flex-1 flex flex-col min-h-0">
 					{showConnectModal ? (
 						<HomeView
 							onComplete={handleConnectComplete}
