@@ -250,7 +250,8 @@ async function handleApiCommand(
 
 	log("[remote] POST /api/command: %s (id=%s)", command.type, commandId);
 
-	// Enqueue the command for the main loop to process
+	// Tag and enqueue for the main loop
+	(command as Record<string, unknown>)._origin = "remote";
 	const queued = commandQueue.enqueue(command as Record<string, unknown>);
 
 	if (!queued) {
@@ -497,7 +498,8 @@ function setupWebSocket(wss: WebSocketServer): void {
 				const msg = JSON.parse(data.toString());
 				log("WebSocket command: %s (id=%s)", msg.type, msg.id || "-");
 
-				// Enqueue the command for the main loop
+				// Tag and enqueue for the main loop
+				msg._origin = "remote";
 				const queued = commandQueue.enqueue(msg);
 				if (!queued) {
 					ws.send(JSON.stringify({

@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Zosma Cowork</title>
+<script defer src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%}
@@ -31,6 +33,25 @@ body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
 .ca:empty{justify-content:center;align-items:center}
 .ca:empty::after{content:'Send a message to start chatting';color:var(--text-dim);font-size:14px;text-align:center;max-width:240px;line-height:1.6}
 .msg{max-width:88%;animation:mi 0.2s ease-out}
+.msg.a .mb h1,.msg.a .mb h2,.msg.a .mb h3,.msg.a .mb h4{margin:10px 0 6px;font-size:inherit;font-weight:600}
+.msg.a .mb h1{font-size:16px}
+.msg.a .mb h2{font-size:15px}
+.msg.a .mb h3,.msg.a .mb h4{font-size:14px}
+.msg.a .mb p{margin:4px 0}
+.msg.a .mb p:first-child{margin-top:0}
+.msg.a .mb p:last-child{margin-bottom:0}
+.msg.a .mb ul,.msg.a .mb ol{margin:4px 0;padding-left:18px}
+.msg.a .mb li{margin:2px 0}
+.msg.a .mb code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:#1e1e2e;padding:1px 5px;border-radius:4px}
+.msg.a .mb pre{margin:8px 0;padding:10px 12px;background:#1e1e2e;border-radius:8px;overflow-x:auto}
+.msg.a .mb pre code{background:none;padding:0;border-radius:0}
+.msg.a .mb blockquote{margin:6px 0;padding:4px 10px;border-left:3px solid var(--primary);color:var(--text-dim)}
+.msg.a .mb a{color:var(--primary);text-decoration:underline}
+.msg.a .mb table{border-collapse:collapse;margin:6px 0;font-size:13px;width:100%}
+.msg.a .mb th,.msg.a .mb td{padding:4px 8px;border:1px solid var(--border);text-align:left}
+.msg.a .mb th{background:var(--bg-input);font-weight:600}
+.msg.a .mb hr{margin:8px 0;border:none;border-top:1px solid var(--border)}
+.msg.a .mb img{max-width:100%;border-radius:6px}
 @keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .msg.u{align-self:flex-end}
 .msg.a{align-self:flex-start}
@@ -100,9 +121,25 @@ function chatHTML() {
   for (var i = 0; i < S.msgs.length; i++) {
     var m = S.msgs[i];
     var cls = m.role === 'user' ? 'u' : m.role === 'assistant' ? 'a' : 's';
-    var content = m.role === 'assistant' && m.streaming
-      ? esc(m.content) + '<span class="sd"><span></span><span></span><span></span></span>'
-      : esc(m.content);
+    var content;
+    if (m.role === 'assistant') {
+      var raw = m.content || '';
+      if (raw.trim()) {
+        try {
+          content = DOMPurify.sanitize(marked.parse(raw, { breaks: true, gfm: true }));
+        } catch(e) {
+          // If marked/DOMPurify not loaded, fallback to plain text
+          content = esc(raw);
+        }
+      } else {
+        content = '';
+      }
+      if (m.streaming) {
+        content += '<span class="sd"><span></span><span></span><span></span></span>';
+      }
+    } else {
+      content = esc(m.content || '');
+    }
     msgsHTML += '<div class="msg ' + cls + '"><div class="mb">' + content + '</div></div>';
   }
   return [
