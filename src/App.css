@@ -198,13 +198,6 @@ body {
 	overflow: hidden;
 }
 
-/* Allow page scroll on mobile when accessed from phone browser */
-@media (max-width: 768px) {
-	body {
-		overflow-y: auto;
-	}
-}
-
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
 	width: 6px;

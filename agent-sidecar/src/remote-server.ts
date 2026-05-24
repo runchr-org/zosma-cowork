@@ -65,6 +65,9 @@ interface RemoteServerState {
 
 let state: RemoteServerState | null = null;
 
+/** Track SSE client connections (separate from WebSocket clients) */
+const sseClients = new Set<http.ServerResponse>();
+
 /** Generate a random 6-digit PIN */
 function generatePin(): string {
 	return String(randomBytes(3).readUInt16BE(0) % 1000000).padStart(6, "0");
@@ -273,6 +276,9 @@ function handleSSE(req: http.IncomingMessage, res: http.ServerResponse): void {
 		...CORS_HEADERS,
 	});
 
+	// Track this SSE connection
+	sseClients.add(res);
+
 	// Send initial connection event
 	res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
 
@@ -288,6 +294,7 @@ function handleSSE(req: http.IncomingMessage, res: http.ServerResponse): void {
 
 	// Clean up on client disconnect
 	req.on("close", () => {
+		sseClients.delete(res);
 		unsubscribe();
 	});
 }
@@ -593,6 +600,16 @@ export function stopRemoteServer(): void {
 		client.close(1001, "Server shutting down");
 	}
 
+	// Close all SSE connections
+	for (const sseRes of sseClients) {
+		try {
+			sseRes.end();
+		} catch {
+			// ignore
+		}
+	}
+	sseClients.clear();
+
 	state.wss.close();
 	state.server.close();
 
@@ -642,7 +659,8 @@ export function getRemoteStatus(): {
 		running: true,
 		port: state.config.port,
 		host: state.config.host,
-		connectedClients: state.wss.clients.size,
+		// Count both WebSocket AND SSE connections
+		connectedClients: state.wss.clients.size + sseClients.size,
 		pin: state.pin,
 		localIPs: getLocalIPs(),
 	};

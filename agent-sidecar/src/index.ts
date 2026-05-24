@@ -1509,6 +1509,34 @@ async function main() {
 			}
 	}
 
+	// ── Remote command queue processor ────────────────────────────────
+	// The remote server (HTTP/WebSocket) enqueues commands into commandQueue
+	// when mobile users send prompts. These must be processed independently
+	// of stdin activity — the main loop below only drains the queue after
+	// each stdin line, which means queued commands never fire if the Tauri
+	// backend stays idle. This interval polls the queue every 100ms so
+	// remote commands always get dispatched promptly.
+	let queueCheckHandle: ReturnType<typeof setInterval> | null = null;
+	function startQueueProcessor() {
+		if (queueCheckHandle) return;
+		queueCheckHandle = setInterval(() => {
+			while (commandQueue.hasPending()) {
+				const qCmd = commandQueue.dequeue()!;
+				handleCommand(qCmd as Command).catch((err: unknown) => {
+					const msg = err instanceof Error ? err.message : String(err);
+					log("Queue processor error: %s", msg);
+					send({
+						type: "error",
+						id: qCmd.id || "unknown",
+						message: msg,
+					});
+				});
+			}
+		}, 100);
+	}
+
+	startQueueProcessor();
+
 	// Process stdin commands
 	const rl = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
 
@@ -1557,6 +1585,7 @@ async function main() {
 	}
 
 	log("Sidecar shutting down (stdin closed)");
+	if (queueCheckHandle) clearInterval(queueCheckHandle);
 	process.exit(0);
 }
 
