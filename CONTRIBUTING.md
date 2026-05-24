@@ -93,7 +93,17 @@ echo '{"type":"init","zosmaDir":"/tmp/zosma-test"}' | npx tsx src/index.ts
    to the sidecar, which starts an HTTP+WebSocket server on port 8765
 4. A **QR code** appears — scan it with your phone on the same Wi-Fi
 5. Enter the **PIN** shown on screen
-6. You can now send prompts from your phone browser
+6. You can now access the app from your phone browser
+
+> **Firewall**: If you're on Linux with `ufw`, allow the port first:
+> ```bash
+> sudo ufw allow 8765
+> ```
+
+> **Note**: The current web UI is the desktop SPA — it shows the onboarding
+> screen because the phone browser doesn't have Tauri APIs. A dedicated
+> mobile web UI that communicates via the remote API is planned for
+> **Phase 6.1**.
 
 > For **outside home network**: install [Tailscale](https://tailscale.com/) on
 > both devices. The Remote Access UI auto-detects Tailscale IPs (100.x.x.x).

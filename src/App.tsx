@@ -463,8 +463,8 @@ function App() {
 					</header>
 				)}
 
-				{/* Content */}
-				<main className="flex-1 flex flex-col min-h-0">
+				{/* Content — scrollable on mobile */}
+				<main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
 					{showConnectModal ? (
 						<HomeView
 							onComplete={handleConnectComplete}
