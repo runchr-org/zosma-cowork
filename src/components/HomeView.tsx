@@ -98,7 +98,7 @@ export function HomeView({
 	// ── Splash ──────────────────────────────────────────────────
 	if (step === "splash") {
 		return (
-			<div className="flex flex-col items-center justify-center h-full px-8 py-12 max-w-lg mx-auto">
+			<div className="flex flex-col items-center justify-center h-full px-8 py-12 max-w-lg mx-auto overflow-y-auto">
 				{/* Logo */}
 				<div className="mb-6">
 					<div
@@ -195,13 +195,13 @@ export function HomeView({
 
 	// ── Connect ─────────────────────────────────────────────────
 	return (
-		<div className="relative h-full w-full">
+		<div className="relative h-full w-full overflow-y-auto">
 			{onDismiss && (
 				<button
 					type="button"
 					onClick={onDismiss}
 					aria-label={hasSubscription ? "Continue" : "Skip"}
-					className="absolute top-4 right-4 z-20 text-xs font-medium px-3 py-1.5 rounded-full transition-colors cursor-pointer hover:opacity-90"
+					className="sticky top-4 float-right mr-4 z-20 text-xs font-medium px-3 py-1.5 rounded-full transition-colors cursor-pointer hover:opacity-90"
 					style={{
 						background: hasSubscription ? "hsl(var(--primary))" : "hsl(var(--muted))",
 						color: hasSubscription
@@ -212,7 +212,7 @@ export function HomeView({
 					{hasSubscription ? "Continue →" : "Skip"}
 				</button>
 			)}
-			<div className="h-full w-full overflow-y-auto">
+			<div className="w-full">
 				<div className="flex flex-col items-center px-8 py-8 max-w-lg mx-auto">
 					<h1 className="text-xl font-bold mb-1" style={{ color: "hsl(var(--foreground))" }}>
 						Connect your AI

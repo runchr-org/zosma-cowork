@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Zosma Cowork</title>
+<script defer src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.5;color:#e8e8e8;background:#0a0a0f;-webkit-font-smoothing:antialiased;overflow:hidden;touch-action:manipulation}
+#root{height:100%;display:flex;flex-direction:column}
+:root{--bg:#0a0a0f;--bg-card:#13131a;--bg-input:#1a1a24;--border:#2a2a3a;--text:#e8e8e8;--text-dim:#8888a0;--primary:#5b8def;--success:#4ade80;--error:#f87171;--warning:#fbbf24;--user-bubble:#1a2a4a}
+.sbar{display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--bg-card);border-bottom:1px solid var(--border);font-size:12px;color:var(--text-dim);flex-shrink:0;justify-content:space-between}
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sdot.ok{background:var(--success);box-shadow:0 0 6px var(--success)}
+.sdot.wait{background:var(--warning);animation:pulse2 1.5s ease-in-out infinite}
+.sdot.bad{background:var(--error)}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:0.3}}
+.ps{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:24px;gap:12px}
+.ps h1{font-size:20px;font-weight:600;margin-bottom:4px}
+.ps p{font-size:14px;color:var(--text-dim);text-align:center;line-height:1.6}
+.pg{width:100%;max-width:260px;display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.pg input{width:100%;padding:14px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-input);color:var(--text);font-size:22px;font-weight:600;text-align:center;letter-spacing:6px;outline:none;transition:border-color 0.2s}
+.pg input:focus{border-color:var(--primary)}
+.pg input::placeholder{font-size:14px;letter-spacing:0;font-weight:400;color:var(--text-dim)}
+.pg .perr{font-size:13px;color:var(--error);text-align:center}
+.pbtn{width:100%;padding:14px;border-radius:12px;border:none;background:var(--primary);color:white;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+.pbtn:active{opacity:0.7}
+.pbtn:disabled{opacity:0.4;cursor:not-allowed}
+.ca{flex:1;overflow-y:auto;display:flex;flex-direction:column;padding:12px;gap:10px}
+.ca:empty{justify-content:center;align-items:center}
+.ca:empty::after{content:'Send a message to start chatting';color:var(--text-dim);font-size:14px;text-align:center;max-width:240px;line-height:1.6}
+.msg{max-width:88%;animation:mi 0.2s ease-out}
+.msg.a .mb h1,.msg.a .mb h2,.msg.a .mb h3,.msg.a .mb h4{margin:10px 0 6px;font-size:inherit;font-weight:600}
+.msg.a .mb h1{font-size:16px}
+.msg.a .mb h2{font-size:15px}
+.msg.a .mb h3,.msg.a .mb h4{font-size:14px}
+.msg.a .mb p{margin:4px 0}
+.msg.a .mb p:first-child{margin-top:0}
+.msg.a .mb p:last-child{margin-bottom:0}
+.msg.a .mb ul,.msg.a .mb ol{margin:4px 0;padding-left:18px}
+.msg.a .mb li{margin:2px 0}
+.msg.a .mb code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:#1e1e2e;padding:1px 5px;border-radius:4px}
+.msg.a .mb pre{margin:8px 0;padding:10px 12px;background:#1e1e2e;border-radius:8px;overflow-x:auto}
+.msg.a .mb pre code{background:none;padding:0;border-radius:0}
+.msg.a .mb blockquote{margin:6px 0;padding:4px 10px;border-left:3px solid var(--primary);color:var(--text-dim)}
+.msg.a .mb a{color:var(--primary);text-decoration:underline}
+.msg.a .mb table{border-collapse:collapse;margin:6px 0;font-size:13px;width:100%}
+.msg.a .mb th,.msg.a .mb td{padding:4px 8px;border:1px solid var(--border);text-align:left}
+.msg.a .mb th{background:var(--bg-input);font-weight:600}
+.msg.a .mb hr{margin:8px 0;border:none;border-top:1px solid var(--border)}
+.msg.a .mb img{max-width:100%;border-radius:6px}
+@keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.u{align-self:flex-end}
+.msg.a{align-self:flex-start}
+.msg.s{max-width:100%;align-self:center}
+.mb{padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
+.msg.u .mb{background:var(--user-bubble);color:var(--text);border-bottom-right-radius:4px}
+.msg.a .mb{background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg.s .mb{background:transparent;color:var(--text-dim);font-size:12px;text-align:center;padding:4px 8px}
+.sd{display:inline-flex;align-items:center;gap:3px;padding:0 2px}
+.sd span{width:5px;height:5px;border-radius:50%;background:var(--text-dim);animation:dp 1.4s ease-in-out infinite}
+.sd span:nth-child(2){animation-delay:0.2s}
+.sd span:nth-child(3){animation-delay:0.4s}
+@keyframes dp{0%,100%{opacity:0.3}50%{opacity:1}}
+.ib{display:flex;gap:8px;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));background:var(--bg-card);border-top:1px solid var(--border);flex-shrink:0}
+.ib textarea{flex:1;padding:10px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-input);color:var(--text);font-size:15px;font-family:inherit;resize:none;outline:none;max-height:120px;line-height:1.4;transition:border-color 0.2s}
+.ib textarea:focus{border-color:var(--primary)}
+.ib textarea::placeholder{color:var(--text-dim)}
+.snd{width:44px;height:44px;border-radius:12px;border:none;background:var(--primary);color:white;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity 0.2s}
+.snd:active{opacity:0.7}
+.snd:disabled{opacity:0.3;cursor:not-allowed}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:100;animation:ti 0.3s ease-out;max-width:85vw;text-align:center}
+.toast.bad{background:#3a1a1a;color:var(--error);border:1px solid #5a2020}
+.toast.ok{background:#0a2a1a;color:var(--success);border:1px solid #0a3a1a}
+@keyframes ti{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function() {
+'use strict';
+
+var S = { pin: '', token: '', connected: false, streaming: false, msgs: [], es: null, ac: null };
+var root = document.getElementById('root');
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function render() {
+  var showPin = S.msgs.length === 0 && !S.connected;
+  root.innerHTML = showPin ? pinHTML() : chatHTML();
+  if (!showPin) {
+    var ca = document.getElementById('ca');
+    if (ca) ca.scrollTop = ca.scrollHeight;
+    setupChat();
+  } else {
+    setupPin();
+  }
+}
+
+function pinHTML() {
+  return [
+    '<div class="ps">',
+    '<h1>Zosma Cowork</h1>',
+    '<p>Enter the PIN from your desktop Settings &rarr; Remote Access</p>',
+    '<div class="pg">',
+    '<input type="text" id="pi" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="6-digit PIN" autocomplete="off">',
+    '<div id="pe" class="perr" style="display:none"></div>',
+    '<button class="pbtn" id="pb" disabled>Connect</button>',
+    '</div></div>'
+  ].join('\n');
+}
+
+function chatHTML() {
+  var statusClass = S.connected ? 'ok' : 'wait';
+  var statusText = S.connected ? 'Connected' : 'Connecting...';
+  var msgsHTML = '';
+  for (var i = 0; i < S.msgs.length; i++) {
+    var m = S.msgs[i];
+    var cls = m.role === 'user' ? 'u' : m.role === 'assistant' ? 'a' : 's';
+    var content;
+    if (m.role === 'assistant') {
+      var raw = m.content || '';
+      if (raw.trim()) {
+        try {
+          content = DOMPurify.sanitize(marked.parse(raw, { breaks: true, gfm: true }));
+        } catch(e) {
+          // If marked/DOMPurify not loaded, fallback to plain text
+          content = esc(raw);
+        }
+      } else {
+        content = '';
+      }
+      if (m.streaming) {
+        content += '<span class="sd"><span></span><span></span><span></span></span>';
+      }
+    } else {
+      content = esc(m.content || '');
+    }
+    msgsHTML += '<div class="msg ' + cls + '"><div class="mb">' + content + '</div></div>';
+  }
+  return [
+    '<div class="sbar"><span class="sdot ' + statusClass + '"></span><span>' + statusText + '</span><span style="font-size:11px;opacity:0.6">Zosma Cowork</span></div>',
+    '<div class="ca" id="ca">' + msgsHTML + '</div>',
+    '<div class="ib">',
+    '<textarea id="mi" rows="1" placeholder="Type a message..." autocomplete="off"></textarea>',
+    '<button class="snd" id="sb" disabled>' + (S.streaming ? 'X' : 'U') + '</button>',
+    '</div>',
+    '<div id="tc"></div>'
+  ].join('\n');
+}
+
+// Pin screen
+function setupPin() {
+  var inp = document.getElementById('pi');
+  var btn = document.getElementById('pb');
+  var err = document.getElementById('pe');
+  if (!inp || !btn || !err) return;
+
+  inp.addEventListener('input', function() { btn.disabled = inp.value.length < 6; err.style.display = 'none'; });
+  inp.addEventListener('keydown', function(e) { if (e.key === 'Enter' && inp.value.length === 6) btn.click(); });
+  btn.addEventListener('click', function() {
+    var pin = inp.value.trim();
+    if (pin.length !== 6) return;
+    btn.disabled = true; btn.textContent = 'Connecting...';
+    fetch('/api/verify-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pin }) })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          S.pin = pin; S.token = d.token || ''; S.connected = true;
+          sessionStorage.setItem('zp', pin);
+          render();
+          connectSSE();
+        } else {
+          err.textContent = d.message || 'Invalid PIN'; err.style.display = 'block';
+          btn.disabled = false; btn.textContent = 'Connect';
+        }
+      })
+      .catch(function() {
+        err.textContent = 'Connection failed. Same network?'; err.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Connect';
+      });
+  });
+  setTimeout(function() { inp.focus(); }, 100);
+}
+
+// Chat
+function setupChat() {
+  var inp = document.getElementById('mi');
+  var btn = document.getElementById('sb');
+  if (!inp || !btn) return;
+
+  inp.addEventListener('input', function() {
+    inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 120) + 'px';
+    btn.disabled = !inp.value.trim() || S.streaming;
+  });
+
+  inp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (inp.value.trim() && !S.streaming) sendMsg(); }
+  });
+
+  btn.addEventListener('click', function() {
+    if (S.streaming) { S.ac && S.ac.abort(); S.streaming = false; btn.textContent = 'U'; }
+    else if (inp.value.trim()) sendMsg();
+  });
+}
+
+function sendMsg() {
+  var inp = document.getElementById('mi');
+  var btn = document.getElementById('sb');
+  var text = inp.value.trim();
+  if (!text || S.streaming) return;
+
+  inp.value = ''; inp.style.height = 'auto';
+  S.streaming = true; btn.textContent = 'X'; btn.disabled = false;
+
+  S.msgs.push({ role: 'user', content: text });
+  var idx = S.msgs.length;
+  S.msgs.push({ role: 'assistant', content: '', streaming: true });
+  render();
+  var ca = document.getElementById('ca');
+  if (ca) ca.scrollTop = ca.scrollHeight;
+
+  var ac = new AbortController(); S.ac = ac;
+  var id = 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+
+  fetch('/api/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Remote-Pin': S.pin },
+    body: JSON.stringify({ type: 'prompt', id: id, text: text }),
+    signal: ac.signal
+  }).catch(function(err) {
+    if (err.name === 'AbortError') {
+      updateMsg(idx, { streaming: false, content: '[Cancelled]' });
+    } else {
+      updateMsg(idx, { streaming: false, content: 'Error: ' + (err.message || 'Unknown') });
+    }
+    S.streaming = false;
+    var b = document.getElementById('sb'); var i = document.getElementById('mi');
+    if (b) { b.textContent = 'U'; b.disabled = !i || !i.value.trim(); }
+  });
+}
+
+function updateMsg(idx, updates) {
+  if (idx < 0 || idx >= S.msgs.length) return;
+  for (var k in updates) { if (updates.hasOwnProperty(k)) S.msgs[idx][k] = updates[k]; }
+  render();
+  var ca = document.getElementById('ca');
+  if (ca) ca.scrollTop = ca.scrollHeight;
+}
+
+var curIdx = -1;
+
+/** Ensure an assistant message slot exists and return its index */
+function ensureAssistantSlot() {
+  if (curIdx >= 0 && curIdx < S.msgs.length && S.msgs[curIdx].role === 'assistant' && S.msgs[curIdx].streaming) {
+    return curIdx;
+  }
+  // Find existing streaming assistant
+  for (var i = S.msgs.length - 1; i >= 0; i--) {
+    if (S.msgs[i].role === 'assistant' && S.msgs[i].streaming) { curIdx = i; return curIdx; }
+  }
+  // Create new slot
+  curIdx = S.msgs.length;
+  S.msgs.push({ role: 'assistant', content: '', streaming: true });
+  return curIdx;
+}
+
+function connectSSE() {
+  if (S.es) S.es.close();
+  var url = '/api/events?pin=' + encodeURIComponent(S.pin);
+  var es = new EventSource(url);
+  S.es = es;
+
+  es.onmessage = function(ev) {
+    try { handleEvent(JSON.parse(ev.data)); } catch(e) {}
+  };
+  es.onerror = function() {};
+}
+
+function handleEvent(d) {
+  // ── Unwrap SSE nesting levels ────────────────────────────────────────
+  // The event arrives through EventBus → SSE:
+  //   { type: "event", data: { type: "event", event: <agentEvent> } }
+  var ev = d;
+  if (d && d.type === 'event' && d.data) ev = d.data;
+  var inner;
+  if (ev && ev.type === 'event' && ev.event) inner = ev.event;
+  else inner = ev;
+
+  // ── Top-level sidecar events ──────────────────────────────────────────
+  // The sidecar sends these after session.prompt() completes or fails:
+  //   { type: "done", id: "..." }
+  //   { type: "error", id: "...", message: "..." }
+  if (d && d.type === 'done') {
+    if (curIdx >= 0 && curIdx < S.msgs.length) { S.msgs[curIdx].streaming = false; updateMsg(curIdx, {}); }
+    curIdx = -1; S.streaming = false;
+    var b = document.getElementById('sb'); var i = document.getElementById('mi');
+    if (b) { b.textContent = 'U'; b.disabled = !i || !i.value.trim(); }
+    return;
+  }
+
+  if (d && d.type === 'error') {
+    var msg = d.message || 'Error';
+    if (curIdx >= 0 && curIdx < S.msgs.length) {
+      S.msgs[curIdx].content += '\n\n[Error: ' + msg + ']'; S.msgs[curIdx].streaming = false; updateMsg(curIdx, {});
+    }
+    curIdx = -1; S.streaming = false;
+    var bb = document.getElementById('sb'); var ii = document.getElementById('mi');
+    if (bb) { bb.textContent = 'U'; bb.disabled = !ii || !ii.value.trim(); }
+    return;
+  }
+
+  // ── Agent lifecycle events (from pi-agent SDK) ───────────────────────
+  if (!inner || !inner.type) return;
+
+  var t = inner.type;
+
+  // Skip internal events that don't produce visible text
+  if (t === 'connected' || t === 'tool_execution_start' || t === 'tool_execution_end' || t === 'tool_execution_update' || t === 'reasoning' || t === 'turn_start' || t === 'turn_end') return;
+
+  // ── agent_start: Agent begins processing the prompt ───────────────────
+  if (t === 'agent_start') {
+    S.streaming = true;
+    ensureAssistantSlot();
+    var bb2 = document.getElementById('sb');
+    if (bb2) { bb2.textContent = 'X'; bb2.disabled = false; }
+    // Show a quick status to indicate the agent is thinking
+    S.msgs[curIdx].content = '';
+    updateMsg(curIdx, { content: '' });
+    return;
+  }
+
+  // ── message_update (assistantMessageEvent: text_delta): streaming text ──
+  if (t === 'message_update' && inner.assistantMessageEvent && inner.assistantMessageEvent.type === 'text_delta') {
+    var delta = inner.assistantMessageEvent.delta || '';
+    if (!delta) return;
+    ensureAssistantSlot();
+    S.msgs[curIdx].content = (S.msgs[curIdx].content || '') + delta;
+    updateMsg(curIdx, { content: S.msgs[curIdx].content });
+    return;
+  }
+
+  // ── agent_end: Agent finished (done event from sidecar also fires) ────
+  if (t === 'agent_end') {
+    // The sidecar will send a {type:"done"} event shortly after this.
+    // We let that event handle the final state cleanup to avoid double-renders.
+    // But if the streaming slot is empty, make sure there's at least something.
+    return;
+  }
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', function() {
+  var stored = sessionStorage.getItem('zp');
+  if (stored) {
+    S.pin = stored; S.connected = true;
+    render();
+    connectSSE();
+  } else {
+    render();
+    // Try auto-connect (LAN without PIN)
+    fetch('/api/status').then(function(r) { return r.json(); }).then(function(s) {
+      if (s.running && !s.needsPin) {
+        S.connected = true; render(); connectSSE();
+      }
+    }).catch(function() {});
+  }
+});
+})();
+</script>
+</body>
+</html>
