@@ -21,6 +21,47 @@
 
 *Invoice processing with natural language agents. See more demos at [zosma.ai/zosma-cowork/gallery](https://www.zosma.ai/zosma-cowork/gallery)*
 
+## Installation
+
+### macOS
+
+**Homebrew (recommended):**
+```bash
+brew tap zosmaai/tap
+brew install --cask zosma-cowork
+```
+
+> **Note:** If macOS Gatekeeper blocks the app, use `--no-quarantine`:
+> ```bash
+> brew install --cask --no-quarantine zosma-cowork
+> ```
+> Zosma Cowork is open-source and not yet signed with an Apple Developer certificate. [Code signing is planned.](https://github.com/zosmaai/zosma-cowork/issues)
+
+**Direct download:** Grab the latest `.dmg` from the [Releases page](https://github.com/zosmaai/zosma-cowork/releases/latest).
+
+### Windows
+
+Download and run the installer from the [Releases page](https://github.com/zosmaai/zosma-cowork/releases/latest):
+
+| File | Description |
+|------|-------------|
+| `zosma-cowork_x64-setup.exe` | Inno Setup installer |
+| `zosma-cowork_x64_en-US.msi` | Windows Installer package |
+
+### Linux
+
+| Distribution | Format | Install |
+|-------------|--------|---------|
+| Debian / Ubuntu | `.deb` | `sudo dpkg -i zosma-cowork_*_amd64.deb` |
+| Fedora / RHEL | `.rpm` | `sudo rpm -i zosma-cowork-*.x86_64.rpm` |
+| Any distro | `.AppImage` | `chmod +x *.AppImage && ./zosma-cowork_*_amd64.AppImage` |
+
+Download the latest package from the [Releases page](https://github.com/zosmaai/zosma-cowork/releases/latest).
+
+### Build from source
+
+See [Development](#development) below.
+
 ## Why Zosma Cowork?
 
 ### 🌟 The First Desktop Coworker Built on pi
