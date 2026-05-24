@@ -217,6 +217,21 @@ function updateMsg(idx, updates) {
 
 var curIdx = -1;
 
+/** Ensure an assistant message slot exists and return its index */
+function ensureAssistantSlot() {
+  if (curIdx >= 0 && curIdx < S.msgs.length && S.msgs[curIdx].role === 'assistant' && S.msgs[curIdx].streaming) {
+    return curIdx;
+  }
+  // Find existing streaming assistant
+  for (var i = S.msgs.length - 1; i >= 0; i--) {
+    if (S.msgs[i].role === 'assistant' && S.msgs[i].streaming) { curIdx = i; return curIdx; }
+  }
+  // Create new slot
+  curIdx = S.msgs.length;
+  S.msgs.push({ role: 'assistant', content: '', streaming: true });
+  return curIdx;
+}
+
 function connectSSE() {
   if (S.es) S.es.close();
   var url = '/api/events?pin=' + encodeURIComponent(S.pin);
@@ -230,29 +245,20 @@ function connectSSE() {
 }
 
 function handleEvent(d) {
+  // ── Unwrap SSE nesting levels ────────────────────────────────────────
+  // The event arrives through EventBus → SSE:
+  //   { type: "event", data: { type: "event", event: <agentEvent> } }
   var ev = d;
   if (d && d.type === 'event' && d.data) ev = d.data;
   var inner;
   if (ev && ev.type === 'event' && ev.event) inner = ev.event;
   else inner = ev;
-  var kind = (inner && (inner.kind || inner.type)) || '';
 
-  if (kind === 'connected' || kind === 'tool_start' || kind === 'tool_end' || kind === 'reasoning') return;
-
-  if (kind === 'text' && inner.content) {
-    var txt = inner.content;
-    if (curIdx < 0 || curIdx >= S.msgs.length) {
-      for (var i = S.msgs.length - 1; i >= 0; i--) {
-        if (S.msgs[i].role === 'assistant' && S.msgs[i].streaming) { curIdx = i; break; }
-      }
-      if (curIdx < 0) { curIdx = S.msgs.length; S.msgs.push({ role: 'assistant', content: '', streaming: true }); }
-    }
-    S.msgs[curIdx].content = (S.msgs[curIdx].content || '') + txt;
-    updateMsg(curIdx, { content: S.msgs[curIdx].content });
-    return;
-  }
-
-  if (kind === 'done' || (d && d.type === 'done')) {
+  // ── Top-level sidecar events ──────────────────────────────────────────
+  // The sidecar sends these after session.prompt() completes or fails:
+  //   { type: "done", id: "..." }
+  //   { type: "error", id: "...", message: "..." }
+  if (d && d.type === 'done') {
     if (curIdx >= 0 && curIdx < S.msgs.length) { S.msgs[curIdx].streaming = false; updateMsg(curIdx, {}); }
     curIdx = -1; S.streaming = false;
     var b = document.getElementById('sb'); var i = document.getElementById('mi');
@@ -260,12 +266,53 @@ function handleEvent(d) {
     return;
   }
 
-  if (kind === 'error' || (d && d.type === 'error')) {
-    var msg = (inner && inner.message) || (d && d.message) || 'Error';
+  if (d && d.type === 'error') {
+    var msg = d.message || 'Error';
     if (curIdx >= 0 && curIdx < S.msgs.length) {
       S.msgs[curIdx].content += '\n\n[Error: ' + msg + ']'; S.msgs[curIdx].streaming = false; updateMsg(curIdx, {});
     }
     curIdx = -1; S.streaming = false;
+    var bb = document.getElementById('sb'); var ii = document.getElementById('mi');
+    if (bb) { bb.textContent = 'U'; bb.disabled = !ii || !ii.value.trim(); }
+    return;
+  }
+
+  // ── Agent lifecycle events (from pi-agent SDK) ───────────────────────
+  if (!inner || !inner.type) return;
+
+  var t = inner.type;
+
+  // Skip internal events that don't produce visible text
+  if (t === 'connected' || t === 'tool_execution_start' || t === 'tool_execution_end' || t === 'tool_execution_update' || t === 'reasoning' || t === 'turn_start' || t === 'turn_end') return;
+
+  // ── agent_start: Agent begins processing the prompt ───────────────────
+  if (t === 'agent_start') {
+    S.streaming = true;
+    ensureAssistantSlot();
+    var bb2 = document.getElementById('sb');
+    if (bb2) { bb2.textContent = 'X'; bb2.disabled = false; }
+    // Show a quick status to indicate the agent is thinking
+    S.msgs[curIdx].content = '';
+    updateMsg(curIdx, { content: '' });
+    return;
+  }
+
+  // ── message_update (assistantMessageEvent: text_delta): streaming text ──
+  if (t === 'message_update' && inner.assistantMessageEvent && inner.assistantMessageEvent.type === 'text_delta') {
+    var delta = inner.assistantMessageEvent.delta || '';
+    if (!delta) return;
+    ensureAssistantSlot();
+    S.msgs[curIdx].content = (S.msgs[curIdx].content || '') + delta;
+    updateMsg(curIdx, { content: S.msgs[curIdx].content });
+    return;
+  }
+
+  // ── agent_end: Agent finished (done event from sidecar also fires) ────
+  if (t === 'agent_end') {
+    // The sidecar will send a {type:"done"} event shortly after this.
+    // We let that event handle the final state cleanup to avoid double-renders.
+    // But if the streaming slot is empty, make sure there's at least something.
+    return;
   }
 }
 
