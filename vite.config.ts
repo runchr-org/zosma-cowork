@@ -2,9 +2,35 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-	plugins: [react(), tailwindcss()],
+	plugins: [
+		react(),
+		tailwindcss(),
+		VitePWA({
+			registerType: "autoUpdate",
+			includeAssets: ["icon.svg"],
+			manifest: {
+				name: "Zosma Cowork",
+				short_name: "Zosma",
+				description: "Desktop AI coworker — accessible from your phone",
+				theme_color: "#1a1a2e",
+				background_color: "#0f0f1a",
+				display: "standalone",
+				scope: "/",
+				start_url: "/",
+				icons: [
+					{
+						src: "icon.svg",
+						sizes: "any",
+						type: "image/svg+xml",
+						purpose: "any maskable",
+					},
+				],
+			},
+		}),
+	],
 	test: {
 		environment: "jsdom",
 		globals: true,

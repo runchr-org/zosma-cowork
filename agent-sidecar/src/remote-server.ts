@@ -32,17 +32,6 @@ import { eventBus, type BusEvent } from "./event-bus.js";
 import { commandQueue } from "./command-queue.js";
 
 // ---------------------------------------------------------------------------
-// Mobile user-agent detection
-// ---------------------------------------------------------------------------
-
-const MOBILE_UA_RE =
-	/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|playbook|kindle|silk/i;
-
-function isMobileUA(ua: string): boolean {
-	return MOBILE_UA_RE.test(ua);
-}
-
-// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -333,15 +322,8 @@ function getProjectRoot(): string {
 	return path.resolve(sidecarRoot, "..");
 }
 
-/** Get the mobile app directory */
-function getMobileDir(): string {
-	return path.join(getProjectRoot(), "mobile");
-}
-
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void {
 	const url = req.url || "/";
-	const ua = (req.headers["user-agent"] || "").toLowerCase();
-	const isMobile = isMobileUA(ua);
 
 	// Security: prevent directory traversal
 	if (url.includes("..")) {
@@ -349,13 +331,6 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void 
 		return;
 	}
 
-	// For mobile browsers, serve the mobile app
-	if (isMobile && (url === "/" || url === "/index.html")) {
-		serveMobileIndex(res);
-		return;
-	}
-
-	// For desktop or other paths, serve from the dist directory
 	let filePath = url;
 	if (url === "/") filePath = "/index.html";
 
@@ -390,39 +365,6 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void 
 		res.end(content);
 	} catch {
 		writeJson(res, 500, { error: "Internal error serving static file" });
-	}
-}
-
-/** Serve the mobile web app (self-contained HTML) */
-function serveMobileIndex(res: http.ServerResponse): void {
-	const mobilePath = path.join(getMobileDir(), "index.html");
-	try {
-		if (fs.existsSync(mobilePath)) {
-			const content = fs.readFileSync(mobilePath, "utf-8");
-			res.writeHead(200, {
-				"Content-Type": "text/html; charset=utf-8",
-				...CORS_HEADERS,
-			});
-			res.end(content);
-			log("Served mobile app");
-		} else {
-			// Fall back to desktop SPA
-			const distDir = getWebDistDir();
-			const indexPath = path.join(distDir, "index.html");
-			if (fs.existsSync(indexPath)) {
-				const content = fs.readFileSync(indexPath);
-				res.writeHead(200, {
-					"Content-Type": getMimeType("html"),
-					...CORS_HEADERS,
-				});
-				res.end(content);
-			} else {
-				writeJson(res, 404, { error: "Mobile UI not found at mobile/index.html" });
-			}
-		}
-	} catch (err) {
-		log("serveMobileIndex error: %s", err);
-		writeJson(res, 500, { error: "Internal error" });
 	}
 }
 
