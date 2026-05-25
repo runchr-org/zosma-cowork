@@ -3,9 +3,9 @@
 #   - AUR_SSH_KEY secret (SSH private key registered on AUR)
 #   - AUR package: zosma-cowork-bin maintained by arjun-zosma
 
-name: Update AUR
+name: "Update AUR"
 
-on:
+"on":
   release:
     types: [published]
   workflow_dispatch:
