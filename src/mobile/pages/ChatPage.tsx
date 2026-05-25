@@ -10,8 +10,20 @@ interface ChatPageProps {
 }
 
 export function ChatPage({ pin, token, onDisconnect }: ChatPageProps) {
-	const { messages, streamingMessage, isRunning, status, error, sendMessage, abort, retry, isConnected } =
-		useRemoteChat({ pin, token });
+	const {
+		messages,
+		streamingMessage,
+		isRunning,
+		status,
+		error,
+		sendMessage,
+		abort,
+		retry,
+		isConnected,
+		models,
+		currentModelId,
+		switchModel,
+	} = useRemoteChat({ pin, token });
 
 	const handleSend = useCallback(
 		(text: string) => {
@@ -23,6 +35,13 @@ export function ChatPage({ pin, token, onDisconnect }: ChatPageProps) {
 	const handleBack = useCallback(() => {
 		onDisconnect();
 	}, [onDisconnect]);
+
+	const handleModelSelect = useCallback(
+		(provider: string, modelId: string) => {
+			switchModel(provider, modelId);
+		},
+		[switchModel],
+	);
 
 	return (
 		<div className="chat-page">
@@ -56,6 +75,9 @@ export function ChatPage({ pin, token, onDisconnect }: ChatPageProps) {
 					onSend={handleSend}
 					onAbort={abort}
 					onRetry={retry}
+					models={models}
+					currentModelId={currentModelId}
+					onModelSelect={handleModelSelect}
 				/>
 			</div>
 		</div>
