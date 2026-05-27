@@ -26,7 +26,7 @@
 
 > A desktop agentic work harness built on [pi](https://github.com/earendil-works/pi-coding-agent), the minimal, language-agnostic coding agent harness. Streaming, thinking, tool calls, multi-turn sessions — all free, all open-source, all local.
 >
-> **Free yourself — and your non-technical colleagues — from expensive proprietary tools.** Zosma Cowork brings the full [pi extension ecosystem](https://github.com/earendil-works/pi-coding-agent) into a native desktop app. No subscriptions, no usage caps, no lock-in. Just bring your own API key or use local models.
+> **Free yourself from expensive proprietary tools.** Zosma Cowork brings the full [pi extension ecosystem](https://github.com/earendil-works/pi-coding-agent) into a native desktop app. No subscriptions, no usage caps, no lock-in. Just bring your own API key or use local models.
 >
 > **From India to the World 🌏 — Made with ❤️ by [Zosma AI](https://zosma.ai)**
 
@@ -40,9 +40,9 @@
 
 ## Why Zosma Cowork?
 
-### 🌟 The First Desktop Coworker Built on pi
+### 🌟 Built on pi
 
-Zosma Cowork is the first desktop application built on [pi](https://github.com/earendil-works/pi-coding-agent) — the minimal, language-agnostic coding agent harness. pi's philosophy of simplicity and composability carries directly into your desktop experience. Every pi extension works out of the box, with zero wrappers or adapters.
+Zosma Cowork is a desktop application built on [pi](https://github.com/earendil-works/pi-coding-agent) — the minimal, language-agnostic coding agent harness. pi's philosophy of simplicity and composability carries directly into your desktop experience. Every pi extension works out of the box, with zero wrappers or adapters.
 
 ### 🆓 Free, Not Freemium
 
@@ -51,31 +51,6 @@ No $20/month subscriptions. No feature gates. No usage limits. Zosma Cowork is *
 ### 🧩 Full pi Extension Ecosystem
 
 The [pi ecosystem](https://github.com/earendil-works/pi-coding-agent) includes hundreds of extensions, skills, tools, prompts, and themes — all compatible with Zosma Cowork. Plug them into your `~/.zosmaai/cowork/` directory and they just work. No wrapping, no porting, no lock-in.
-
-#### vs Other Agentic Work Harnesses
-
-| | Zosma Cowork | Claude Code / Sidebar | Cursor / Copilot | Open-source harnesses |
-|--|--|--|--|--|
-| **Built on pi** | ✅ Full pi SDK | ❌ Proprietary | ❌ Proprietary | ❌ Different base |
-| **pi extensions** | ✅ Direct, no adapters | ❌ | ❌ | Partial |
-| **Price** | 🆓 Free (MIT) | 💰 $20/mo (Pro) | 💰 $20-40/mo | Varies |
-| **Desktop app** | ✅ Tauri v2 native | 🟡 CLI only | IDE-only | CLI-only |
-| **Local-first** | ✅ Keys + data stay local | ❌ Cloud-bound | ✅ Partial | Varies |
-| **Non-coder friendly** | ✅ Minimal UI, no CLI needed | 🟡 Developer-focused | 🟡 Developer-focused | ❌ CLI-only |
-| **Made in India 🇮🇳** | ✅ Built from India | ❌ | ❌ | ❌ |
-
-### 👥 Help Your Non-Technical Friends Get Started
-
-Agentic work shouldn't be limited to people who can type CLI commands. **Non-coders deserve a minimal, approachable work harness too.**
-
-Zosma Cowork is designed to be the tool you set up for:
-- **Your friend** who wants to use AI but doesn't know where to start
-- **Your colleague** on the business side who needs AI assistance without a terminal
-- **Your team members** who shouldn't have to pay for an expensive subscription just to try agentic AI
-
-**This is why Indian developers should contribute.** Not because you need another tool — but because your non-technical friends, colleagues, and community members need a free, simple on-ramp into the agentic AI world.
-
-> *"India doesn't just consume technology — we build it, we ship it, we lead it. And we make sure nobody gets left behind."
 
 ## Features
 
@@ -274,7 +249,7 @@ zosma-cowork/
 
 From India to the World 🌏 — with ❤️ from the team at [Zosma AI](https://zosma.ai).
 
-> *"India doesn't just consume technology — we build it, we ship it, we lead it."*
+
 
 ## License
 
