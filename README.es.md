@@ -1,3 +1,5 @@
+<div align="center">
+
 # Zosma Cowork 🇮🇳
 
 [English](./README.md) | [中文](./README.zh.md) | **Español** | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md) | [Português](./README.pt.md) | [Русский](./README.ru.md) | [한국어](./README.ko.md) | [हिंदी](./README.hi.md)
@@ -6,12 +8,29 @@
 [![Release](https://github.com/zosmaai/zosma-cowork/actions/workflows/release.yml/badge.svg)](https://github.com/zosmaai/zosma-cowork/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Made in India](https://img.shields.io/badge/Made_in_India-🇮🇳-FF9933?labelColor=138808)](https://zosma.ai)
+[![GitHub Repo Stars](https://img.shields.io/github/stars/zosmaai/zosma-cowork?style=social)](https://github.com/zosmaai/zosma-cowork/stargazers)
 
-> Un compañero de escritorio impulsado por el [SDK de pi agent](https://github.com/earendil-works/pi-coding-agent) — transmisión en tiempo real, procesos de pensamiento, llamadas a herramientas, sesiones multi-turno y dirección, todo en una hermosa aplicación nativa.
+</div>
 
-> 🇮🇳 **India's first Non-Coding Agentic Work Harness**
+<br/>
+
+<div align="center">
+  <a href="https://github.com/zosmaai/zosma-cowork/stargazers">
+    <img src="./assets/thank-you-for-the-star.png" alt="Thank you for starring Zosma Cowork!" width="100%" />
+  </a>
+  <br/>
+  <sub>
+    If you find Zosma Cowork useful,
+    <a href="https://github.com/zosmaai/zosma-cowork">⭐ star the repo</a> —
+    it lets us know we're building something that matters.
+  </sub>
+</div>
+
+<br/>
+
+> Un arnés de trabajo agéntico de escritorio construido sobre [pi](https://github.com/earendil-works/pi-coding-agent), el arnés de agente de codificación mínimo y agnóstico al lenguaje. Streaming, pensamiento, llamadas a herramientas, sesiones multi-turno — todo gratuito, todo código abierto, todo local.
 >
-> **From India to the World 🌏 — Made with ❤️ by [Zosma AI](https://zosma.ai)**
+> Construido por [Zosma AI](https://zosma.ai).
 
 ## Gallery
 
@@ -19,91 +38,196 @@
 
 <img src="./assets/screenshot.png" width="100%" alt="Zosma Cowork screenshot" />
 
-*Procesamiento de facturas con agentes de lenguaje natural. Más demos en [zosma.ai/zosma-cowork/gallery](https://www.zosma.ai/zosma-cowork/gallery)*
+*Invoice processing with natural language agents. See more demos at [zosma.ai/zosma-cowork/gallery](https://www.zosma.ai/zosma-cowork/gallery)*
 
 ## ¿Por qué Zosma Cowork?
 
-### 🌟 El primer escritorio colaborativo basado en pi
+### 🌟 Construido sobre pi
 
-Zosma Cowork es la primera aplicación de escritorio construida sobre [pi](https://github.com/earendil-works/pi-coding-agent) — el arnés de agente mínimo y agnóstico al lenguaje. Cada extensión de pi funciona directamente, sin envoltorios ni adaptadores.
+Zosma Cowork es una aplicación de escritorio construida sobre [pi](https://github.com/earendil-works/pi-coding-agent) — el arnés de agente de codificación mínimo y agnóstico al lenguaje. Cada extensión de pi funciona directamente, sin envoltorios ni adaptadores.
 
-### 🆓 Gratuito, no Freemium
+### 🆓 Gratuito y Código Abierto
 
-Sin suscripciones de $20/mes. Sin límites de funciones. Sin restricciones de uso. Zosma Cowork es **100% gratuito y de código abierto** (MIT). Trae tu propia clave API o usa modelos locales — tú controlas los costos.
+Zosma Cowork es **100% gratuito y de código abierto** (MIT). Trae tu propia clave API o usa modelos locales — tú mantienes el control.
 
-### 🧩 Ecosistema completo de extensiones pi
+### 🧩 Ecosistema Completo de Extensiones pi
 
-El [ecosistema pi](https://github.com/earendil-works/pi-coding-agent) incluye cientos de extensiones, skills, herramientas, prompts y temas — todos compatibles con Zosma Cowork. Plúgalos en `~/.zosmaai/cowork/` y funcionan. Sin adaptadores, sin bloqueo.
-
-### 👥 Ayuda a colegas no técnicos a comenzar
-
-El trabajo agentivo no debería limitarse a quienes saben usar la CLI. **Los no programadores también merecen un arnés de trabajo mínimo y accesible.** Configura Zosma Cowork para tus amigos y colegas no técnicos — gratis, simple, listo para usar.
-
-**Por eso los desarrolladores indios deberían contribuir.** No porque necesites otra herramienta — sino porque tus amigos no técnicos necesitan una entrada gratuita y simple al mundo de la IA agentiva.
-
-> *"India no solo consume tecnología — la construimos, la enviamos, la lideramos. Y nos aseguramos de que nadie se quede atrás."*
-
+El [ecosistema pi](https://github.com/earendil-works/pi-coding-agent) incluye cientos de extensiones, habilidades, herramientas, prompts y temas — todos compatibles con Zosma Cowork. Colócalos en tu directorio `~/.zosmaai/cowork/` y funcionan al instante.
 
 ## Características
-
-- **Tiempo de ejecución del agente en proceso** — El SDK de pi agent se ejecuta directamente dentro de la aplicación (sin subprocesos, sin dependencia de CLI en tiempo de ejecución)
-- **Sesiones multi-turno** — Continuidad completa de conversación con historial de sesión persistente
-- **Respuestas en streaming** — Observa al agente pensar, escribir y llamar herramientas en tiempo real
+- **Sidecar de agente Node.js** — El SDK pi-mono TypeScript se ejecuta en un proceso sidecar gestionado para capacidades completas de agente
+- **Relé Tauri ligero** — La capa Rust es un puente IPC mínimo entre React y el sidecar
+- **Ecosistema de extensiones pi** — Compatible con extensiones pi a través de `DefaultResourceLoader` — habilidades, herramientas y prompts auto-descubiertos
+- **Sesiones multi-turno** — Continuidad completa de conversación con historial persistente
+- **Respuestas en streaming** — Ve al agente pensar, escribir y llamar herramientas en tiempo real
 - **Bloques de pensamiento** — Razonamiento expandible del modelo
-- **Línea de tiempo de llamadas a herramientas** — Llamadas bash/edit/write en tiempo real con argumentos y resultados
+- **Línea de tiempo de llamadas a herramientas** — Llamadas en vivo bash/edit/write con argumentos y resultados
 - **Gestión de sesiones** — Sesiones de chat persistentes guardadas en `~/.zosmaai/cowork/`
-- **Modo claro y oscuro** — Modo claro crema cálido y modo oscuro carbón cálido
+- **Modo claro y oscuro** — Modo claro crema cálido, modo oscuro carbón cálido
 - **Atajos de teclado** — `Cmd/Ctrl+Shift+K` para enfocar, `Cmd/Ctrl+N` para nueva sesión
-- **Abortar y dirigir** — Detener un agente en ejecución a mitad de turno, enviar mensajes de dirección de seguimiento
-- **UI inspirada en Claude** — Diseño de tres columnas con barra lateral, espacio de trabajo y panel de información
+- **Abortar y dirigir** — Detén un agente en ejecución, envía mensajes de seguimiento
+- **UI inspirada en Claude** — Diseño de 3 columnas con barra lateral, espacio de trabajo y panel de información
 
-## Tecnologías
+## Arquitectura
 
-| Capa | Tecnología |
-|------|-----------|
-| Frontend | React 19, Tailwind CSS v4, Radix UI |
-| Shell de escritorio | Tauri v2, Rust, Tokio |
-| Motor del agente | Node.js sidecar — pi-mono SDK |
-| SDK del agente | `@earendil-works/pi-coding-agent` — pi-mono TypeScript SDK
-| Pruebas | Vitest, Testing Library, jsdom, `cargo test` |
-| Linter | Biome (frontend), Clippy (Rust) |
+<img src="./assets/architecture.png" width="100%" alt="Zosma Cowork architecture diagram" />
 
-## Inicio rápido
+<details>
+<summary>Editar este diagrama</summary>
 
-### Prerrequisitos
-
-- [Node.js](https://nodejs.org/) 22+
-- [Rust](https://rustup.rs/) 1.85+
-
-### Instalar y ejecutar
+El diagrama se genera desde <code>assets/architecture.mmd</code>. Para actualizar:
 
 ```bash
-# Instalar dependencias
+# Edit assets/architecture.mmd, then re-render:
+mmdc -i assets/architecture.mmd -o assets/architecture.png -b white -w 900 -H 700
+```
+</details>
+
+## Stack Tecnológico
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, Tailwind CSS v4, Radix UI |
+| Shell de escritorio | Tauri v2, Rust, Tokio |
+| Motor de agente | Sidecar Node.js — `@earendil-works/pi-coding-agent` (pi-mono SDK) |
+| Pruebas | Vitest, Testing Library, jsdom |
+| Linting | Biome (frontend), Clippy (Rust) |
+
+## Desarrollo
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 22+
+- [Rust](https://rustup.rs/) 1.85+ (para el shell Tauri)
+
+### Quick Start
+
+```bash
+# Install frontend dependencies
 npm install
 
-# Ejecutar servidor de desarrollo frontend
+# Install agent-sidecar dependencies
+cd agent-sidecar && npm install && cd ..
+
+# Run frontend dev server
 npm run dev:frontend
 
-# Ejecutar aplicación Tauri completa (frontend + backend Rust + Node.js agent sidecar)
+# Run full Tauri app (frontend + Rust relay + Node.js sidecar)
 npm run dev
 ```
 
-## Configuración y datos
+### Scripts
+
+```bash
+# Frontend
+npm run lint          # Biome lint
+npm run typecheck     # TypeScript check
+npm run test          # Vitest run
+npm run validate      # lint + typecheck + test
+npm run format        # Biome format
+
+# Tauri
+npm run build:frontend
+npm run build         # Build release binary
+
+# Agent Sidecar
+cd agent-sidecar
+npm run build         # TypeScript → JavaScript
+npm run dev           # tsx watch (standalone development)
+
+# Rust (Tauri relay only)
+cargo fmt --all --check
+cargo clippy --workspace -- -D warnings
+```
+
+## Configuración y Datos
 
 | Qué | Ubicación | Notas |
-|-----|-----------|-------|
-| Proveedores LLM y claves API | `~/.zosmaai/agent/settings.json` | Gestionado por la app |
-| Definiciones de modelos | `~/.zosmaai/agent/models.json` | Gestionado por la app |
-| Extensiones y habilidades | `~/.zosmaai/agent/extensions/` | Directorio local de extensiones |
+|------|----------|-------|
+| Proveedores LLM y claves API | `~/.zosmaai/cowork/auth.json` | Gestionado por la app |
+| Definiciones de modelo | `~/.zosmaai/cowork/models.json` | Gestionado por la app |
+| Extensiones y habilidades | `~/.zosmaai/cowork/extensions/` | Extensiones compatibles con Pi |
 | Historial de sesiones | `~/.zosmaai/cowork/` | Gestionado por Zosma Cowork |
 
-## 🇮🇳 Made in India
+## Protocolo IPC
 
-**Zosma Cowork** — orgullosamente construido **desde India** por **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
+El relé Tauri se comunica con el sidecar Node.js a través de líneas JSON stdin/stdout:
 
-De India para el Mundo 🌏 — con ❤️ del equipo de [Zosma AI](https://zosma.ai).
+**Comandos (→ sidecar):**
 
-> *"India no solo consume tecnología — la construimos, la enviamos, la lideramos."*
+| Command | Description |
+|---------|-------------|
+| `init` | Inicializar agente con configuración zosmaDir |
+| `get_models` | Listar modelos disponibles de todos los proveedores |
+| `prompt` | Enviar mensaje de usuario, transmitir eventos |
+| `abort` | Cancelar prompt en ejecución |
+| `set_model` | Cambiar modelo activo |
+| `save_auth` | Guardar clave API para un proveedor |
+| `reload` | Reinicializar con extensiones/auth frescas |
+
+**Eventos (← sidecar):**
+
+| Event | UI Effect |
+|-------|-----------|
+| `ready` | Modelos cargados, habilitar UI |
+| `event` | Eventos de sesión del agente (pensamiento, texto, llamadas a herramientas) |
+| `done` | Prompt completado |
+| `result` | Respuesta a un comando de solicitud |
+| `error` | Error con mensaje |
+
+## Estructura del Proyecto
+
+```
+zosma-cowork/
+├── agent-sidecar/                # Node.js agent process
+│   └── src/
+│       └── index.ts              # Sidecar: pi-mono SDK, stdin/stdout protocol
+├── src/                          # React frontend
+│   ├── components/               # UI components
+│   │   ├── ChatMessage.tsx       # Message with thinking + tool calls
+│   │   ├── ThinkingBlock.tsx     # Expandable reasoning
+│   │   ├── ToolCallTimeline.tsx  # Tool execution timeline
+│   │   ├── MessageInput.tsx      # Chat input
+│   │   └── ui/                   # Primitives (tooltip, badge, etc.)
+│   ├── hooks/
+│   │   ├── usePiStream.ts        # Streaming state machine (useReducer)
+│   │   └── useSessions.ts        # Session persistence
+│   ├── types/
+│   │   ├── index.ts              # ChatMessage, ToolCallInfo
+│   │   └── pi-events.ts          # CoworkEvent types
+│   ├── App.tsx                   # Main 3-column layout
+│   └── App.css                   # Tailwind theme (light + dark)
+├── src-tauri/                    # Tauri desktop shell (thin Rust relay)
+│   └── src/
+│       ├── main.rs               # Entry point
+│       └── lib.rs                # IPC commands → sidecar process
+├── docs/                         # Architecture & plans
+└── .github/workflows/            # CI/CD
+```
+
+---
+
+## Star History
+
+<a href="https://star-history.com/#zosmaai/zosma-cowork&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zosmaai/zosma-cowork&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=zosmaai/zosma-cowork&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=zosmaai/zosma-cowork&type=Date" width="100%" />
+  </picture>
+</a>
+
+## Contributors
+
+<a href="https://github.com/zosmaai/zosma-cowork/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=zosmaai/zosma-cowork" alt="Contributors" />
+</a>
+
+---
+
+## 🇮🇳 Hecho en India
+
+**Zosma Cowork** — construido **desde India** por **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
 
 ## Licencia
 

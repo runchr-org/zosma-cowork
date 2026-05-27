@@ -1,3 +1,5 @@
+<div align="center">
+
 # Zosma Cowork 🇮🇳
 
 [English](./README.md) | [中文](./README.zh.md) | [Español](./README.es.md) | [日本語](./README.ja.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md) | [Português](./README.pt.md) | [Русский](./README.ru.md) | **한국어** | [हिंदी](./README.hi.md)
@@ -6,12 +8,29 @@
 [![Release](https://github.com/zosmaai/zosma-cowork/actions/workflows/release.yml/badge.svg)](https://github.com/zosmaai/zosma-cowork/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Made in India](https://img.shields.io/badge/Made_in_India-🇮🇳-FF9933?labelColor=138808)](https://zosma.ai)
+[![GitHub Repo Stars](https://img.shields.io/github/stars/zosmaai/zosma-cowork?style=social)](https://github.com/zosmaai/zosma-cowork/stargazers)
 
-> [pi agent SDK](https://github.com/earendil-works/pi-coding-agent)로 구동되는 데스크톱 AI 동료 — 스트리밍, 사고 과정, 도구 호출, 멀티턴 세션 및 스티어링을 모두 아름다운 네이티브 앱에 통합했습니다.
+</div>
 
-> 🇮🇳 **India's first Non-Coding Agentic Work Harness**
+<br/>
+
+<div align="center">
+  <a href="https://github.com/zosmaai/zosma-cowork/stargazers">
+    <img src="./assets/thank-you-for-the-star.png" alt="Thank you for starring Zosma Cowork!" width="100%" />
+  </a>
+  <br/>
+  <sub>
+    If you find Zosma Cowork useful,
+    <a href="https://github.com/zosmaai/zosma-cowork">⭐ star the repo</a> —
+    it lets us know we're building something that matters.
+  </sub>
+</div>
+
+<br/>
+
+> 최소한의 언어에 구애받지 않는 코딩 에이전트 하니스인 [pi](https://github.com/earendil-works/pi-coding-agent) 위에 구축된 데스크톱 에이전틱 워크 하니스입니다. 스트리밍, 사고, 도구 호출, 다중 턴 세션 — 모두 무료, 오픈소스, 로컬에서 작동합니다.
 >
-> **From India to the World 🌏 — Made with ❤️ by [Zosma AI](https://zosma.ai)**
+> [Zosma AI](https://zosma.ai) 제공.
 
 ## Gallery
 
@@ -19,91 +38,196 @@
 
 <img src="./assets/screenshot.png" width="100%" alt="Zosma Cowork screenshot" />
 
-*자연어 에이전트를 이용한 인보이스 처리. 더 많은 데모 보기: [zosma.ai/zosma-cowork/gallery](https://www.zosma.ai/zosma-cowork/gallery)*
+*Invoice processing with natural language agents. See more demos at [zosma.ai/zosma-cowork/gallery](https://www.zosma.ai/zosma-cowork/gallery)*
 
-## Zosma Cowork 를 선택해야 하는 이유
+## Zosma Cowork를 선택해야 하는 이유
 
-### 🌟 pi 기반 최초의 데스크톱 코워커
+### 🌟 pi 기반으로 구축
 
-Zosma Cowork는 [pi](https://github.com/earendil-works/pi-coding-agent) — 최소한의 언어에 구애받지 않는 코딩 에이전트 하니스 — 위에 구축된 최초의 데스크톱 애플리케이션입니다. 모든 pi 확장이 래퍼나 어댑터 없이 직접 작동합니다.
+Zosma Cowork는 [pi](https://github.com/earendil-works/pi-coding-agent) 위에 구축된 데스크톱 애플리케이션입니다 — 최소한의 언어에 구애받지 않는 코딩 에이전트 하니스입니다. 모든 pi 확장 기능이 래퍼나 어댑터 없이 바로 작동합니다.
 
-### 🆓 무료, Freemium 아님
+### 🆓 무료 및 오픈소스
 
-월 $20의 구독료 없음. 기능 제한 없음. 사용 상한 없음. Zosma Cowork는 **100% 무료 오픈소스** (MIT)입니다. 자신의 API 키를 가져오거나 로컬 모델을 사용하세요 — 비용을 직접 제어할 수 있습니다.
+Zosma Cowork는 **100% 무료이며 오픈소스** (MIT)입니다. 자체 API 키를 사용하거나 로컬 모델을 실행하세요 — 사용자가 제어합니다.
 
 ### 🧩 완전한 pi 확장 생태계
 
-[pi 생태계](https://github.com/earendil-works/pi-coding-agent)에는 수백 개의 확장, 스킬, 도구, 프롬프트, 테마가 포함되어 있습니다 — 모두 Zosma Cowork와 호환됩니다. `~/.zosmaai/cowork/`에 플러그인하기만 하면 작동합니다. 어댑터 불필요, 락인 없음.
-
-### 👥 비기술자 동료의 시작을 도우세요
-
-에이전트 워크는 CLI 명령어를 입력할 수 있는 사람만을 위한 것이 아닙니다. **비개발자도 최소한의 접근 가능한 워크 하니스를 가질 자격이 있습니다.** 기술에 익숙하지 않은 친구와 동료를 위해 Zosma Cowork를 설정하세요 — 무료, 간단, 즉시 사용 가능.
-
-**이것이 인도 개발자가 기여해야 하는 이유입니다.** 당신이 또 다른 도구를 필요로 해서가 아니라 — 당신의 비기술자 친구들이 에이전트 AI 세계로의 무료하고 간단한 진입로를 필요로 하기 때문입니다.
-
-> *"인도는 기술을 소비만 하지 않습니다 — 우리는 그것을 구축하고, 출시하고, 선도합니다. 그리고 누구도 뒤처지지 않도록 합니다."*
-
+[pi 생태계](https://github.com/earendil-works/pi-coding-agent)에는 수백 개의 확장 기능, 스킬, 도구, 프롬프트 및 테마가 포함되어 있습니다 — 모두 Zosma Cowork와 호환됩니다. `~/.zosmaai/cowork/` 디렉토리에 넣으면 바로 작동합니다.
 
 ## 기능
+- **Node.js 에이전트 사이드카** — pi-mono TypeScript SDK가 관리형 사이드카 프로세스에서 실행되어 완전한 에이전트 기능 제공
+- **경량 Tauri 릴레이** — Rust 레이어는 React와 사이드카 간의 최소 IPC 브리지
+- **pi 확장 생태계** — `DefaultResourceLoader`를 통해 pi 확장과 호환 — 스킬, 도구, 프롬프트 자동 검색
+- **다중 턴 세션** — 영구 세션 기록으로 완전한 대화 연속성
+- **스트리밍 응답** — 에이전트가 생각하고, 작성하고, 도구를 호출하는 것을 실시간으로 확인
+- **사고 블록** — 모델의 확장 가능한 추론
+- **도구 호출 타임라인** — 인수 및 결과와 함께 실시간 bash/edit/write 도구 호출
+- **세션 관리** — `~/.zosmaai/cowork/`에 저장된 영구 채팅 세션
+- **라이트 & 다크 모드** — 따뜻한 크림 라이트 모드, 따뜻한 차콜 다크 모드
+- **키보드 단축키** — 포커스 `Cmd/Ctrl+Shift+K`, 새 세션 `Cmd/Ctrl+N`
+- **중단 및 조종** — 실행 중인 에이전트 중단, 후속 조종 메시지 전송
+- **Claude 영감 UI** — 사이드바, 작업 공간, 정보 패널이 있는 3열 레이아웃
 
-- **인프로세스 에이전트 런타임** — pi agent SDK가 앱 내에서 직접 실행 (서브프로세스 없음, 런타임 시 CLI 의존성 없음)
-- **멀티턴 세션** — 영구 세션 기록으로 완전한 대화 연속성
-- **스트리밍 응답** — 에이전트가 생각하고, 쓰고, 도구를 호출하는 것을 실시간으로 확인
-- **사고 블록** — 확장 가능한 모델의 추론 과정
-- **도구 호출 타임라인** — 인수와 결과가 포함된 실시간 bash/edit/write 도구 호출
-- **세션 관리** — `~/.zosmaai/cowork/`에 저장되는 지속적인 채팅 세션
-- **라이트 & 다크 모드** — 따뜻한 크림 라이트 모드와 따뜻한 차콜 다크 모드
-- **키보드 단축키** — `Cmd/Ctrl+Shift+K`로 포커스, `Cmd/Ctrl+N`으로 새 세션
-- **중단 및 스티어링** — 턴 중간에 실행 중인 에이전트 중지, 후속 스티어링 메시지 전송
-- **Claude 스타일 UI** — 사이드바, 작업 공간, 정보 패널이 있는 3열 레이아웃
+## 아키텍처
+
+<img src="./assets/architecture.png" width="100%" alt="Zosma Cowork architecture diagram" />
+
+<details>
+<summary>이 다이어그램 편집</summary>
+
+이 다이어그램은 <code>assets/architecture.mmd</code>에서 생성됩니다. 업데이트 방법:
+
+```bash
+# Edit assets/architecture.mmd, then re-render:
+mmdc -i assets/architecture.mmd -o assets/architecture.png -b white -w 900 -H 700
+```
+</details>
 
 ## 기술 스택
 
-| 레이어 | 기술 |
-|--------|------|
+| Layer | Technology |
+|-------|-----------|
 | 프론트엔드 | React 19, Tailwind CSS v4, Radix UI |
 | 데스크톱 셸 | Tauri v2, Rust, Tokio |
-| 에이전트 엔진 | Node.js sidecar — pi-mono SDK (`@earendil-works/pi-coding-agent`)
-| 에이전트 SDK | `@earendil-works/pi-coding-agent` — pi-mono TypeScript SDK
-| 테스트 | Vitest, Testing Library, jsdom, `cargo test` |
-| 린터 | Biome (프론트엔드), Clippy (Rust) |
+| 에이전트 엔진 | Node.js 사이드카 — `@earendil-works/pi-coding-agent` (pi-mono SDK) |
+| 테스트 | Vitest, Testing Library, jsdom |
+| 린팅 | Biome (프론트엔드), Clippy (Rust) |
 
-## 빠른 시작
+## 개발
 
-### 전제 조건
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) 22+
-- [Rust](https://rustup.rs/) 1.85+
+- [Rust](https://rustup.rs/) 1.85+ (Tauri 데스크톱 셸용)
 
-### 설치 및 실행
+### Quick Start
 
 ```bash
-# 의존성 설치
+# Install frontend dependencies
 npm install
 
-# 프론트엔드 개발 서버 실행
+# Install agent-sidecar dependencies
+cd agent-sidecar && npm install && cd ..
+
+# Run frontend dev server
 npm run dev:frontend
 
-# 전체 Tauri 앱 실행 (프론트엔드 + Rust 백엔드 + Node.js agent sidecar)
+# Run full Tauri app (frontend + Rust relay + Node.js sidecar)
 npm run dev
 ```
 
-## 설정 및 데이터
+### Scripts
+
+```bash
+# Frontend
+npm run lint          # Biome lint
+npm run typecheck     # TypeScript check
+npm run test          # Vitest run
+npm run validate      # lint + typecheck + test
+npm run format        # Biome format
+
+# Tauri
+npm run build:frontend
+npm run build         # Build release binary
+
+# Agent Sidecar
+cd agent-sidecar
+npm run build         # TypeScript → JavaScript
+npm run dev           # tsx watch (standalone development)
+
+# Rust (Tauri relay only)
+cargo fmt --all --check
+cargo clippy --workspace -- -D warnings
+```
+
+## 구성 및 데이터
 
 | 항목 | 위치 | 참고 |
-|------|------|------|
-| LLM 제공자 및 API 키 | `~/.zosmaai/agent/settings.json` | 앱에서 관리 |
-| 모델 정의 | `~/.zosmaai/agent/models.json` | 앱에서 관리 |
-| 확장 및 스킬 | `~/.zosmaai/agent/extensions/` | 로컬 확장 디렉토리 |
+|------|----------|-------|
+| LLM 제공자 및 API 키 | `~/.zosmaai/cowork/auth.json` | 앱에서 관리 |
+| 모델 정의 | `~/.zosmaai/cowork/models.json` | 앱에서 관리 |
+| 확장 기능 및 스킬 | `~/.zosmaai/cowork/extensions/` | Pi 호환 확장 |
 | 세션 기록 | `~/.zosmaai/cowork/` | Zosma Cowork에서 관리 |
 
-## 🇮🇳 Made in India
+## IPC 프로토콜
 
-**Zosma Cowork** — **인도에서** 자랑스럽게 구축되었습니다 — **ZOSMAAI SOLUTIONS PRIVATE LIMITED**
+Tauri 릴레이는 stdin/stdout JSON 라인을 통해 Node.js 사이드카와 통신합니다:
 
-인도에서 세계로 🌏 — [Zosma AI](https://zosma.ai) 팀의 ❤️를 담아.
+**명령 (→ 사이드카):**
 
-> *"인도는 기술을 소비만 하지 않습니다 — 우리는 그것을 구축하고, 출시하고, 선도합니다."*
+| Command | Description |
+|---------|-------------|
+| `init` | zosmaDir 설정으로 에이전트 초기화 |
+| `get_models` | 사용 가능한 모든 모델 나열 |
+| `prompt` | 사용자 메시지 전송, 이벤트 스트리밍 |
+| `abort` | 실행 중인 프롬프트 취소 |
+| `set_model` | 활성 모델 전환 |
+| `save_auth` | 제공자용 API 키 저장 |
+| `reload` | 새로운 확장/인증으로 다시 초기화 |
+
+**이벤트 (← 사이드카):**
+
+| Event | UI Effect |
+|-------|-----------|
+| `ready` | 모델 로드됨, UI 활성화 |
+| `event` | 에이전트 세션 이벤트 (사고, 텍스트, 도구 호출) |
+| `done` | 프롬프트 완료 |
+| `result` | 요청 명령에 대한 응답 |
+| `error` | 메시지와 함께 오류 |
+
+## 프로젝트 구조
+
+```
+zosma-cowork/
+├── agent-sidecar/                # Node.js agent process
+│   └── src/
+│       └── index.ts              # Sidecar: pi-mono SDK, stdin/stdout protocol
+├── src/                          # React frontend
+│   ├── components/               # UI components
+│   │   ├── ChatMessage.tsx       # Message with thinking + tool calls
+│   │   ├── ThinkingBlock.tsx     # Expandable reasoning
+│   │   ├── ToolCallTimeline.tsx  # Tool execution timeline
+│   │   ├── MessageInput.tsx      # Chat input
+│   │   └── ui/                   # Primitives (tooltip, badge, etc.)
+│   ├── hooks/
+│   │   ├── usePiStream.ts        # Streaming state machine (useReducer)
+│   │   └── useSessions.ts        # Session persistence
+│   ├── types/
+│   │   ├── index.ts              # ChatMessage, ToolCallInfo
+│   │   └── pi-events.ts          # CoworkEvent types
+│   ├── App.tsx                   # Main 3-column layout
+│   └── App.css                   # Tailwind theme (light + dark)
+├── src-tauri/                    # Tauri desktop shell (thin Rust relay)
+│   └── src/
+│       ├── main.rs               # Entry point
+│       └── lib.rs                # IPC commands → sidecar process
+├── docs/                         # Architecture & plans
+└── .github/workflows/            # CI/CD
+```
+
+---
+
+## Star History
+
+<a href="https://star-history.com/#zosmaai/zosma-cowork&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zosmaai/zosma-cowork&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=zosmaai/zosma-cowork&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=zosmaai/zosma-cowork&type=Date" width="100%" />
+  </picture>
+</a>
+
+## Contributors
+
+<a href="https://github.com/zosmaai/zosma-cowork/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=zosmaai/zosma-cowork" alt="Contributors" />
+</a>
+
+---
+
+## 🇮🇳 인도 제작
+
+**Zosma Cowork** — **ZOSMAAI SOLUTIONS PRIVATE LIMITED**에서 **인도에서** 개발.
 
 ## 라이선스
 
