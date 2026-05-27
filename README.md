@@ -8,19 +8,23 @@
 [![Made in India](https://img.shields.io/badge/Made_in_India-🇮🇳-FF9933?labelColor=138808)](https://zosma.ai)
 [![GitHub Repo Stars](https://img.shields.io/github/stars/zosmaai/zosma-cowork?style=social)](https://github.com/zosmaai/zosma-cowork/stargazers)
 
+<br/>
+
 <div align="center">
   <a href="https://github.com/zosmaai/zosma-cowork/stargazers">
     <img src="./assets/thank-you-for-the-star.png" alt="Thank you for starring Zosma Cowork!" width="100%" />
   </a>
   <br/>
   <sub>
-    <b>Love Zosma Cowork?</b>
-    <a href="https://github.com/zosmaai/zosma-cowork">⭐ Star our repo</a> —
-    it costs nothing and tells us we're building something you care about!
+    If you find Zosma Cowork useful,
+    <a href="https://github.com/zosmaai/zosma-cowork">⭐ star the repo</a> —
+    it lets us know we're building something that matters.
   </sub>
 </div>
 
-> 🇮🇳 **India's first Non-Coding Agentic Work Harness** — The first desktop coworker built on [pi](https://github.com/earendil-works/pi-coding-agent), the minimal agentic work harness. Streaming, thinking, tool calls, multi-turn sessions — all free, all open-source, all local.
+<br/>
+
+> A desktop agentic work harness built on [pi](https://github.com/earendil-works/pi-coding-agent), the minimal, language-agnostic coding agent harness. Streaming, thinking, tool calls, multi-turn sessions — all free, all open-source, all local.
 >
 > **Free yourself — and your non-technical colleagues — from expensive proprietary tools.** Zosma Cowork brings the full [pi extension ecosystem](https://github.com/earendil-works/pi-coding-agent) into a native desktop app. No subscriptions, no usage caps, no lock-in. Just bring your own API key or use local models.
 >
