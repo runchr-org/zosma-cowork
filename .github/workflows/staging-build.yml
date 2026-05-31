@@ -1,0 +1,276 @@
+name: Staging Build
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Staging builds for internal testing.
+#
+# WHAT this does:
+#   - On every push to `main` (and on manual `workflow_dispatch`), bundle the
+#     desktop app for macOS-universal, Linux-x64, and Windows-x64.
+#   - Upload the installers as workflow artifacts (14 day retention).
+#   - Post a Discord message to an internal channel with auth-free download
+#     links served via nightly.link (one webhook secret — single source of
+#     truth, no per-recipient management).
+#
+# WHAT this DOES NOT do:
+#   - Does NOT create a GitHub Release. The production release flow is still
+#     `release.yml` (tag-triggered on `v*.*.*` / `*.*.*`).
+#   - Does NOT publish to AUR / winget / Homebrew. Those are gated on
+#     `update-aur.yml`, `update-winget.yml`, `notify-homebrew.yml` which fire
+#     on `release` events, not on this workflow.
+#   - Does NOT code-sign. Apple notarisation is metered and we'd burn quota
+#     on every merge to `main`. Internal testers can dismiss the OS warnings
+#     (see email body for the macOS `xattr` and Windows "Run anyway" steps).
+#
+# Tracks zosmaai/zosma-cowork#133.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  # Only the tip of `main` needs a staging installer. If a second merge lands
+  # while a build is mid-flight, abandon the older one — testers only care
+  # about the newest.
+  group: staging-build-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            name: macOS-universal
+          - platform: ubuntu-22.04
+            args: ""
+            name: Linux-x64
+          - platform: windows-latest
+            args: ""
+            name: Windows-x64
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      # NOTE: no "Inject release version from tag" step here — staging uses
+      # whatever version is already in package.json / tauri.conf.json /
+      # Cargo.toml. The installer's filename will be something like
+      # `Zosma Cowork_0.3.0_x64_en-US.msi` regardless of which commit it was
+      # built from. We rely on the artifact name (which includes the SHA) to
+      # disambiguate. See the "Collect bundles" step below.
+
+      - name: Build agent-sidecar
+        shell: bash
+        run: |
+          cd agent-sidecar
+          npm ci
+          npm run bundle
+          # Patch import_meta.url for CJS compatibility (cross-platform node, not sed)
+          node -e "
+            const fs = require('fs');
+            let code = fs.readFileSync('dist/bundle.cjs', 'utf-8');
+            code = code.replace(/var (import_meta\d*) = \{\};/g, (_, m) => 'var ' + m + ' = { url: require(\"url\").pathToFileURL(__filename).href };');
+            fs.writeFileSync('dist/bundle.cjs', code, 'utf-8');
+          "
+          mkdir -p "$GITHUB_WORKSPACE/src-tauri/agent-sidecar"
+          cp dist/bundle.cjs "$GITHUB_WORKSPACE/src-tauri/agent-sidecar/index.cjs"
+
+      - name: Fetch bundled Node.js
+        shell: bash
+        run: node src-tauri/scripts/fetch-node.mjs
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Tell Tauri's macOS bundler to skip codesigning explicitly. Without
+      # this, tauri-action sees an empty APPLE_SIGNING_IDENTITY env var and
+      # tries to sign with the default identity, which fails on a runner with
+      # no keychain entries. "-" is the documented escape hatch.
+      - name: Disable macOS signing
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "APPLE_SIGNING_IDENTITY=-" >> $GITHUB_ENV
+
+      - name: Build Tauri app (unsigned staging)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # IMPORTANT: no `tagName` / `releaseName` / `releaseDraft` keys.
+          # When those are absent, tauri-action only builds — it does not
+          # publish a GitHub Release. That's the whole point of this
+          # workflow.
+          args: ${{ matrix.args }}
+          includeUpdaterJson: false
+
+      - name: Collect bundles
+        shell: bash
+        run: |
+          set -e
+          mkdir -p staging-out
+
+          # macOS — .dmg only (the .app is also produced as a directory which
+          # doesn't survive upload-artifact's zip round-trip cleanly).
+          find src-tauri/target -path '*/release/bundle/dmg/*.dmg' -exec cp -v {} staging-out/ \; 2>/dev/null || true
+
+          # Linux
+          find src-tauri/target/release/bundle -maxdepth 3 -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
+            -exec cp -v {} staging-out/ \; 2>/dev/null || true
+
+          # Windows — .msi and the NSIS setup .exe
+          find src-tauri/target/release/bundle -maxdepth 3 -type f \
+            \( -name '*.msi' -o -name '*-setup.exe' \) \
+            -exec cp -v {} staging-out/ \; 2>/dev/null || true
+
+          echo "── Collected ──"
+          ls -la staging-out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # Including the short SHA in the name lets testers tell at a glance
+          # which commit they're installing. nightly.link's URL needs the
+          # exact artifact name, so the notify job below constructs the same
+          # string from `github.sha`.
+          name: zosma-cowork-staging-${{ matrix.name }}-${{ github.sha }}
+          path: staging-out/*
+          if-no-files-found: error
+          # 14 days = ~2 sprints. Long enough to be useful, short enough to
+          # not blow through GitHub Free's 500 MB artifact storage budget at
+          # ~150 MB per OS per run.
+          retention-days: 14
+
+  notify:
+    name: Notify Discord
+    needs: build
+    # `always()` so we still notify on partial-failure builds (one OS broken,
+    # others fine). The embed colour + per-OS link list will reflect the
+    # actual `needs.build.result` so the channel can tell at a glance.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check webhook configured
+        id: cfg
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_STAGING_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::DISCORD_STAGING_WEBHOOK secret not set — skipping notification. Create a webhook on a Discord channel (Channel settings → Integrations → Webhooks → New) and add the URL as a repo secret."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post to Discord
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_STAGING_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          ACTOR: ${{ github.actor }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          set -euo pipefail
+          SHA7="${SHA:0:7}"
+
+          # First line of the commit message becomes the embed description.
+          # Squash-merged PRs end the subject with `(#N)`. Discord does NOT
+          # auto-linkify GitHub-style `#N` refs the way GitHub itself does,
+          # so we rewrite them to explicit markdown links — GitHub's web
+          # routing 302s /pull/N → /issues/N when N is an issue, so always
+          # linking to /pull/N is safe regardless of ref type.
+          SUBJECT_LINE="$(printf '%s\n' "$COMMIT_MSG" | head -n1)"
+          SUBJECT_LINKED="$(printf '%s' "$SUBJECT_LINE" | sed -E "s|#([0-9]+)|[#\1](https://github.com/$REPO/pull/\1)|g")"
+
+          # Discord embed colour: green / yellow / red on success / partial / failure.
+          # Decimal (Discord's embed.color is an int, not a hex string).
+          case "$BUILD_RESULT" in
+            success)   COLOR=3066993  ;;  # #2ECC71
+            failure)   COLOR=15158332 ;;  # #E74C3C
+            cancelled) COLOR=10070709 ;;  # #99AAB5
+            *)         COLOR=15844367 ;;  # #F1C40F  (skipped / mixed)
+          esac
+
+          MAC_URL="https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-macOS-universal-$SHA.zip"
+          LIN_URL="https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-Linux-x64-$SHA.zip"
+          WIN_URL="https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-Windows-x64-$SHA.zip"
+          COMMIT_URL="https://github.com/$REPO/commit/$SHA"
+          RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
+
+          # Build the JSON payload via `jq` so multi-line bodies + special
+          # characters in commit messages (backticks, quotes, backslashes)
+          # don't break the request. `jq -n` builds a fresh object; `--arg`
+          # passes strings safely; `--argjson` passes numerics.
+          PAYLOAD=$(jq -n \
+            --arg title "Zosma Cowork staging — $SHA7" \
+            --arg sha7 "$SHA7" \
+            --arg url "$RUN_URL" \
+            --arg subject "$SUBJECT_LINKED" \
+            --arg actor "$ACTOR" \
+            --arg result "$BUILD_RESULT" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg mac "$MAC_URL" \
+            --arg lin "$LIN_URL" \
+            --arg win "$WIN_URL" \
+            --argjson color $COLOR \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $subject,
+                color: $color,
+                fields: [
+                  { name: "Status",  value: $result, inline: true },
+                  { name: "By",      value: $actor,  inline: true },
+                  { name: "Commit",  value: ("[" + $sha7 + "](" + $commit_url + ")"), inline: true },
+                  { name: "Downloads",
+                    value: ("• [macOS (universal)](" + $mac + ")\n• [Linux x64](" + $lin + ")\n• [Windows x64](" + $win + ")"),
+                    inline: false },
+                  { name: "Notes",
+                    value: "Unsigned build. macOS: `xattr -dr com.apple.quarantine \"/Applications/Zosma Cowork.app\"`. Windows SmartScreen: *More info → Run anyway*. Internal use only — do not redistribute.",
+                    inline: false }
+                ],
+                footer: { text: "Staging build • 14d retention • nightly.link mirror" },
+                timestamp: now | todate
+              }]
+            }')
+
+          # Discord returns 204 No Content on success, 4xx with a JSON error
+          # body on failure. `--fail-with-body` exits non-zero AND prints
+          # the body so a bad embed (e.g. exceeded 6000-char limit) shows
+          # up in the job log.
+          curl --fail-with-body -sS \
+            -H 'Content-Type: application/json' \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$WEBHOOK"
