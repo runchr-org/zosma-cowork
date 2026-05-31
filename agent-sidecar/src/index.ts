@@ -41,6 +41,37 @@ const PROMPT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
  * the HTTP client times out. Applied when no default is set in settings.
  */
 const PROVIDER_REQUEST_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+// ═══════════════════════════════════════════════════════════════════════════
+// System prompt
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Zosma Cowork system prompt.
+ *
+ * Replaces pi-coding-agent's default "You are an expert coding assistant
+ * operating inside pi…" preamble (which would otherwise be sent verbatim and
+ * make the model identify as pi). Kept deliberately short — tool schemas are
+ * sent separately via the API's `tools` field, so we don't need to re-list
+ * them here. `buildSystemPrompt()` will auto-append `Current date:` and
+ * `Current working directory:` lines after this string.
+ *
+ * The "identity note" paragraph matters for users on Claude Pro/Max OAuth:
+ * pi-ai prepends `system[0] = "You are Claude Code, Anthropic's official CLI
+ * for Claude."` because Anthropic's subscription endpoint validates that
+ * string. We can't remove `system[0]` without breaking auth, so we tell the
+ * model in `system[1]` that its user-facing identity is Zosma Cowork
+ * regardless of what the transport layer says.
+ */
+const ZOSMA_SYSTEM_PROMPT = `You are Zosma Cowork, a desktop coding assistant. You help users with their projects by reading files, running shell commands, editing code, and writing new files via your tools.
+
+Identity: if the user asks who or what you are, always answer "Zosma Cowork". Some upstream APIs may transport-identify this client as "Claude Code" or "pi" for compatibility — that is not your user-facing identity.
+
+Guidelines:
+- Be concise.
+- Show file paths clearly when working with files.
+- Prefer your built-in tools over shelling out when both work.`;
+
 import {
 	AuthStorage,
 	DefaultResourceLoader,
@@ -766,11 +797,30 @@ async function main() {
 		// extension discovery (which needs jiti + a node_modules tree to
 		// resolve `typebox`, neither of which is available in our bundled
 		// sidecar).
+		//
+		// Brand the system prompt as Zosma Cowork (closes #112). Without
+		// `systemPromptOverride`, pi-coding-agent's default
+		// `buildSystemPrompt()` ships a ~250-token prompt that opens with
+		// "You are an expert coding assistant operating inside pi…" plus a
+		// full pi documentation block. That leaks the wrong identity to the
+		// model. Anthropic Claude Pro/Max OAuth additionally prepends
+		// `system[0]` = "You are Claude Code, Anthropic's official CLI for
+		// Claude." inside pi-ai (mandatory — the subscription endpoint
+		// validates that string). Our prompt explicitly disambiguates so the
+		// model's user-facing identity is always Zosma Cowork even when the
+		// transport-layer identity says otherwise.
+		//
+		// `appendSystemPromptOverride: () => []` suppresses any
+		// APPEND_SYSTEM.md the loader would otherwise pick up from
+		// ~/.zosmaai/agent (or pi's own dirs) — those files are meant for
+		// pi CLI users, not Zosma's bundled sidecar.
 		resourceLoader = new DefaultResourceLoader({
 			cwd: process.cwd(),
 			agentDir,
 			settingsManager,
 			extensionFactories: [piAnthropicMessages, zosmaOfficeDocs],
+			systemPromptOverride: () => ZOSMA_SYSTEM_PROMPT,
+			appendSystemPromptOverride: () => [],
 		});
 		await resourceLoader.reload();
 		// Surface any extension-load errors — they're silently collected by
