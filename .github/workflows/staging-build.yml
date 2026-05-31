@@ -7,8 +7,9 @@ name: Staging Build
 #   - On every push to `main` (and on manual `workflow_dispatch`), bundle the
 #     desktop app for macOS-universal, Linux-x64, and Windows-x64.
 #   - Upload the installers as workflow artifacts (14 day retention).
-#   - Email a list of internal testers with auth-free download links served
-#     via nightly.link.
+#   - Post a Discord message to an internal channel with auth-free download
+#     links served via nightly.link (one webhook secret — single source of
+#     truth, no per-recipient management).
 #
 # WHAT this DOES NOT do:
 #   - Does NOT create a GitHub Release. The production release flow is still
@@ -168,103 +169,104 @@ jobs:
           retention-days: 14
 
   notify:
-    name: Email testers
+    name: Notify Discord
     needs: build
     # `always()` so we still notify on partial-failure builds (one OS broken,
-    # others fine). The body includes the per-OS job result so testers know
-    # which downloads are real.
+    # others fine). The embed colour + per-OS link list will reflect the
+    # actual `needs.build.result` so the channel can tell at a glance.
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Check email config
+      - name: Check webhook configured
         id: cfg
         env:
-          RECIPIENTS: ${{ vars.STAGING_NOTIFY_EMAILS }}
+          WEBHOOK: ${{ secrets.DISCORD_STAGING_WEBHOOK }}
         run: |
-          if [ -z "$RECIPIENTS" ]; then
+          if [ -z "$WEBHOOK" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::STAGING_NOTIFY_EMAILS variable not set — skipping email notification. Configure it in repo Settings → Secrets and variables → Actions → Variables."
+            echo "::warning::DISCORD_STAGING_WEBHOOK secret not set — skipping notification. Create a webhook on a Discord channel (Channel settings → Integrations → Webhooks → New) and add the URL as a repo secret."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Compose body
+      - name: Post to Discord
         if: steps.cfg.outputs.configured == 'true'
-        id: body
         env:
+          WEBHOOK: ${{ secrets.DISCORD_STAGING_WEBHOOK }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           SHA: ${{ github.sha }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+          ACTOR: ${{ github.actor }}
           BUILD_RESULT: ${{ needs.build.result }}
         run: |
+          set -euo pipefail
           SHA7="${SHA:0:7}"
-          # First line of the commit message is the subject; the rest is
-          # body. Squash-merged PRs end the subject with `(#N)`.
+
+          # First line of the commit message becomes the embed title row.
+          # Squash-merged PRs end the subject with `(#N)`, which renders
+          # nicely in Discord and links back to the PR automatically.
           SUBJECT_LINE="$(printf '%s\n' "$COMMIT_MSG" | head -n1)"
 
-          cat > body.txt <<EOF
-          Zosma Cowork — staging build
+          # Discord embed colour: green / yellow / red on success / partial / failure.
+          # Decimal (Discord's embed.color is an int, not a hex string).
+          case "$BUILD_RESULT" in
+            success)   COLOR=3066993  ;;  # #2ECC71
+            failure)   COLOR=15158332 ;;  # #E74C3C
+            cancelled) COLOR=10070709 ;;  # #99AAB5
+            *)         COLOR=15844367 ;;  # #F1C40F  (skipped / mixed)
+          esac
 
-          Commit:  $SHA7  ($SHA)
-          Message: $SUBJECT_LINE
-          Status:  $BUILD_RESULT
-          Run:     https://github.com/$REPO/actions/runs/$RUN_ID
+          MAC_URL="https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-macOS-universal-$SHA.zip"
+          LIN_URL="https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-Linux-x64-$SHA.zip"
+          WIN_URL="https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-Windows-x64-$SHA.zip"
+          COMMIT_URL="https://github.com/$REPO/commit/$SHA"
+          RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
 
-          Downloads (auth-free; mirrored via nightly.link):
-            macOS (universal):
-              https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-macOS-universal-$SHA.zip
-            Linux (x64):
-              https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-Linux-x64-$SHA.zip
-            Windows (x64):
-              https://nightly.link/$REPO/actions/runs/$RUN_ID/zosma-cowork-staging-Windows-x64-$SHA.zip
+          # Build the JSON payload via `jq` so multi-line bodies + special
+          # characters in commit messages (backticks, quotes, backslashes)
+          # don't break the request. `jq -n` builds a fresh object; `--arg`
+          # passes strings safely; `--argjson` passes numerics.
+          PAYLOAD=$(jq -n \
+            --arg title "Zosma Cowork staging — $SHA7" \
+            --arg sha7 "$SHA7" \
+            --arg url "$RUN_URL" \
+            --arg subject "$SUBJECT_LINE" \
+            --arg actor "$ACTOR" \
+            --arg result "$BUILD_RESULT" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg mac "$MAC_URL" \
+            --arg lin "$LIN_URL" \
+            --arg win "$WIN_URL" \
+            --argjson color $COLOR \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $subject,
+                color: $color,
+                fields: [
+                  { name: "Status",  value: $result, inline: true },
+                  { name: "By",      value: $actor,  inline: true },
+                  { name: "Commit",  value: ("[" + $sha7 + "](" + $commit_url + ")"), inline: true },
+                  { name: "Downloads",
+                    value: ("• [macOS (universal)](" + $mac + ")\n• [Linux x64](" + $lin + ")\n• [Windows x64](" + $win + ")"),
+                    inline: false },
+                  { name: "Notes",
+                    value: "Unsigned build. macOS: `xattr -dr com.apple.quarantine \"/Applications/Zosma Cowork.app\"`. Windows SmartScreen: *More info → Run anyway*. Internal use only — do not redistribute.",
+                    inline: false }
+                ],
+                footer: { text: "Staging build • 14d retention • nightly.link mirror" },
+                timestamp: now | todate
+              }]
+            }')
 
-          --------------------------------------------------------------------
-          Unsigned-build notes
-          --------------------------------------------------------------------
-          These installers are NOT code-signed. The OS will warn on first
-          launch. Dismiss as follows:
-
-          • macOS — after dragging into /Applications, run once:
-
-              xattr -dr com.apple.quarantine "/Applications/Zosma Cowork.app"
-
-            (Skip if you can; Apple Gatekeeper just complains about an
-            unidentified developer otherwise.)
-
-          • Windows — SmartScreen shows "Windows protected your PC".
-            Click "More info" → "Run anyway".
-
-          • Linux — .AppImage: chmod +x and run. .deb / .rpm install with
-            your package manager; no signing dialog.
-
-          --------------------------------------------------------------------
-          This is a staging build, not a release. Do not redistribute.
-          --------------------------------------------------------------------
-          EOF
-
-          # Stash multi-line body for the send step. `EOF` heredoc into
-          # GITHUB_OUTPUT requires a unique terminator; use a random one.
-          DELIM="EOF_$(openssl rand -hex 8)"
-          {
-            echo "text<<$DELIM"
-            cat body.txt
-            echo "$DELIM"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Send email
-        if: steps.cfg.outputs.configured == 'true'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          # SMTP host/port/credentials are secrets (sensitive).
-          # Recipient list + From line are repo Variables (not sensitive,
-          # easier to edit without re-encryption when the rota changes).
-          server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          secure: ${{ secrets.SMTP_PORT == '465' }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          from: ${{ vars.STAGING_NOTIFY_FROM }}
-          to: ${{ vars.STAGING_NOTIFY_EMAILS }}
-          subject: "[zosma-cowork staging] ${{ github.sha }} — ${{ needs.build.result }}"
-          body: ${{ steps.body.outputs.text }}
+          # Discord returns 204 No Content on success, 4xx with a JSON error
+          # body on failure. `--fail-with-body` exits non-zero AND prints
+          # the body so a bad embed (e.g. exceeded 6000-char limit) shows
+          # up in the job log.
+          curl --fail-with-body -sS \
+            -H 'Content-Type: application/json' \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$WEBHOOK"

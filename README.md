@@ -147,10 +147,10 @@ cargo clippy --workspace -- -D warnings
 
 Every merge to `main` produces unsigned cross-platform installers via the
 `Staging Build` workflow (`.github/workflows/staging-build.yml`). The bundles
-are attached as workflow artifacts (14-day retention) and a notification
-email with auth-free [nightly.link](https://nightly.link) download URLs is
-sent to the addresses configured in the `STAGING_NOTIFY_EMAILS` repo
-Variable.
+are attached as workflow artifacts (14-day retention) and a Discord embed
+with auth-free [nightly.link](https://nightly.link) download URLs is posted
+to whatever channel the `DISCORD_STAGING_WEBHOOK` repo secret points at
+(typically `#staging-builds`).
 
 This flow **does not** create a GitHub Release, tag a commit, or publish to
 AUR / winget / Homebrew — those side-effects remain gated on the
@@ -159,6 +159,14 @@ tag-triggered `release.yml`. See issue
 
 To run a staging build on demand, trigger `Staging Build` from the Actions
 tab via *Run workflow*.
+
+**One-time setup**: in Discord, open the target channel → *Edit Channel →
+Integrations → Webhooks → New Webhook*, copy the URL, then add it as a
+GitHub repo secret named `DISCORD_STAGING_WEBHOOK` (Settings → Secrets and
+variables → Actions → New repository secret). The workflow degrades
+gracefully — if the secret is unset the notify job emits a warning and
+exits 0, so the build itself still succeeds and the artifacts are still
+uploaded.
 
 ## Config & Data
 
