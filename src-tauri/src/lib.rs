@@ -134,9 +134,12 @@ fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
         .join("index.ts")
 }
 
-/// Pick the first candidate that exists and is NOT a `#!`-shebang shim.
-/// `fetch-node.mjs` writes shell-script placeholders for variants it
-/// didn't download; spawning one of those gives EPIPE on the next write.
+/// Pick the first candidate that exists and is NOT a stub placeholder.
+/// `fetch-node.mjs` writes shell-script (`#!/bin/bash ... exit 1`) or
+/// batch (`@echo off ... exit /b 1`) placeholders for variants it didn't
+/// download. Spawning a `#!` script on Unix gives EPIPE on the next write;
+/// spawning a `@echo off` text file on Windows fails CreateProcessW with
+/// ERROR_BAD_EXE_FORMAT. Sniff the first two bytes for either signature.
 fn pick_real_node(candidates: &[PathBuf]) -> Option<PathBuf> {
     use std::io::Read;
     for p in candidates {
@@ -146,7 +149,13 @@ fn pick_real_node(candidates: &[PathBuf]) -> Option<PathBuf> {
         let mut buf = [0u8; 2];
         match std::fs::File::open(p).and_then(|mut f| f.read(&mut buf).map(|n| (n, buf))) {
             Ok((2, [b'#', b'!'])) => {
-                log::warn!("Skipping shim Node.js placeholder: {:?}", p);
+                log::warn!("Skipping shebang Node.js shim: {:?}", p);
+                continue;
+            }
+            // `@e` is the first two bytes of "@echo off" — fetch-node.mjs's
+            // Windows stub. Real node.exe starts with `MZ` (PE header).
+            Ok((2, [b'@', _])) => {
+                log::warn!("Skipping batch-file Node.js shim: {:?}", p);
                 continue;
             }
             Ok(_) => return Some(p.clone()),
@@ -181,8 +190,16 @@ fn find_node(app: &tauri::AppHandle) -> PathBuf {
         if let Ok(resource_dir) = app.path().resource_dir() {
             let binaries_dir = resource_dir.join("binaries");
 
+            // Windows: prefer node.exe (the real downloaded binary). Older
+            // copies of fetch-node.mjs leave `binaries/node` as an 84-byte
+            // `.cmd` stub (`@echo off ... exit /b 1`) because the stub-creation
+            // loop ran before the `node.exe → node` copy and the copy was
+            // guarded by `!existsSync(nodeCopy)`. CreateProcessW on that stub
+            // fails with ERROR_BAD_EXE_FORMAT, killing the sidecar before init.
+            // pick_real_node only sniffs for `#!` shebangs, so the `.cmd`
+            // stub slips past — listing node.exe first sidesteps it entirely.
             #[cfg(target_os = "windows")]
-            let candidates = [binaries_dir.join("node"), binaries_dir.join("node.exe")];
+            let candidates = [binaries_dir.join("node.exe"), binaries_dir.join("node")];
 
             #[cfg(target_os = "macos")]
             let candidates = {
@@ -281,18 +298,35 @@ async fn spawn_sidecar(
     let run_args: Vec<String>;
 
     if p.extension().map(|e| e == "ts").unwrap_or(false) {
-        // Dev mode: use tsx from agent-sidecar's node_modules
+        // Dev mode: use tsx from agent-sidecar's node_modules.
+        // On Windows, npm creates THREE files per bin: a POSIX shell wrapper
+        // (`tsx`, no extension) for Git Bash, plus `tsx.cmd` for cmd.exe and
+        // `tsx.ps1` for PowerShell. Rust's Command/CreateProcessW cannot
+        // execute the POSIX wrapper (it's not a PE binary), so picking it
+        // makes spawn fail with ERROR_BAD_EXE_FORMAT and the sidecar never
+        // starts. Prefer `tsx.cmd` on Windows.
         let sidecar_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
             .join("agent-sidecar");
-        let tsx_bin = sidecar_dir.join("node_modules").join(".bin").join("tsx");
+        let bin_dir = sidecar_dir.join("node_modules").join(".bin");
+        #[cfg(target_os = "windows")]
+        let tsx_bin = {
+            let cmd = bin_dir.join("tsx.cmd");
+            if cmd.exists() { cmd } else { bin_dir.join("tsx") }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let tsx_bin = bin_dir.join("tsx");
         if tsx_bin.exists() {
             run_cmd = tsx_bin.to_string_lossy().to_string();
             run_args = vec![p_str];
             log::info!("Sidecar: {} {}", run_cmd, run_args[0]);
         } else {
-            run_cmd = "npx".to_string();
+            // npx is also a .cmd on Windows — let cmd.exe resolve it via PATH.
+            #[cfg(target_os = "windows")]
+            { run_cmd = "npx.cmd".to_string(); }
+            #[cfg(not(target_os = "windows"))]
+            { run_cmd = "npx".to_string(); }
             run_args = vec!["tsx".to_string(), p_str];
             log::info!("Sidecar: {} tsx {}", run_cmd, run_args[1]);
         }
@@ -1271,14 +1305,32 @@ async fn write_user_file(path: String, content: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn open_url(url: String) -> Result<(), String> {
-    let st = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(format!(
-            "xdg-open '{}' || open '{}' || start '' '{}'",
-            &url, &url, &url
-        ))
-        .status()
-        .map_err(|e| format!("open: {e}"))?;
+    // Per-platform browser opener. Previous implementation shelled out to
+    // `sh -c "xdg-open ... || open ... || start '' ..."` which silently
+    // fails on Windows: GUI Tauri processes don't have `sh` on PATH, and
+    // even when Git Bash is installed `start` is a cmd.exe builtin, not
+    // a real executable. That broke every OAuth flow (Claude Pro, GitHub
+    // Copilot, OpenAI Codex) on Windows — the UI stuck at "Opening
+    // browser…" with no error because the React side `.catch(() => {})`s
+    // the rejection.
+    #[cfg(target_os = "windows")]
+    let result = {
+        // `cmd /c start "" <url>` — the empty quoted string is required
+        // because `start` interprets the first quoted arg as the window
+        // title. CREATE_NO_WINDOW (0x08000000) prevents a brief flash of
+        // a console window when the GUI app shells out.
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .creation_flags(0x0800_0000)
+            .status()
+    };
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(&url).status();
+    #[cfg(target_os = "linux")]
+    let result = std::process::Command::new("xdg-open").arg(&url).status();
+
+    let st = result.map_err(|e| format!("open: {e}"))?;
     if !st.success() {
         return Err(format!("exit: {}", st));
     }
@@ -1349,11 +1401,20 @@ pub fn run() {
 
             let h = app.handle().clone();
             let st: AppState = AppState::default();
+            // Resolve zosma dir. On Windows, GUI apps don't inherit HOME
+            // (that's a POSIX convention) — the equivalent is USERPROFILE.
+            // Falling through to /tmp/.zosmaai on Windows causes auth.json
+            // and models.json to land in C:\tmp\.zosmaai instead of the user's
+            // profile, so credentials silently "disappear" between runs and
+            // every release-installer user trips over it.
             let zd = std::env::var("ZOSMA_DIR").unwrap_or_else(|_| {
-                format!(
-                    "{}/.zosmaai",
-                    std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
-                )
+                #[cfg(target_os = "windows")]
+                let home = std::env::var("USERPROFILE")
+                    .or_else(|_| std::env::var("HOME"))
+                    .unwrap_or_else(|_| "C:\\Users\\Default".into());
+                #[cfg(not(target_os = "windows"))]
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                format!("{}/.zosmaai", home)
             });
             let pp = st.pending_prompts.clone();
             let pr = st.pending_requests.clone();

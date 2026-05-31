@@ -194,6 +194,26 @@ function downloadAndExtract(targetTriple) {
 		}
 	}
 
+	// On Windows, Tauri resources list "binaries/node" as a resource entry.
+	// Since the downloaded binary is "node.exe", we copy it to "node" so
+	// Tauri can bundle it. This MUST happen BEFORE the stub-creation loop
+	// below — otherwise the loop writes an `@echo off … exit /b 1` text
+	// stub to `binaries/node` (because `existsSync(p)` is false at that
+	// point) and the subsequent copy is skipped due to its
+	// `!existsSync(nodeCopy)` guard. The stub then ships in the .msi/.exe
+	// installer and `CreateProcessW` fails with ERROR_BAD_EXE_FORMAT,
+	// breaking the sidecar for every Windows release-build user.
+	if (isWin) {
+		const nodeExe = join(binariesDir, "node.exe");
+		const nodeCopy = join(binariesDir, "node");
+		if (existsSync(nodeExe)) {
+			// Overwrite unconditionally — a stale `.cmd` stub from a previous
+			// run of an older fetch-node.mjs would otherwise persist.
+			copyFileSync(nodeExe, nodeCopy);
+			console.log(`[fetch-node]   ✅ Copied node.exe → node for Tauri resource bundling`);
+		}
+	}
+
 	// Create stub placeholders for any STILL-missing variants so Tauri
 	// resource validation passes. Real binaries created above take precedence.
 	// On Windows, use .cmd stubs because bash scripts won't execute.
@@ -207,18 +227,6 @@ function downloadAndExtract(targetTriple) {
 			} else {
 				writeFileSync(p, `#!/bin/bash\necho "Node.js variant '${v}' not available for this build." >&2\nexit 1\n`);
 			}
-		}
-	}
-
-	// On Windows, Tauri resources list "binaries/node" as a resource entry.
-	// Since the downloaded binary is "node.exe", we create a copy named "node"
-	// so Tauri can bundle it. This makes the resource listing platform-agnostic.
-	if (isWin) {
-		const nodeExe = join(binariesDir, "node.exe");
-		const nodeCopy = join(binariesDir, "node");
-		if (existsSync(nodeExe) && !existsSync(nodeCopy)) {
-			copyFileSync(nodeExe, nodeCopy);
-			console.log(`[fetch-node]   ✅ Copied node.exe → node for Tauri resource bundling`);
 		}
 	}
 }
