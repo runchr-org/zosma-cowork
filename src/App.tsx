@@ -153,13 +153,25 @@ function App() {
 	// otherwise wrongly dump a just-signed-out user back into chat with
 	// no credentials.
 	useEffect(() => {
+		// Guard against async-cleanup race in StrictMode dev / HMR. Without
+		// this, the listener registers after cleanup ran, leaks, and a
+		// future `oauth_completed` event fires it multiple times.
+		let mounted = true;
 		let unlisten: (() => void) | undefined;
 		(async () => {
-			unlisten = await listen("oauth_completed", () => {
+			const u = await listen("oauth_completed", () => {
 				setShowKeyEntry(false);
 			});
+			if (!mounted) {
+				u();
+				return;
+			}
+			unlisten = u;
 		})();
-		return () => unlisten?.();
+		return () => {
+			mounted = false;
+			unlisten?.();
+		};
 	}, []);
 
 	// Track whether any subscription (OAuth) is signed in. Refreshes on
@@ -180,11 +192,18 @@ function App() {
 		refresh();
 		const onReload = () => refresh();
 		window.addEventListener("config-reload", onReload);
+		let mounted = true;
 		let unlisten: (() => void) | undefined;
 		(async () => {
-			unlisten = await listen("ready", () => refresh());
+			const u = await listen("ready", () => refresh());
+			if (!mounted) {
+				u();
+				return;
+			}
+			unlisten = u;
 		})();
 		return () => {
+			mounted = false;
 			window.removeEventListener("config-reload", onReload);
 			unlisten?.();
 		};

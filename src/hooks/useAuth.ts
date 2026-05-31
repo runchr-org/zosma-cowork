@@ -25,13 +25,22 @@ export function useAuth() {
 	// Re-check credentials when sidecar becomes ready
 	// (avoids race where initial check runs before sidecar initializes)
 	useEffect(() => {
+		// Guard against async-cleanup race in StrictMode dev / HMR (see
+		// ProviderAuthSection for the full explanation).
+		let mounted = true;
 		let unlisten: (() => void) | undefined;
 		(async () => {
-			unlisten = await listen("ready", () => {
+			const u = await listen("ready", () => {
 				refresh();
 			});
+			if (!mounted) {
+				u();
+				return;
+			}
+			unlisten = u;
 		})();
 		return () => {
+			mounted = false;
 			unlisten?.();
 		};
 	}, [refresh]);

@@ -84,11 +84,24 @@ export function ProviderAuthSection({ provider, compact = false, onChange }: Pro
 	useEffect(() => {
 		const handler = () => refreshStatus();
 		window.addEventListener("config-reload", handler);
+		// Guard against async-cleanup race: in React StrictMode (dev) the
+		// effect mounts → cleans → re-mounts before the async listen()
+		// promise resolves. Without `mounted` tracking, the listener
+		// registers AFTER cleanup ran, leaks forever, and accumulates one
+		// extra phantom listener per mount cycle. The same race is hit by
+		// Vite HMR re-running effects.
+		let mounted = true;
 		let unlisten: UnlistenFn | undefined;
 		(async () => {
-			unlisten = await listen("ready", () => refreshStatus());
+			const u = await listen("ready", () => refreshStatus());
+			if (!mounted) {
+				u();
+				return;
+			}
+			unlisten = u;
 		})();
 		return () => {
+			mounted = false;
 			window.removeEventListener("config-reload", handler);
 			unlisten?.();
 		};
@@ -96,9 +109,14 @@ export function ProviderAuthSection({ provider, compact = false, onChange }: Pro
 
 	// Subscribe to OAuth lifecycle events emitted by Rust.
 	useEffect(() => {
-		let unlisteners: UnlistenFn[] = [];
+		// Same async-cleanup race as above — critical here because the
+		// `oauth_open_url` listener calls `invoke("open_url", …)`, so each
+		// leaked listener = one extra browser tab when the user clicks
+		// Sign In. StrictMode + HMR can stack 3-4 leaks per session.
+		let mounted = true;
+		const unlisteners: UnlistenFn[] = [];
 		(async () => {
-			unlisteners = await Promise.all([
+			const us = await Promise.all([
 				listen<{ provider: string; url: string; instructions?: string }>(
 					"oauth_open_url",
 					(e) => {
@@ -169,8 +187,14 @@ export function ProviderAuthSection({ provider, compact = false, onChange }: Pro
 					setError(null);
 				}),
 			]);
+			if (!mounted) {
+				for (const u of us) u();
+				return;
+			}
+			unlisteners.push(...us);
 		})();
 		return () => {
+			mounted = false;
 			for (const u of unlisteners) u();
 		};
 	}, [provider, refreshStatus, onChange]);
