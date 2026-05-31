@@ -49,6 +49,17 @@ import {
 	SettingsManager,
 	createAgentSession,
 } from "@earendil-works/pi-coding-agent";
+// pi-coding-agent's AuthStorage.login does not forward an `originator`
+// parameter to provider-specific OAuth flows. OpenAI's auth server
+// validates `originator` against a whitelist tied to the Codex CLI
+// client_id (`app_EMoamEEZ73f0CkXaXp7hrann`); known accepted values
+// include `codex_cli_rs` and `Codex Desktop`. The SDK's default of
+// `originator=pi` causes auth.openai.com to return
+// `missing_required_parameter` and the browser shows an error page.
+// We bypass AuthStorage.login for openai-codex and call the underlying
+// loginOpenAICodex directly with a valid originator, then persist via
+// authStorage.set() the same way AuthStorage.login would have.
+import { loginOpenAICodex } from "@earendil-works/pi-ai/oauth";
 import {
 	discoverExtensions,
 	installExtension,
@@ -1040,8 +1051,55 @@ async function main() {
 					const cmdId = cmd.id;
 					const storage = authStorage;
 					log("Starting OAuth for %s", provider);
+					// Build the callback bag once so we can reuse it for both the
+					// generic storage.login() path AND the openai-codex override
+					// path below. Closing over `provider`, `ac`, `storage`, and
+					// `cmdId` makes the duplication painless.
 					oauthInflight = (async () => {
 						try {
+							if (provider === "openai-codex") {
+								// Direct call to loginOpenAICodex with a whitelisted
+								// originator. See the import-site comment for context.
+								const creds = await loginOpenAICodex({
+									originator: "codex_cli_rs",
+									onAuth: (info) => {
+										send({
+											type: "event",
+											event: {
+												kind: "oauth_open_url",
+												provider,
+												url: info.url,
+												instructions: info.instructions,
+											},
+										});
+									},
+									onPrompt: async (prompt) => {
+										throw new Error(
+											`Interactive prompts are not supported in the desktop OAuth flow (message: ${String(prompt.message ?? "")})`,
+										);
+									},
+									onProgress: (message) => {
+										send({
+											type: "event",
+											event: { kind: "oauth_progress", provider, message },
+										});
+									},
+									onManualCodeInput: () =>
+										new Promise<string>((_resolve, reject) => {
+											const err = new Error("OAuth cancelled");
+											err.name = "AbortError";
+											if (ac.signal.aborted) {
+												reject(err);
+												return;
+											}
+											ac.signal.addEventListener("abort", () => reject(err), {
+												once: true,
+											});
+										}),
+								});
+								// Persist exactly the way AuthStorage.login would have.
+								storage.set(provider, { type: "oauth", ...creds });
+							} else {
 							await storage.login(provider, {
 								onAuth: (info) => {
 									send({
@@ -1111,6 +1169,7 @@ async function main() {
 									}),
 								signal: ac.signal,
 							});
+							}
 							log("OAuth login succeeded for %s", provider);
 							// Release the AbortSignal so the dangling
 							// onManualCodeInput promise rejects and gets GC'd.
