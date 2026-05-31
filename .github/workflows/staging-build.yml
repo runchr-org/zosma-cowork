@@ -171,10 +171,15 @@ jobs:
   notify:
     name: Notify Discord
     needs: build
-    # `always()` so we still notify on partial-failure builds (one OS broken,
-    # others fine). The embed colour + per-OS link list will reflect the
-    # actual `needs.build.result` so the channel can tell at a glance.
-    if: always()
+    # Fire on success OR failure — we want partial-failure builds (one OS
+    # broken, others fine) to still ping the channel. But skip cancelled
+    # runs: when `cancel-in-progress: true` aborts an in-flight build because
+    # a newer commit landed, NO artifacts get uploaded, and posting an embed
+    # whose nightly.link URLs all 404 just creates noise. The user is going
+    # to see the next run's notification a couple of minutes later anyway.
+    # `skipped` is also dropped — it would only happen if the matrix itself
+    # was filtered out, in which case there's nothing to notify about.
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Check webhook configured
