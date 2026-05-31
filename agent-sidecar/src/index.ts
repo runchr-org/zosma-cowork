@@ -743,9 +743,15 @@ async function main() {
 		modelRegistry = ModelRegistry.create(authStorage, modelsPath);
 
 		// Settings — in-memory for now, minimal config
-		// Set a default provider timeout so API calls never hang indefinitely
+		// Set a default provider timeout so API calls never hang indefinitely.
+		//
+		// Compaction is NOT explicitly disabled here: pi-coding-agent ships
+		// auto-compaction + branch summarization on by default
+		// (DEFAULT_COMPACTION_SETTINGS in dist/core/compaction/compaction.js,
+		// reserveTokens=16384, keepRecentTokens=20000) and we want both. Without
+		// it, long Zosma sessions hard-fail with context-window overflow
+		// instead of self-summarising older turns. See #135.
 		settingsManager = SettingsManager.inMemory({
-			compaction: { enabled: false },
 			retry: {
 				provider: {
 					timeoutMs: PROVIDER_REQUEST_TIMEOUT_MS,
