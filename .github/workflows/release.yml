@@ -215,6 +215,51 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "${{ github.ref_name }}"
           releaseBody: "Download the latest Zosma Cowork release."
-          releaseDraft: false
+          # Keep the release as a draft until ALL matrix jobs finish
+          # uploading their assets. The `publish` job below flips it to
+          # published, which is what fires `release: published` events.
+          # Without this, downstream workflows (Update AUR, Update Winget,
+          # Notify Homebrew Tap) trigger immediately when the FIRST matrix
+          # job creates the release — long before any .deb/.msi/.dmg has
+          # actually been uploaded — and curl-ing the assets 404s. See #145.
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  # Single follow-up job that flips the draft release published once every
+  # matrix build has uploaded its bundles. This is the event that fans out
+  # to Update AUR / Update Winget / Notify Homebrew Tap — with assets
+  # actually in place, so their download steps succeed.
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Promote draft → published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Sanity-check that at least one bundle of each kind is attached
+          # before un-drafting. If the matrix is silently producing empty
+          # releases we want to know now, not when a user clicks an empty
+          # tag page.
+          ASSETS_JSON=$(gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          echo "Release assets:"
+          echo "$ASSETS_JSON"
+          MISSING=0
+          for pat in '\.dmg$' '\.deb$' '\.msi$' '-setup\.exe$'; do
+            if ! grep -qE "$pat" <<<"$ASSETS_JSON"; then
+              echo "::warning::no asset matching $pat"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ "$MISSING" -gt 0 ]; then
+            echo "::error::$MISSING expected asset patterns missing — refusing to publish"
+            exit 1
+          fi
+          gh release edit "$TAG" --repo "${GITHUB_REPOSITORY}" --draft=false
+          echo "✅ $TAG promoted to published"
