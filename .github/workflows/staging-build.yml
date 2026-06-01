@@ -136,22 +136,36 @@ jobs:
           set -e
           mkdir -p staging-out
 
-          # macOS — .dmg only (the .app is also produced as a directory which
-          # doesn't survive upload-artifact's zip round-trip cleanly).
-          find src-tauri/target -path '*/release/bundle/dmg/*.dmg' -exec cp -v {} staging-out/ \; 2>/dev/null || true
+          # This repo is a Cargo workspace (`[workspace]` in the root
+          # Cargo.toml), so cargo / tauri write build artifacts to
+          # `target/` at the repo root — NOT `src-tauri/target/`. The
+          # earlier path looked plausible but produced an empty
+          # staging-out on every platform, failing upload-artifact's
+          # `if-no-files-found: error`. macOS also has an extra triple
+          # component (`target/universal-apple-darwin/...`) from the
+          # `--target universal-apple-darwin` lipo build, hence the
+          # glob-based `find target -path ...` patterns rather than a
+          # hardcoded `target/release/bundle`.
+          find target -path '*/release/bundle/dmg/*.dmg' -exec cp -v {} staging-out/ \; 2>/dev/null || true
 
-          # Linux
-          find src-tauri/target/release/bundle -maxdepth 3 -type f \
+          find target -path '*/release/bundle/*' -type f \
             \( -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
             -exec cp -v {} staging-out/ \; 2>/dev/null || true
 
-          # Windows — .msi and the NSIS setup .exe
-          find src-tauri/target/release/bundle -maxdepth 3 -type f \
+          find target -path '*/release/bundle/*' -type f \
             \( -name '*.msi' -o -name '*-setup.exe' \) \
             -exec cp -v {} staging-out/ \; 2>/dev/null || true
 
           echo "── Collected ──"
           ls -la staging-out
+          # Guard — fail the step early (before upload-artifact) so the
+          # error message points at the actual cause rather than
+          # "No files were found with the provided path: staging-out/*".
+          if [ -z "$(ls -A staging-out)" ]; then
+            echo "::error::staging-out is empty — no bundles matched. Listing target/ for diagnosis:"
+            find target -path '*/release/bundle/*' -type f | head -50 || true
+            exit 1
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
