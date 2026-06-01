@@ -23,7 +23,10 @@ use walkdir::WalkDir;
 
 #[derive(Default)]
 struct SidecarState {
-    child: Mutex<Option<Child>>,
+    // The Child handle is owned by the exit-watcher task spawned in setup()
+    // (not stored here) so we can wait() on it and log unexpected deaths.
+    // tokio's kill_on_drop ensures it's reaped on app shutdown when the
+    // watcher task is aborted.
     stdin: Mutex<Option<tokio::process::ChildStdin>>,
     ready: Arc<AtomicBool>,
 }
@@ -44,6 +47,31 @@ struct AppState {
     sidecar: SidecarState,
     pending_prompts: Arc<Mutex<HashMap<String, PendingPrompt>>>,
     pending_requests: Arc<Mutex<HashMap<String, PendingRequest>>>,
+}
+
+/// Strip the Windows `\\?\` extended-length path prefix.
+///
+/// Tauri's `app.path().resource_dir()` on Windows returns paths in the
+/// extended-length form (e.g. `\\?\C:\Program Files\...`) because the
+/// underlying call to `GetFinalPathNameByHandleW` produces that form.
+/// This is fine for most Rust file I/O, but Node.js v24's main-module
+/// resolver calls `realpathSync` on its argv[1] and then walks the
+/// path component-by-component starting from the prefix — it ends up
+/// calling `lstat('C:')`, which on Windows returns EISDIR, and Node
+/// crashes with `Error: EISDIR: illegal operation on a directory` before
+/// the sidecar's first line runs. The crash is invisible because the
+/// Tauri parent has no console and stderr is normally inherited.
+///
+/// Strip the prefix unconditionally — `dunce::simplified` does the same
+/// check; we avoid the dependency here. The non-extended path is
+/// equivalent for paths <260 chars (which all our resource paths are).
+fn strip_unc_prefix(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(stripped.to_string())
+    } else {
+        p
+    }
 }
 
 fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
@@ -71,7 +99,7 @@ fn find_sidecar_path(app: &tauri::AppHandle) -> PathBuf {
         .join("agent-sidecar")
         .join("index.cjs");
     if resource.exists() {
-        return resource;
+        return strip_unc_prefix(resource);
     }
 
     // Check common system paths for distro-packaged installations.
@@ -224,6 +252,7 @@ fn find_node(app: &tauri::AppHandle) -> PathBuf {
             let candidates = [binaries_dir.join("node")];
 
             if let Some(real) = pick_real_node(&candidates) {
+                let real = strip_unc_prefix(real);
                 log::info!("Using bundled Node.js: {:?}", real);
                 return real;
             }
@@ -369,17 +398,43 @@ async fn spawn_sidecar(
     c.env("NODE_OPTIONS", node_options);
     c.stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .kill_on_drop(true);
+    // Without CREATE_NO_WINDOW (0x08000000), spawning a console-subsystem
+    // child (node.exe / npx.cmd / tsx.cmd are all console-subsystem) from a
+    // windows-subsystem GUI parent makes Windows allocate a brand new
+    // console window for the child — a black cmd.exe popup that sits open
+    // for the entire lifetime of the sidecar. CREATE_NO_WINDOW suppresses
+    // it and is the universal Windows-GUI-spawning-CLI-child fix.
+    #[cfg(target_os = "windows")]
+    {
+        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    log::info!("Sidecar: spawning cmd={run_cmd:?} args={run_args:?} zosmaDir={zm}");
     let mut c = c.spawn().map_err(|e| format!("spawn: {e}"))?;
     let o = c.stdout.take().ok_or("no stdout")?;
     let mut i = c.stdin.take().ok_or("no stdin")?;
+    // Pipe sidecar stderr into our logger so crashes are visible.
+    // Without this, on Windows GUI apps stderr inherit() silently
+    // discards everything because windows-subsystem parents have no
+    // console attached. See issue #140.
+    if let Some(err) = c.stderr.take() {
+        tauri::async_runtime::spawn(async move {
+            use tokio::io::AsyncBufReadExt as _;
+            let mut lines = tokio::io::BufReader::new(err).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                log::warn!("sidecar[err]: {line}");
+            }
+            log::warn!("sidecar[err]: stderr EOF");
+        });
+    }
     let msg = serde_json::json!({"type":"init","zosmaDir":zm});
     let l = format!("{}\n", serde_json::to_string(&msg).unwrap());
     i.write_all(l.as_bytes())
         .await
         .map_err(|e| format!("init: {e}"))?;
     i.flush().await.map_err(|e| format!("flush: {e}"))?;
+    log::info!("Sidecar: init sent, pid={:?}", c.id());
     Ok((c, o, i))
 }
 
@@ -455,10 +510,29 @@ async fn read_stdout(
 
 async fn scmd(state: &AppState, m: &Value) -> Result<(), String> {
     let mut s = state.sidecar.stdin.lock().await;
-    let i = s.as_mut().ok_or("no sidecar")?;
+    let i = s.as_mut().ok_or_else(|| {
+        log::error!("scmd: no sidecar (stdin is None) for msg={m}");
+        "no sidecar".to_string()
+    })?;
     let l = format!("{}\n", serde_json::to_string(m).map_err(|e| e.to_string())?);
-    i.write_all(l.as_bytes()).await.map_err(|e| e.to_string())?;
-    i.flush().await.map_err(|e| e.to_string())
+    let kind = m.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+    let id = m.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+    if let Err(e) = i.write_all(l.as_bytes()).await {
+        log::error!(
+            "scmd[{kind}/{id}]: write_all FAILED: {e} (raw os err: {:?})",
+            e.raw_os_error()
+        );
+        return Err(e.to_string());
+    }
+    if let Err(e) = i.flush().await {
+        log::error!(
+            "scmd[{kind}/{id}]: flush FAILED: {e} (raw os err: {:?})",
+            e.raw_os_error()
+        );
+        return Err(e.to_string());
+    }
+    log::debug!("scmd[{kind}/{id}]: sent ({} bytes)", l.len());
+    Ok(())
 }
 
 async fn scmd_r(state: &AppState, m: &Value, t: std::time::Duration) -> Result<Value, String> {
@@ -1380,6 +1454,22 @@ fn uuid_v4() -> String {
 pub fn run() {
     let aptabase_key = option_env!("APTABASE_KEY").unwrap_or("");
     let builder = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("zosma".into()),
+                    },
+                ))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                ))
+                .level(log::LevelFilter::Info)
+                .max_file_size(5_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
@@ -1430,10 +1520,23 @@ pub fn run() {
             app.manage(st);
             tauri::async_runtime::spawn(async move {
                 match spawn_sidecar(h.clone(), &zd).await {
-                    Ok((c, o, i)) => {
+                    Ok((mut c, o, i)) => {
                         let s: State<AppState> = h.state();
-                        *s.sidecar.child.lock().await = Some(c);
+                        let pid = c.id();
                         *s.sidecar.stdin.lock().await = Some(i);
+                        // Watch the sidecar's exit so unexpected deaths are
+                        // diagnosable. Owns the Child for its lifetime;
+                        // tokio kill_on_drop ensures cleanup if this task
+                        // is aborted (app shutdown).
+                        tauri::async_runtime::spawn(async move {
+                            match c.wait().await {
+                                Ok(status) => log::error!(
+                                    "Sidecar pid={pid:?} EXITED: status={status:?} code={:?}",
+                                    status.code()
+                                ),
+                                Err(e) => log::error!("Sidecar pid={pid:?} wait error: {e}"),
+                            }
+                        });
                         read_stdout(o, pp, pr, rd, h.clone()).await;
                     }
                     Err(e) => log::error!("Sidecar: {e}"),
