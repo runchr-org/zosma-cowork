@@ -17,7 +17,7 @@ describe("SuggestedActions", () => {
 
 	it("renders subtitle", () => {
 		render(<SuggestedActions onSend={vi.fn()} />);
-		expect(screen.getByText(/Choose a quick start or type below/)).toBeInTheDocument();
+		expect(screen.getByText(/Choose a starting point or type below/)).toBeInTheDocument();
 	});
 
 	it("renders all suggested action cards", () => {

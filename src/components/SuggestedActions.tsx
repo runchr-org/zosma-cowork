@@ -52,23 +52,17 @@ interface SuggestedActionsProps {
 
 export function SuggestedActions({ onSend }: SuggestedActionsProps) {
 	return (
-		<div className="flex flex-col items-center justify-center h-full gap-6 px-8">
-			<div className="text-center">
-				<div className="text-4xl font-bold mb-3" style={{ color: "hsl(var(--primary))" }}>
-					✦
-				</div>
-				<h1 className="text-xl font-semibold" style={{ color: "hsl(var(--foreground))" }}>
+		<div className="flex flex-col items-center justify-center h-full gap-6 px-6">
+			<div className="text-center max-w-sm">
+				<h1 className="text-lg font-semibold" style={{ color: "hsl(var(--foreground))" }}>
 					What are you working on?
 				</h1>
-				<p
-					className="text-sm mt-1 max-w-md text-center"
-					style={{ color: "hsl(var(--muted-foreground))" }}
-				>
-					Choose a quick start or type below
+				<p className="text-sm mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
+					Choose a starting point or type below
 				</p>
 			</div>
 
-			<div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-xl w-full">
+			<div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-w-lg w-full">
 				{SUGGESTIONS.map((suggestion) => (
 					<button
 						key={suggestion.title}
@@ -77,7 +71,7 @@ export function SuggestedActions({ onSend }: SuggestedActionsProps) {
 							trackEvent("suggested_action", { action: suggestion.title });
 							onSend(suggestion.prompt);
 						}}
-						className="flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all hover:shadow-md hover:-translate-y-0.5"
+						className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-all hover:shadow-sm hover:-translate-y-0.5"
 						style={{
 							background: "hsl(var(--card))",
 							borderColor: "hsl(var(--border))",

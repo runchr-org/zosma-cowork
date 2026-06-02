@@ -15,8 +15,8 @@ vi.mock("./SkillsPanel", () => ({
 	},
 }));
 
-vi.mock("./ProviderAuthSection", () => ({
-	ProviderAuthSection: function MockAuth() {
+vi.mock("./settings/Authentication", () => ({
+	Authentication: function MockAuth() {
 		return "AUTH_SECTION_MOCK";
 	},
 }));
@@ -109,7 +109,7 @@ describe("SettingsPage", () => {
 	it("navigates to Theme section on click", () => {
 		render(<SettingsPage onClose={vi.fn()} />);
 		clickNavButton("Theme");
-		expect(screen.getByRole("heading", { name: "Theme" })).toBeDefined();
+		expect(screen.getByRole("heading", { name: "Appearance" })).toBeDefined();
 	});
 
 	it("navigates to Custom Instructions section on click", () => {

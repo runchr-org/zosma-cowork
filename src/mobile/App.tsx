@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { OtpPage } from "./pages/OtpPage";
 import { ChatPage } from "./pages/ChatPage";
+import { OtpPage } from "./pages/OtpPage";
 
 type MobileView = "otp" | "chat";
 
@@ -36,18 +36,9 @@ export function MobileApp() {
 
 	return (
 		<div className="mobile-app">
-			{state.view === "otp" && (
-				<OtpPage
-					initialPin={state.pin}
-					onSuccess={handleOtpSuccess}
-				/>
-			)}
+			{state.view === "otp" && <OtpPage initialPin={state.pin} onSuccess={handleOtpSuccess} />}
 			{state.view === "chat" && state.token && (
-				<ChatPage
-					pin={state.pin}
-					token={state.token}
-					onDisconnect={handleDisconnect}
-				/>
+				<ChatPage pin={state.pin} token={state.token} onDisconnect={handleDisconnect} />
 			)}
 		</div>
 	);

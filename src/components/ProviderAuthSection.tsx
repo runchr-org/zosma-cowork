@@ -117,28 +117,25 @@ export function ProviderAuthSection({ provider, compact = false, onChange }: Pro
 		const unlisteners: UnlistenFn[] = [];
 		(async () => {
 			const us = await Promise.all([
-				listen<{ provider: string; url: string; instructions?: string }>(
-					"oauth_open_url",
-					(e) => {
-						if (e.payload?.provider !== provider) return;
-						setPhase("waiting_browser");
-						// GitHub Copilot uses the device-flow and passes the 8-char user
-						// code as `"Enter code: ABCD-1234"`. Extract and surface it so the
-						// user can paste it into github.com/login/device. Loopback-redirect
-						// providers (Anthropic, OpenAI Codex) pass freeform instructions
-						// without a code — fall back to a plain "Opening browser…".
-						const ins = e.payload.instructions ?? null;
-						const m = ins?.match(/([A-Z0-9]{4}-?[A-Z0-9]{4})/);
-						setStatusMessage(m ? "Authorize this device in your browser:" : "Opening browser…");
-						setUserCode(m ? m[1] : null);
-						setVerificationUrl(m ? e.payload.url : null);
-						invoke("open_url", { url: e.payload.url }).catch(() => {
-							// As a fallback, force a window.open which will likely be blocked
-							// in Tauri but at least surfaces the URL in dev tools.
-							window.open(e.payload.url, "_blank");
-						});
-					},
-				),
+				listen<{ provider: string; url: string; instructions?: string }>("oauth_open_url", (e) => {
+					if (e.payload?.provider !== provider) return;
+					setPhase("waiting_browser");
+					// GitHub Copilot uses the device-flow and passes the 8-char user
+					// code as `"Enter code: ABCD-1234"`. Extract and surface it so the
+					// user can paste it into github.com/login/device. Loopback-redirect
+					// providers (Anthropic, OpenAI Codex) pass freeform instructions
+					// without a code — fall back to a plain "Opening browser…".
+					const ins = e.payload.instructions ?? null;
+					const m = ins?.match(/([A-Z0-9]{4}-?[A-Z0-9]{4})/);
+					setStatusMessage(m ? "Authorize this device in your browser:" : "Opening browser…");
+					setUserCode(m ? m[1] : null);
+					setVerificationUrl(m ? e.payload.url : null);
+					invoke("open_url", { url: e.payload.url }).catch(() => {
+						// As a fallback, force a window.open which will likely be blocked
+						// in Tauri but at least surfaces the URL in dev tools.
+						window.open(e.payload.url, "_blank");
+					});
+				}),
 				listen<{ provider: string; message: string }>("oauth_progress", (e) => {
 					if (e.payload?.provider !== provider) return;
 					setStatusMessage(e.payload.message);

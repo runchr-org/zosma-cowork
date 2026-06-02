@@ -1,149 +1,284 @@
 @import "tailwindcss";
 
-/* ── CSS Variables (light mode) ── */
+/* ═══════════════════════════════════════════════
+   Zosma Cowork — Design Tokens
+   Light: Warm white  ·  Dark: Near-black
+   Primary: #98F46F → hsl(102 86% 70%) — Oliver AI green
+   ═══════════════════════════════════════════════ */
+
+/* ── Light mode (default — no data-theme attr) ── */
 :root {
-	--background: 0 0% 100%;
-	--foreground: 240 10% 3.9%;
-	--card: 0 0% 100%;
-	--card-foreground: 240 10% 3.9%;
-	--popover: 0 0% 100%;
-	--popover-foreground: 240 10% 3.9%;
-	--primary: 221 83% 53%;
+	--background: 45 18% 95%;
+	--foreground: 40 25% 12%;
+	--card: 45 12% 97%;
+	--card-foreground: 40 22% 14%;
+	--popover: 45 12% 97%;
+	--popover-foreground: 40 22% 14%;
+	--primary: 102 70% 32%;
 	--primary-foreground: 0 0% 100%;
-	--secondary: 240 5% 96%;
-	--secondary-foreground: 240 6% 10%;
-	--muted: 240 5% 96%;
-	--muted-foreground: 240 4% 46%;
-	--accent: 240 5% 96%;
-	--accent-foreground: 240 6% 10%;
-	--destructive: 0 72% 51%;
-	--destructive-foreground: 0 0% 100%;
-	--border: 240 6% 90%;
-	--input: 240 6% 90%;
-	--ring: 240 10% 3.9%;
+	--secondary: 45 12% 88%;
+	--secondary-foreground: 40 14% 18%;
+	--muted: 45 12% 90%;
+	--muted-foreground: 40 12% 28%;
+	--accent: 102 40% 90%;
+	--accent-foreground: 40 14% 18%;
+	--destructive: 0 72% 52%;
+	--destructive-foreground: 0 0% 98%;
+	--border: 45 10% 78%;
+	--input: 45 10% 78%;
+	--ring: 102 65% 35%;
 	--radius: 0.5rem;
-	--font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	--font-sans: "Chakra Petch", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+		Roboto, sans-serif;
+	--font-chakra: "Chakra Petch", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	--font-space-grotesk: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		sans-serif;
 	--font-mono: "SF Mono", "Fira Code", "Fira Mono", Menlo, monospace;
 
 	/* ── Chat layout ── */
-	--chat-user-bg: 0 0% 100%;
-	--chat-user-fg: 240 10% 3.9%;
-	--chat-assistant-bg: 0 0% 100%;
-	--chat-assistant-fg: 240 10% 3.9%;
-	--chat-system-bg: 240 5% 96%;
-	--chat-system-fg: 240 4% 46%;
-	--chat-avatar-user-bg: 221 83% 53%;
+	--chat-user-bg: 45 14% 93%;
+	--chat-user-fg: 40 25% 12%;
+	--chat-assistant-bg: 45 6% 99%;
+	--chat-assistant-fg: 40 25% 12%;
+	--chat-system-bg: 45 12% 88%;
+	--chat-system-fg: 40 12% 28%;
+	--chat-avatar-user-bg: 102 80% 50%;
 	--chat-avatar-user-fg: 0 0% 100%;
-	--chat-avatar-assistant-bg: 240 5% 96%;
-	--chat-avatar-assistant-fg: 240 10% 3.9%;
+	--chat-avatar-assistant-bg: 45 10% 82%;
+	--chat-avatar-assistant-fg: 40 22% 14%;
 
 	/* ── Status bar ── */
-	--status-bg: 240 5% 96%;
-	--status-divider: 240 6% 90%;
-	--status-active-fg: 221 83% 53%;
+	--status-bg: 45 14% 92%;
+	--status-divider: 45 10% 78%;
+	--status-active-fg: 102 70% 32%;
 
 	/* ── Tool execution blocks ── */
-	--tool-running-bg: 38 92% 50% / 0.12;
-	--tool-running-fg: 38 92% 50%;
-	--tool-running-border: 38 92% 50% / 0.25;
-	--tool-complete-bg: 142 71% 45% / 0.08;
-	--tool-complete-fg: 142 71% 45%;
-	--tool-complete-border: 142 71% 45% / 0.2;
-	--tool-error-bg: 0 72% 51% / 0.08;
-	--tool-error-fg: 0 72% 51%;
-	--tool-error-border: 0 72% 51% / 0.2;
-	--tool-timeline-line: 240 6% 90%;
+	--tool-running-bg: 102 70% 32% / 0.14;
+	--tool-running-fg: 102 70% 32%;
+	--tool-running-border: 102 70% 32% / 0.5;
+	--tool-complete-bg: 142 60% 40% / 0.08;
+	--tool-complete-fg: 142 60% 40%;
+	--tool-complete-border: 142 60% 40% / 0.2;
+	--tool-error-bg: 0 72% 52% / 0.08;
+	--tool-error-fg: 0 72% 52%;
+	--tool-error-border: 0 72% 52% / 0.2;
+	--tool-timeline-line: 45 10% 78%;
 
 	/* ── Diff colors ── */
-	--diff-added-bg: 142 71% 45% / 0.08;
-	--diff-added-fg: 142 71% 45%;
-	--diff-removed-bg: 0 72% 51% / 0.08;
-	--diff-removed-fg: 0 72% 51%;
-	--diff-context-fg: 240 4% 46%;
-	--diff-hunk-fg: 221 83% 53%;
+	--diff-added-bg: 142 60% 40% / 0.08;
+	--diff-added-fg: 142 60% 40%;
+	--diff-removed-bg: 0 72% 52% / 0.08;
+	--diff-removed-fg: 0 72% 52%;
+	--diff-context-fg: 40 12% 28%;
+	--diff-hunk-fg: 102 70% 32%;
 
 	/* ── Subtle backgrounds ── */
-	--success-subtle: 142 71% 45% / 0.06;
-	--error-subtle: 0 72% 51% / 0.06;
+	--success-subtle: 142 60% 40% / 0.06;
+	--error-subtle: 0 72% 52% / 0.06;
 
 	/* ── Sidebar ── */
-	--sidebar-background: 240 5% 96%;
-	--sidebar-foreground: 240 10% 3.9%;
-	--sidebar-accent: 240 5% 90%;
-	--sidebar-accent-foreground: 240 6% 10%;
-	--sidebar-border: 240 6% 90%;
+	--sidebar-background: 45 16% 91%;
+	--sidebar-foreground: 40 22% 14%;
+	--sidebar-accent: 102 30% 88%;
+	--sidebar-accent-foreground: 40 16% 18%;
+	--sidebar-border: 45 10% 78%;
 }
 
-/* ── Dark mode ── */
+/* ── Dark mode via OS (only when no manual data-theme set) ── */
 @media (prefers-color-scheme: dark) {
-	:root {
-		--background: 240 10% 3.9%;
-		--foreground: 0 0% 98%;
-		--card: 240 10% 5.9%;
-		--card-foreground: 0 0% 98%;
-		--popover: 240 10% 5.9%;
-		--popover-foreground: 0 0% 98%;
-		--primary: 217 91% 60%;
-		--primary-foreground: 0 0% 100%;
-		--secondary: 240 4% 16%;
-		--secondary-foreground: 0 0% 98%;
-		--muted: 240 4% 16%;
-		--muted-foreground: 240 5% 65%;
-		--accent: 240 4% 16%;
-		--accent-foreground: 0 0% 98%;
-		--destructive: 0 62% 60%;
-		--border: 240 4% 16%;
-		--input: 240 4% 16%;
-		--ring: 240 5% 65%;
+	:root:not([data-theme]) {
+		--background: 0 0% 4%;
+		--foreground: 0 0% 90%;
+		--card: 0 0% 7%;
+		--card-foreground: 0 0% 90%;
+		--popover: 0 0% 7%;
+		--popover-foreground: 0 0% 90%;
+		--primary: 102 80% 55%;
+		--primary-foreground: 0 0% 8%;
+		--secondary: 102 8% 12%;
+		--secondary-foreground: 0 0% 90%;
+		--muted: 0 0% 10%;
+		--muted-foreground: 0 0% 50%;
+		--accent: 102 12% 14%;
+		--accent-foreground: 0 0% 90%;
+		--destructive: 0 62% 55%;
+		--destructive-foreground: 0 0% 98%;
+		--border: 0 0% 16%;
+		--input: 0 0% 16%;
+		--ring: 102 60% 45%;
 
-		/* ── Chat layout (dark) ── */
-		--chat-user-bg: 240 6% 6%;
-		--chat-user-fg: 0 0% 98%;
-		--chat-assistant-bg: 240 10% 3.9%;
-		--chat-assistant-fg: 0 0% 98%;
-		--chat-system-bg: 240 4% 16%;
-		--chat-system-fg: 240 5% 65%;
-		--chat-avatar-user-bg: 217 91% 60%;
+		--chat-user-bg: 0 0% 6%;
+		--chat-user-fg: 0 0% 90%;
+		--chat-assistant-bg: 0 0% 4%;
+		--chat-assistant-fg: 0 0% 90%;
+		--chat-system-bg: 0 0% 10%;
+		--chat-system-fg: 0 0% 50%;
+		--chat-avatar-user-bg: 102 80% 50%;
 		--chat-avatar-user-fg: 0 0% 100%;
-		--chat-avatar-assistant-bg: 240 4% 16%;
-		--chat-avatar-assistant-fg: 0 0% 98%;
+		--chat-avatar-assistant-bg: 0 0% 12%;
+		--chat-avatar-assistant-fg: 0 0% 85%;
 
-		/* ── Status bar (dark) ── */
-		--status-bg: 240 6% 6%;
-		--status-divider: 240 4% 16%;
-		--status-active-fg: 217 91% 60%;
+		--status-bg: 0 0% 5%;
+		--status-divider: 0 0% 14%;
+		--status-active-fg: 102 75% 55%;
 
-		/* ── Tool execution blocks (dark) ── */
-		--tool-running-bg: 38 92% 50% / 0.15;
-		--tool-running-fg: 38 92% 60%;
-		--tool-running-border: 38 92% 50% / 0.3;
-		--tool-complete-bg: 142 71% 45% / 0.1;
-		--tool-complete-fg: 142 71% 55%;
-		--tool-complete-border: 142 71% 45% / 0.25;
-		--tool-error-bg: 0 62% 60% / 0.1;
-		--tool-error-fg: 0 62% 65%;
-		--tool-error-border: 0 62% 60% / 0.25;
-		--tool-timeline-line: 240 4% 16%;
+		--tool-running-bg: 102 65% 50% / 0.15;
+		--tool-running-fg: 102 65% 55%;
+		--tool-running-border: 102 65% 50% / 0.3;
+		--tool-complete-bg: 142 60% 45% / 0.1;
+		--tool-complete-fg: 142 60% 55%;
+		--tool-complete-border: 142 60% 45% / 0.25;
+		--tool-error-bg: 0 62% 55% / 0.1;
+		--tool-error-fg: 0 62% 60%;
+		--tool-error-border: 0 62% 55% / 0.25;
+		--tool-timeline-line: 0 0% 14%;
 
-		/* ── Diff colors (dark) ── */
-		--diff-added-bg: 142 71% 45% / 0.1;
-		--diff-added-fg: 142 71% 60%;
-		--diff-removed-bg: 0 62% 60% / 0.1;
-		--diff-removed-fg: 0 62% 65%;
-		--diff-context-fg: 240 5% 55%;
-		--diff-hunk-fg: 217 91% 60%;
+		--diff-added-bg: 142 60% 45% / 0.1;
+		--diff-added-fg: 142 60% 55%;
+		--diff-removed-bg: 0 62% 55% / 0.1;
+		--diff-removed-fg: 0 62% 60%;
+		--diff-context-fg: 0 0% 50%;
+		--diff-hunk-fg: 102 65% 55%;
 
-		/* ── Subtle backgrounds (dark) ── */
-		--success-subtle: 142 71% 45% / 0.08;
-		--error-subtle: 0 62% 60% / 0.08;
+		--success-subtle: 142 60% 45% / 0.08;
+		--error-subtle: 0 62% 55% / 0.08;
 
-		/* ── Sidebar (dark) ── */
-		--sidebar-background: 240 10% 5.9%;
-		--sidebar-foreground: 0 0% 98%;
-		--sidebar-accent: 240 4% 16%;
-		--sidebar-accent-foreground: 0 0% 98%;
-		--sidebar-border: 240 4% 16%;
+		--sidebar-background: 0 0% 5%;
+		--sidebar-foreground: 0 0% 85%;
+		--sidebar-accent: 102 10% 10%;
+		--sidebar-accent-foreground: 0 0% 90%;
+		--sidebar-border: 0 0% 12%;
 	}
+}
+
+/* ── Manual light mode override ── */
+[data-theme="light"] {
+	--background: 45 18% 95%;
+	--foreground: 40 25% 12%;
+	--card: 45 12% 97%;
+	--card-foreground: 40 22% 14%;
+	--popover: 45 12% 97%;
+	--popover-foreground: 40 22% 14%;
+	--primary: 102 70% 32%;
+	--primary-foreground: 0 0% 100%;
+	--secondary: 45 12% 88%;
+	--secondary-foreground: 40 14% 18%;
+	--muted: 45 12% 90%;
+	--muted-foreground: 40 12% 28%;
+	--accent: 102 40% 90%;
+	--accent-foreground: 40 14% 18%;
+	--destructive: 0 72% 52%;
+	--destructive-foreground: 0 0% 98%;
+	--border: 45 10% 78%;
+	--input: 45 10% 78%;
+	--ring: 102 65% 35%;
+
+	--chat-user-bg: 45 14% 93%;
+	--chat-user-fg: 40 25% 12%;
+	--chat-assistant-bg: 45 6% 99%;
+	--chat-assistant-fg: 40 25% 12%;
+	--chat-system-bg: 45 12% 88%;
+	--chat-system-fg: 40 12% 28%;
+	--chat-avatar-user-bg: 102 80% 50%;
+	--chat-avatar-user-fg: 0 0% 100%;
+	--chat-avatar-assistant-bg: 45 10% 82%;
+	--chat-avatar-assistant-fg: 40 22% 14%;
+
+	--status-bg: 45 14% 92%;
+	--status-divider: 45 10% 78%;
+	--status-active-fg: 102 70% 32%;
+
+	--tool-running-bg: 102 70% 32% / 0.14;
+	--tool-running-fg: 102 70% 32%;
+	--tool-running-border: 102 70% 32% / 0.5;
+	--tool-complete-bg: 142 60% 40% / 0.08;
+	--tool-complete-fg: 142 60% 40%;
+	--tool-complete-border: 142 60% 40% / 0.2;
+	--tool-error-bg: 0 72% 52% / 0.08;
+	--tool-error-fg: 0 72% 52%;
+	--tool-error-border: 0 72% 52% / 0.2;
+	--tool-timeline-line: 45 10% 78%;
+
+	--diff-added-bg: 142 60% 40% / 0.08;
+	--diff-added-fg: 142 60% 40%;
+	--diff-removed-bg: 0 72% 52% / 0.08;
+	--diff-removed-fg: 0 72% 52%;
+	--diff-context-fg: 40 12% 28%;
+	--diff-hunk-fg: 102 70% 32%;
+
+	--success-subtle: 142 60% 40% / 0.06;
+	--error-subtle: 0 72% 52% / 0.06;
+
+	--sidebar-background: 45 16% 91%;
+	--sidebar-foreground: 40 22% 14%;
+	--sidebar-accent: 102 30% 88%;
+	--sidebar-accent-foreground: 40 16% 18%;
+	--sidebar-border: 45 10% 78%;
+}
+
+/* ── Manual dark mode override ── */
+[data-theme="dark"] {
+	--background: 0 0% 4%;
+	--foreground: 0 0% 90%;
+	--card: 0 0% 7%;
+	--card-foreground: 0 0% 90%;
+	--popover: 0 0% 7%;
+	--popover-foreground: 0 0% 90%;
+	--primary: 102 80% 55%;
+	--primary-foreground: 0 0% 8%;
+	--secondary: 102 8% 12%;
+	--secondary-foreground: 0 0% 90%;
+	--muted: 0 0% 10%;
+	--muted-foreground: 0 0% 50%;
+	--accent: 102 12% 14%;
+	--accent-foreground: 0 0% 90%;
+	--destructive: 0 62% 55%;
+	--destructive-foreground: 0 0% 98%;
+	--border: 0 0% 16%;
+	--input: 0 0% 16%;
+	--ring: 102 60% 45%;
+
+	--chat-user-bg: 0 0% 6%;
+	--chat-user-fg: 0 0% 90%;
+	--chat-assistant-bg: 0 0% 4%;
+	--chat-assistant-fg: 0 0% 90%;
+	--chat-system-bg: 0 0% 10%;
+	--chat-system-fg: 0 0% 50%;
+	--chat-avatar-user-bg: 102 80% 50%;
+	--chat-avatar-user-fg: 0 0% 100%;
+	--chat-avatar-assistant-bg: 0 0% 12%;
+	--chat-avatar-assistant-fg: 0 0% 85%;
+
+	--status-bg: 0 0% 5%;
+	--status-divider: 0 0% 14%;
+	--status-active-fg: 102 75% 55%;
+
+	--tool-running-bg: 102 65% 50% / 0.15;
+	--tool-running-fg: 102 65% 55%;
+	--tool-running-border: 102 65% 50% / 0.3;
+	--tool-complete-bg: 142 60% 45% / 0.1;
+	--tool-complete-fg: 142 60% 55%;
+	--tool-complete-border: 142 60% 45% / 0.25;
+	--tool-error-bg: 0 62% 55% / 0.1;
+	--tool-error-fg: 0 62% 60%;
+	--tool-error-border: 0 62% 55% / 0.25;
+	--tool-timeline-line: 0 0% 14%;
+
+	--diff-added-bg: 142 60% 45% / 0.1;
+	--diff-added-fg: 142 60% 55%;
+	--diff-removed-bg: 0 62% 55% / 0.1;
+	--diff-removed-fg: 0 62% 60%;
+	--diff-context-fg: 0 0% 50%;
+	--diff-hunk-fg: 102 65% 55%;
+
+	--success-subtle: 142 60% 45% / 0.08;
+	--error-subtle: 0 62% 55% / 0.08;
+
+	--sidebar-background: 0 0% 5%;
+	--sidebar-foreground: 0 0% 85%;
+	--sidebar-accent: 102 10% 10%;
+	--sidebar-accent-foreground: 0 0% 90%;
+	--sidebar-border: 0 0% 12%;
 }
 
 @theme {
@@ -171,6 +306,8 @@
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
 	--font-sans: var(--font-sans);
+	--font-chakra: var(--font-chakra);
+	--font-space-grotesk: var(--font-space-grotesk);
 	--font-mono: var(--font-mono);
 	--color-sidebar: hsl(var(--sidebar-background));
 	--color-sidebar-foreground: hsl(var(--sidebar-foreground));
@@ -212,6 +349,12 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
 	background: hsl(var(--muted-foreground) / 0.3);
+}
+
+/* ── Chat font override ── */
+.chat-font,
+.chat-font * {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* ── Code blocks ── */

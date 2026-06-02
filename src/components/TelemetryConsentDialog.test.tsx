@@ -11,21 +11,21 @@ describe("TelemetryConsentDialog", () => {
 
 	it("renders both action buttons", () => {
 		render(<TelemetryConsentDialog onEnable={vi.fn()} onDismiss={vi.fn()} />);
-		expect(screen.getByText("Not Now")).toBeInTheDocument();
-		expect(screen.getByText("Enable Telemetry")).toBeInTheDocument();
+		expect(screen.getByText("Not now")).toBeInTheDocument();
+		expect(screen.getByText("Enable telemetry")).toBeInTheDocument();
 	});
 
-	it("calls onEnable when Enable Telemetry is clicked", async () => {
+	it("calls onEnable when Enable telemetry is clicked", async () => {
 		const onEnable = vi.fn();
 		render(<TelemetryConsentDialog onEnable={onEnable} onDismiss={vi.fn()} />);
-		await userEvent.click(screen.getByText("Enable Telemetry"));
+		await userEvent.click(screen.getByText("Enable telemetry"));
 		expect(onEnable).toHaveBeenCalledOnce();
 	});
 
-	it("calls onDismiss when Not Now is clicked", async () => {
+	it("calls onDismiss when Not now is clicked", async () => {
 		const onDismiss = vi.fn();
 		render(<TelemetryConsentDialog onEnable={vi.fn()} onDismiss={onDismiss} />);
-		await userEvent.click(screen.getByText("Not Now"));
+		await userEvent.click(screen.getByText("Not now"));
 		expect(onDismiss).toHaveBeenCalledOnce();
 	});
 

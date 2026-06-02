@@ -124,11 +124,9 @@ export function SkillsPanel() {
 	const detailSkillRemovable = detailSkill
 		? (installed.find((s) => {
 				const candidate = detailSkill.id.split("@").pop() || detailSkill.id;
-				const name = candidate.includes("/")
-					? candidate.split("/").pop() || candidate
-					: candidate;
+				const name = candidate.includes("/") ? candidate.split("/").pop() || candidate : candidate;
 				return s.name === name;
-		  })?.removable ?? true)
+			})?.removable ?? true)
 		: true;
 
 	return (
@@ -297,7 +295,7 @@ export function SkillsPanel() {
 				open={detailSkill !== null}
 				onClose={() => setDetailSkill(null)}
 				installed={detailSkill ? isInstalled(detailSkill.id) : false}
-				isInstalling={installingSet.includes(detailSkill?.id ?? '')}
+				isInstalling={installingSet.includes(detailSkill?.id ?? "")}
 				removable={detailSkillRemovable}
 				onInstall={handleInstall}
 				onRemove={handleRemove}

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { openExternalUrl } from "../lib/utils";
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import { ExternalLink, Globe, Loader2 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useCallback, useEffect, useId, useState } from "react";
 import type { NpmData, SkillResult } from "../lib/skillRegistry";
 import {
 	fetchNpmDataForSkill,
@@ -7,6 +9,7 @@ import {
 	formatInstallCount,
 	formatSize,
 } from "../lib/skillRegistry";
+import { openExternalUrl } from "../lib/utils";
 
 interface ExtensionDetailProps {
 	skill: SkillResult | null;
@@ -32,7 +35,8 @@ export function ExtensionDetail({
 	const [npmData, setNpmData] = useState<NpmData | null>(null);
 	const [fetching, setFetching] = useState(true);
 	const [error, setError] = useState(false);
-	const overlayRef = useRef<HTMLDivElement>(null);
+	const reduced = useReducedMotion();
+	const titleId = useId();
 	const skillId = skill?.id ?? null;
 
 	useEffect(() => {
@@ -52,30 +56,6 @@ export function ExtensionDetail({
 		};
 	}, [open, skillId]);
 
-	// Escape key dismiss
-	useEffect(() => {
-		if (!open) return;
-		const handleKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") onClose();
-		};
-		window.addEventListener("keydown", handleKey);
-		return () => window.removeEventListener("keydown", handleKey);
-	}, [open, onClose]);
-
-	const handleOverlayKeyDown = useCallback(
-		(e: React.KeyboardEvent) => {
-			if (e.key === "Escape") onClose();
-		},
-		[onClose],
-	);
-
-	const handleOverlayClick = useCallback(
-		(e: React.MouseEvent) => {
-			if (e.target === overlayRef.current) onClose();
-		},
-		[onClose],
-	);
-
 	const handleInstall = useCallback(() => {
 		if (skillId) onInstall(skillId);
 	}, [skillId, onInstall]);
@@ -84,61 +64,43 @@ export function ExtensionDetail({
 		if (skillId) onRemove(skillId);
 	}, [skillId, onRemove]);
 
-	if (!open || !skill) return null;
+	if (!skill) return null;
 
 	const displayName = npmData?.name || skill.id;
 
 	return (
-		<div
-			ref={overlayRef}
-			className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-			onClick={handleOverlayClick}
-			onKeyDown={handleOverlayKeyDown}
-		>
-			<div className="w-full max-w-md mx-4 bg-card border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-				{/* Header */}
-				<div className="flex items-center justify-between px-5 py-4 border-b border-border">
-					<div className="min-w-0 flex-1">
-						<h2 className="text-sm font-semibold text-foreground truncate">{displayName}</h2>
-						{npmData?.description && (
-							<p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-								{npmData.description}
-							</p>
-						)}
-					</div>
-					<button
-						type="button"
-						onClick={onClose}
-						aria-label="Close"
-						className="shrink-0 ml-3 p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-					>
-						<svg
-							width="16"
-							height="16"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							aria-hidden="true"
-							role="img"
-						>
-							<title>Close</title>
-							<path d="M18 6 6 18M6 6l12 12" />
-						</svg>
-					</button>
-				</div>
+		<Dialog open={open} onClose={onClose} size="md" labelledBy={titleId}>
+			<DialogHeader
+				title={displayName}
+				description={npmData?.description}
+				onClose={onClose}
+				titleId={titleId}
+			/>
 
-				{/* Content */}
-				<div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+			<DialogBody scrollable className="space-y-3">
+				<AnimatePresence mode="wait">
 					{fetching ? (
-						<div className="flex items-center justify-center py-8">
+						<motion.div
+							key="loading"
+							initial={reduced ? false : { opacity: 0 }}
+							animate={{ opacity: 1 }}
+							exit={{ opacity: 0 }}
+							transition={{ duration: 0.18 }}
+							className="flex items-center justify-center py-10"
+						>
 							<div className="flex flex-col items-center gap-2">
-								<div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-								<p className="text-xs text-muted-foreground">Loading details...</p>
+								<Loader2 className="w-5 h-5 text-primary animate-spin" />
+								<p className="text-xs text-muted-foreground">Loading details…</p>
 							</div>
-						</div>
+						</motion.div>
 					) : (
-						<>
+						<motion.div
+							key="content"
+							initial={reduced ? false : { opacity: 0, y: 4 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+							className="space-y-3"
+						>
 							{/* Package details grid */}
 							<div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
 								{npmData?.version && (
@@ -173,7 +135,7 @@ export function ExtensionDetail({
 							</div>
 
 							{/* Links */}
-							<div className="flex flex-col gap-1.5 pt-1">
+							<div className="flex flex-col gap-1 pt-1">
 								{skill.url && (
 									<button
 										type="button"
@@ -184,23 +146,9 @@ export function ExtensionDetail({
 												console.error("Failed to open URL:", e);
 											}
 										}}
-										className="text-xs text-primary hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+										className="text-xs text-primary hover:underline flex items-center gap-1.5 cursor-pointer bg-transparent border-none p-0 self-start"
 									>
-										<svg
-											width="12"
-											height="12"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											strokeWidth="2"
-											aria-hidden="true"
-											role="img"
-										>
-											<title>External link</title>
-											<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-											<polyline points="15 3 21 3 21 9" />
-											<line x1="10" y1="14" x2="21" y2="3" />
-										</svg>
+										<ExternalLink className="w-3 h-3" />
 										View on skills.sh
 									</button>
 								)}
@@ -214,28 +162,14 @@ export function ExtensionDetail({
 												console.error("Failed to open homepage:", e);
 											}
 										}}
-										className="text-xs text-primary hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+										className="text-xs text-primary hover:underline flex items-center gap-1.5 cursor-pointer bg-transparent border-none p-0 self-start"
 									>
-										<svg
-											width="12"
-											height="12"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											strokeWidth="2"
-											aria-hidden="true"
-											role="img"
-										>
-											<title>Homepage</title>
-											<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-											<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-										</svg>
+										<Globe className="w-3 h-3" />
 										Homepage
 									</button>
 								)}
 							</div>
 
-							{/* Not found message */}
 							{error && (
 								<div className="py-3 text-center">
 									<p className="text-xs text-muted-foreground">
@@ -246,48 +180,68 @@ export function ExtensionDetail({
 									</p>
 								</div>
 							)}
-						</>
+						</motion.div>
 					)}
-				</div>
+				</AnimatePresence>
+			</DialogBody>
 
-				{/* Actions */}
-				<div className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
+			<DialogFooter>
+				<button
+					type="button"
+					onClick={onClose}
+					className="px-3 py-1.5 text-xs font-medium text-muted-foreground rounded-md hover:bg-muted/70 transition-colors active:scale-[0.97]"
+				>
+					Close
+				</button>
+				{installed && removable ? (
 					<button
 						type="button"
-						onClick={onClose}
-						className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted rounded-md hover:bg-muted/80 transition-colors"
+						onClick={handleRemove}
+						className="px-3 py-1.5 text-xs font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md hover:bg-destructive/15 transition-colors active:scale-[0.97]"
 					>
-						Close
+						Remove
 					</button>
-					{installed && removable ? (
-						<button
-							type="button"
-							onClick={handleRemove}
-							title="Remove this skill"
-							className="px-3 py-1.5 text-xs font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md hover:bg-destructive/20 transition-colors"
-						>
-							Remove
-						</button>
-					) : installed && !removable ? (
-						<span
-							title="System skill — cannot be removed"
-							className="px-3 py-1.5 text-xs font-medium text-muted-foreground/40 border border-sidebar-border/50 rounded-md"
-						>
-							System
-						</span>
-					) : (
-						<button
-							type="button"
-							disabled={isInstalling}
-							onClick={handleInstall}
-							className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-md hover:bg-primary/80 disabled:opacity-50 transition-all"
-						>
-							{isInstalling ? "Installing..." : "Install"}
-						</button>
-					)}
-				</div>
-			</div>
-		</div>
+				) : installed && !removable ? (
+					<span className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-md">
+						System
+					</span>
+				) : (
+					<button
+						type="button"
+						disabled={isInstalling}
+						onClick={handleInstall}
+						className="relative px-4 py-1.5 text-xs font-medium text-primary-foreground bg-primary rounded-md hover:brightness-110 disabled:opacity-50 transition-all active:scale-[0.97] min-w-[90px]"
+					>
+						<AnimatePresence mode="wait" initial={false}>
+							{isInstalling ? (
+								<motion.span
+									key="installing"
+									initial={reduced ? false : { opacity: 0, y: 4 }}
+									animate={{ opacity: 1, y: 0 }}
+									exit={{ opacity: 0, y: -4 }}
+									transition={{ duration: 0.16 }}
+									className="flex items-center justify-center gap-1.5"
+								>
+									<Loader2 className="w-3 h-3 animate-spin" />
+									Installing…
+								</motion.span>
+							) : (
+								<motion.span
+									key="install"
+									initial={reduced ? false : { opacity: 0, y: 4 }}
+									animate={{ opacity: 1, y: 0 }}
+									exit={{ opacity: 0, y: -4 }}
+									transition={{ duration: 0.16 }}
+									className="block"
+								>
+									Install
+								</motion.span>
+							)}
+						</AnimatePresence>
+					</button>
+				)}
+			</DialogFooter>
+		</Dialog>
 	);
 }
 

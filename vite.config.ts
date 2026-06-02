@@ -1,8 +1,8 @@
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
 import { VitePWA } from "vite-plugin-pwa";
+import { defineConfig } from "vitest/config";
 
 // Multi-page entries: desktop + mobile
 type InputMap = Record<string, string>;
@@ -67,12 +67,7 @@ export default defineConfig({
 		port: 1420,
 		strictPort: true,
 		watch: {
-			ignored: [
-				"**/src-tauri/**",
-				"**/target/**",
-				"**/agent-sidecar/**",
-				"**/node_modules/**",
-			],
+			ignored: ["**/src-tauri/**", "**/target/**", "**/agent-sidecar/**", "**/node_modules/**"],
 		},
 	},
 });

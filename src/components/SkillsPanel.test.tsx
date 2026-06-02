@@ -125,7 +125,9 @@ describe("SkillsPanel", () => {
 		mockInvoke.mockImplementation((cmd: string, _args?: Record<string, unknown>) => {
 			if (cmd === "list_skills") return Promise.resolve([]);
 			if (cmd === "search_skills") {
-				return Promise.resolve([{ id: "test/skill@my-skill", installCount: 100, url: "", npmData: null }]);
+				return Promise.resolve([
+					{ id: "test/skill@my-skill", installCount: 100, url: "", npmData: null },
+				]);
 			}
 			if (cmd === "install_skill") return Promise.resolve({ success: true });
 			return Promise.resolve(null);
@@ -177,7 +179,7 @@ describe("SkillsPanel", () => {
 
 		// Detail modal should appear
 		await waitFor(() => {
-			expect(screen.getByText("Loading details...")).toBeDefined();
+			expect(screen.getByText(/Loading details/)).toBeDefined();
 		});
 	});
 

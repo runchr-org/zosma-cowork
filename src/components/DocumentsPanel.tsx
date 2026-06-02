@@ -83,10 +83,7 @@ export function DocumentsPanel({ onOpenDocument }: DocumentsPanelProps) {
 		<div className="flex flex-col gap-3">
 			{/* Header */}
 			<div className="flex items-center justify-between">
-				<h3
-					className="text-sm font-semibold"
-					style={{ color: "hsl(var(--card-foreground))" }}
-				>
+				<h3 className="text-sm font-semibold" style={{ color: "hsl(var(--card-foreground))" }}>
 					Documents
 				</h3>
 				<button
@@ -114,10 +111,7 @@ export function DocumentsPanel({ onOpenDocument }: DocumentsPanelProps) {
 						className="w-8 h-8 mx-auto mb-2 opacity-40"
 						style={{ color: "hsl(var(--muted-foreground))" }}
 					/>
-					<p
-						className="text-xs"
-						style={{ color: "hsl(var(--muted-foreground))" }}
-					>
+					<p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
 						No documents yet. Ask the agent to create one!
 					</p>
 				</div>
@@ -154,9 +148,7 @@ export function DocumentsPanel({ onOpenDocument }: DocumentsPanelProps) {
 							}}
 						>
 							<div className="flex items-start gap-2">
-								<span className="text-base mt-0.5">
-									{getDocumentIcon(doc.type)}
-								</span>
+								<span className="text-base mt-0.5">{getDocumentIcon(doc.type)}</span>
 								<div className="flex-1 min-w-0">
 									<p
 										className="text-sm font-medium truncate"
@@ -164,14 +156,9 @@ export function DocumentsPanel({ onOpenDocument }: DocumentsPanelProps) {
 									>
 										{doc.path.split("/").pop() || doc.path}
 									</p>
-									<p
-										className="text-xs mt-1"
-										style={{ color: "hsl(var(--muted-foreground))" }}
-									>
+									<p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
 										{formatFileSize(doc.sizeBytes)}
-										{getDocumentCountLabel(doc) && (
-											<> &middot; {getDocumentCountLabel(doc)}</>
-										)}
+										{getDocumentCountLabel(doc) && <> &middot; {getDocumentCountLabel(doc)}</>}
 									</p>
 								</div>
 								<button

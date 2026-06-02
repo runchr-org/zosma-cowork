@@ -1,7 +1,8 @@
 import { usePasteDetection } from "@/hooks/usePasteDetection";
 import { trackEvent } from "@/lib/telemetry";
 import type { ModelInfo } from "@/types";
-import { Mic, Paperclip, X } from "lucide-react";
+import { ArrowUp, Mic, Paperclip, X } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ModelSelector } from "./ModelSelector";
 
@@ -26,6 +27,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 		const { pastedImages, pasteHandler, clearImages } = usePasteDetection();
 		const textareaRef = useRef<HTMLTextAreaElement>(null);
 		const recognitionRef = useRef<SpeechRecognition | null>(null);
+		const prefersReducedMotion = useReducedMotion();
 
 		useImperativeHandle(ref, () => ({
 			focus: () => textareaRef.current?.focus(),
@@ -150,20 +152,31 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 		}
 
 		const placeholder = disabled
-			? "Zosma Cowork is thinking..."
-			: "Message Zosma Cowork... (Enter to send, Shift+Enter for newline)";
+			? "Thinking..."
+			: "Message (Enter to send, Shift+Enter for newline)";
+
+		const hasContent = !!(text.trim() || attachedFiles.length > 0 || pastedImages.length > 0);
 
 		return (
-			<form onSubmit={handleSubmit} className="p-4">
+			<motion.form
+				onSubmit={handleSubmit}
+				className="px-4 pb-4"
+				initial={prefersReducedMotion ? false : { y: 72, opacity: 0 }}
+				animate={{ y: 0, opacity: 1 }}
+				transition={{
+					y: { type: "spring", stiffness: 55, damping: 22, mass: 1 },
+					opacity: { duration: 0.35, ease: "easeOut", delay: 0.05 },
+				}}
+			>
+				{/* Outer shell */}
 				<div
-					className="rounded-2xl border shadow-sm transition-all focus-within:ring-1"
+					className="relative rounded-2xl border transition-colors focus-within:border-[hsl(var(--ring)/0.4)]"
 					style={{
 						background: "hsl(var(--card))",
 						borderColor: "hsl(var(--border))",
-						// @ts-expect-error CSS custom property
-						"--ring-color": "hsl(var(--primary) / 0.3)",
 					}}
 				>
+					{/* Textarea */}
 					<textarea
 						ref={textareaRef}
 						value={text}
@@ -175,10 +188,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 						disabled={disabled}
 						enterKeyHint="send"
 						inputMode="text"
-						className="w-full resize-none rounded-t-2xl bg-transparent px-4 pt-3 pb-2 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+						className="w-full resize-none bg-transparent px-4 pt-3 pb-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
 					/>
 
-					{/* Image preview chips */}
+					{/* Pasted image chips */}
 					{pastedImages.length > 0 && (
 						<div className="flex flex-wrap gap-1.5 px-4 pb-1.5">
 							{pastedImages.map((img) => (
@@ -237,31 +250,31 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 						</div>
 					)}
 
-					<div className="flex items-center justify-between px-3 pb-3">
-						<div className="flex items-center gap-1.5">
+					{/* Bottom toolbar: actions left, send right */}
+					<div className="flex items-center justify-between px-2 pb-2 pt-0.5">
+						{/* Left: attach, mic, model */}
+						<div className="flex items-center gap-0.5">
 							<button
 								type="button"
 								onClick={openFileDialog}
 								disabled={disabled}
 								aria-label="Attach files"
-								className="md:rounded-lg p-2 md:p-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-								style={{ minWidth: 44, minHeight: 44 }}
+								className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--muted)/0.7)] transition-colors disabled:opacity-40"
 							>
-								<Paperclip size={18} />
+								<Paperclip size={16} />
 							</button>
 							<button
 								type="button"
 								onClick={startVoiceInput}
 								disabled={disabled}
 								aria-label={isListening ? "Stop recording" : "Voice input"}
-								className={`md:rounded-lg p-2 md:p-1.5 transition-colors disabled:opacity-50 ${
+								className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors disabled:opacity-40 ${
 									isListening
-										? "text-red-500 hover:text-red-400"
-										: "text-muted-foreground hover:text-foreground"
+										? "text-red-500 hover:bg-red-500/10"
+										: "text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--muted)/0.7)]"
 								}`}
-								style={{ minWidth: 44, minHeight: 44 }}
 							>
-								<Mic size={18} />
+								<Mic size={16} />
 							</button>
 							{models && onModelSelect ? (
 								<ModelSelector
@@ -270,28 +283,32 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 									onSelect={onModelSelect}
 								/>
 							) : (
-								<span className="text-xs" style={{ color: "hsl(var(--muted-foreground) / 0.6)" }}>
+								<span
+									className="px-1.5 text-xs"
+									style={{ color: "hsl(var(--muted-foreground) / 0.55)" }}
+								>
 									{modelLabel || "Zosma"}
 								</span>
 							)}
 						</div>
+
+						{/* Right: send CTA — white bg, black icon always */}
 						<button
 							type="submit"
-							disabled={
-								disabled ||
-								(!text.trim() && attachedFiles.length === 0 && pastedImages.length === 0)
-							}
-							className="px-5 md:px-4 py-2.5 md:py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+							disabled={disabled || !hasContent}
+							aria-label="Send message"
+							className="flex items-center justify-center w-8 h-8 rounded-full transition-all duration-150 disabled:cursor-not-allowed"
 							style={{
-								background: "hsl(var(--primary))",
-								color: "hsl(var(--primary-foreground))",
+								background: hasContent ? "#ffffff" : "hsl(var(--muted))",
+								color: hasContent ? "#000000" : "hsl(var(--muted-foreground) / 0.4)",
+								opacity: disabled ? 0.4 : 1,
 							}}
 						>
-							Send →
+							<ArrowUp size={15} strokeWidth={2.5} />
 						</button>
 					</div>
 				</div>
-			</form>
+			</motion.form>
 		);
 	},
 );

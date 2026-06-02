@@ -138,8 +138,8 @@ export function OtpPage({ initialPin, onSuccess }: OtpPageProps) {
 							</div>
 							<h2 className="otp-card-title">Scan to Connect</h2>
 							<p className="otp-card-text">
-								Open the Remote Access panel on your desktop and scan the QR code to
-								automatically connect.
+								Open the Remote Access panel on your desktop and scan the QR code to automatically
+								connect.
 							</p>
 
 							{/* Divider */}
@@ -163,11 +163,7 @@ export function OtpPage({ initialPin, onSuccess }: OtpPageProps) {
 										ref={pinInputRef}
 									/>
 								</div>
-								<button
-									type="submit"
-									disabled={pin.length !== 6}
-									className="otp-btn"
-								>
+								<button type="submit" disabled={pin.length !== 6} className="otp-btn">
 									Connect
 								</button>
 							</form>
@@ -204,11 +200,7 @@ export function OtpPage({ initialPin, onSuccess }: OtpPageProps) {
 										className="otp-input"
 									/>
 								</div>
-								<button
-									type="submit"
-									disabled={pin.length !== 6}
-									className="otp-btn"
-								>
+								<button type="submit" disabled={pin.length !== 6} className="otp-btn">
 									Connect
 								</button>
 							</form>

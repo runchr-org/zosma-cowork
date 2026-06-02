@@ -220,9 +220,7 @@ export function useRemoteChat({ pin }: UseRemoteChatOptions): RemoteChatState {
 
 			case "message_update": {
 				// Contains assistantMessageEvent with streaming details
-				const streamEvent = agentEvent.assistantMessageEvent as
-					| Record<string, unknown>
-					| undefined;
+				const streamEvent = agentEvent.assistantMessageEvent as Record<string, unknown> | undefined;
 				if (!streamEvent?.type) return;
 
 				setIsRunning(true);
@@ -299,7 +297,9 @@ export function useRemoteChat({ pin }: UseRemoteChatOptions): RemoteChatState {
 							if (lastTool) {
 								lastTool.args = {
 									...(lastTool.args as Record<string, unknown>),
-									_partial: ((lastTool.args as Record<string, unknown>)?._partial as string || "") + delta,
+									_partial:
+										(((lastTool.args as Record<string, unknown>)?._partial as string) || "") +
+										delta,
 								};
 							}
 							return { ...prev, toolCalls };
@@ -369,9 +369,7 @@ export function useRemoteChat({ pin }: UseRemoteChatOptions): RemoteChatState {
 				setStreamingMessage((prev) => {
 					if (!prev) return null;
 					const toolCalls = (prev.toolCalls || []).map((tc) =>
-						tc.id === toolCallId
-							? { ...tc, status: "completed" as const, result }
-							: tc,
+						tc.id === toolCallId ? { ...tc, status: "completed" as const, result } : tc,
 					);
 					return { ...prev, toolCalls };
 				});

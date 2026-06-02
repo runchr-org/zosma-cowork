@@ -80,7 +80,7 @@ describe("MessageInput file picker", () => {
 		await user.click(screen.getByLabelText("Attach files"));
 
 		// Type message
-		const textarea = screen.getByPlaceholderText(/Message Zosma Cowork/);
+		const textarea = screen.getByRole("textbox");
 		await user.type(textarea, "Summarize this");
 
 		// Send
@@ -103,7 +103,7 @@ describe("MessageInput file picker", () => {
 		await user.click(screen.getByLabelText("Attach files"));
 		expect(screen.getByText("doc.md")).toBeInTheDocument();
 
-		const textarea = screen.getByPlaceholderText(/Message Zosma Cowork/);
+		const textarea = screen.getByRole("textbox");
 		await user.type(textarea, "hi");
 		await user.click(screen.getByRole("button", { name: /send/i }));
 

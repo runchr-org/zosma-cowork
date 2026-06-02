@@ -22,6 +22,8 @@ interface ChatViewProps {
 	currentModelId?: string;
 	onModelSelect?: (provider: string, modelId: string) => void;
 	toolPhase?: ToolPhase | null;
+	/** Changing this remounts the input, retriggering its entrance animation */
+	sessionKey?: string;
 }
 
 export function ChatView({
@@ -37,6 +39,7 @@ export function ChatView({
 	currentModelId,
 	onModelSelect,
 	toolPhase,
+	sessionKey,
 }: ChatViewProps) {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -88,7 +91,7 @@ export function ChatView({
 	const isEmpty = messages.length === 0 && !streamingMessage;
 
 	return (
-		<>
+		<div className="chat-font flex flex-col flex-1 min-h-0">
 			<div
 				ref={scrollContainerRef}
 				onScroll={handleScroll}
@@ -98,7 +101,7 @@ export function ChatView({
 				{isEmpty ? (
 					<SuggestedActions onSend={onSend} />
 				) : (
-					<div className="pb-4">
+					<div className="pt-1 pb-6">
 						{allMessages.map((msg) => (
 							<ChatMessageItem key={msg.id} message={msg} detailsExpanded={detailsExpanded} />
 						))}
@@ -117,14 +120,18 @@ export function ChatView({
 				onAbort={onAbort}
 			/>
 
-			<MessageInput
-				ref={inputRef}
-				onSend={onSend}
-				disabled={isRunning}
-				models={models}
-				currentModelId={currentModelId}
-				onModelSelect={onModelSelect}
-			/>
-		</>
+			{/* overflow-hidden gives the slide-up animation a clean clip edge */}
+			<div className="overflow-hidden">
+				<MessageInput
+					key={sessionKey}
+					ref={inputRef}
+					onSend={onSend}
+					disabled={isRunning}
+					models={models}
+					currentModelId={currentModelId}
+					onModelSelect={onModelSelect}
+				/>
+			</div>
+		</div>
 	);
 }

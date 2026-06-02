@@ -1,29 +1,22 @@
 /**
- * HomeView — Branded splash screen + onboarding
+ * HomeView — Onboarding flow
  *
- * Shows a polished splash with logo, tagline, and either the setup flow
- * or a brief "ready" state depending on auth status.
+ * Two-step flow:
+ *   1. Splash — brief value proposition, single CTA
+ *   2. Connect — API key quick-start or OAuth sign-in
  *
- * Flow: splash → connect (API key prompt + OAuth provider cards)
+ * Designed to disappear: get the user connected and into the app fast.
  */
 
+import type { LucideIcon } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Eye, EyeOff, Lock, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { ClaudeIcon, GitHubIcon, OpenAIIcon } from "./BrandIcons";
 import { ProviderAuthSection } from "./ProviderAuthSection";
 
 interface OnboardingProps {
 	onComplete: (apiKey: string) => Promise<void>;
-	/**
-	 * Optional escape hatch: dismiss the connect flow without configuring a
-	 * provider and let the parent jump the user to Settings (where they can
-	 * pick any provider and finish setup later).
-	 */
 	onSkipToSettings?: () => void;
-	/**
-	 * Dismiss the Connect modal entirely. Renders a Skip / Continue
-	 * affordance in the top-right of the "connect" step (never on splash).
-	 * Label flips to "Continue" when at least one subscription (OAuth)
-	 * provider is signed in.
-	 */
 	onDismiss?: () => void;
 	hasSubscription?: boolean;
 }
@@ -31,17 +24,22 @@ interface OnboardingProps {
 type Step = "splash" | "connect";
 
 const PROVIDERS = [
-	{ id: "anthropic", label: "Claude Pro/Max", icon: "🤖", desc: "Use your Claude subscription" },
+	{
+		id: "anthropic",
+		label: "Claude Pro/Max",
+		icon: ClaudeIcon,
+		desc: "Use your Claude subscription",
+	},
 	{
 		id: "github-copilot",
 		label: "GitHub Copilot",
-		icon: "🐙",
+		icon: GitHubIcon,
 		desc: "Use your GitHub subscription",
 	},
 	{
 		id: "openai-codex",
 		label: "ChatGPT",
-		icon: "💬",
+		icon: OpenAIIcon,
 		desc: "Use your ChatGPT Plus / Pro subscription",
 	},
 ] as const;
@@ -54,16 +52,16 @@ export function HomeView({
 }: OnboardingProps) {
 	const [step, setStep] = useState<Step>("splash");
 	const [apiKey, setApiKey] = useState("");
+	const [showKey, setShowKey] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
 	const [appVersion, setAppVersion] = useState<string | null>(null);
 
-	// Load app version from Tauri
 	useEffect(() => {
 		import("@tauri-apps/api/app")
 			.then(({ getVersion }) => getVersion().then(setAppVersion))
-			.catch(() => {}); // ignore if not in Tauri env
+			.catch(() => {});
 	}, []);
 
 	const handleSave = useCallback(async () => {
@@ -75,12 +73,8 @@ export function HomeView({
 			await onComplete(trimmed);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Failed to save API key";
-			// Check for common sidecar/connection failures and show a clearer message
 			if (msg === "no sidecar" || msg.includes("ERR_MODULE_NOT_FOUND")) {
-				setError(
-					"The AI engine is not running. If you installed from a package manager, try upgrading: " +
-						"'yay -S zosma-cowork-bin' or download the latest release from zosma.ai",
-				);
+				setError("The AI engine is not running. Try restarting or download the latest release.");
 			} else if (msg === "not ready" || msg === "timeout") {
 				setError("Waiting for the AI engine to start. Please try again in a moment.");
 			} else {
@@ -98,156 +92,139 @@ export function HomeView({
 	// ── Splash ──────────────────────────────────────────────────
 	if (step === "splash") {
 		return (
-			<div className="flex flex-col items-center justify-center h-full px-8 py-12 max-w-lg mx-auto overflow-y-auto">
-				{/* Logo */}
-				<div className="mb-6">
-					<div
-						className="w-20 h-20 rounded-2xl flex items-center justify-center"
-						style={{
-							background:
-								"linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--primary) / 0.05))",
-							boxShadow: "0 0 40px hsl(var(--primary) / 0.1)",
-						}}
-					>
-						<span className="text-4xl font-bold" style={{ color: "hsl(var(--primary))" }}>
-							Z
-						</span>
-					</div>
+			<div className="flex flex-col items-center justify-center h-full px-8 py-12 max-w-sm mx-auto overflow-y-auto">
+				{/* Logo mark */}
+				<div
+					className="w-16 h-16 rounded-xl flex items-center justify-center mb-5"
+					style={{
+						background:
+							"linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--primary) / 0.05))",
+					}}
+				>
+					<span className="text-2xl font-bold" style={{ color: "hsl(var(--primary))" }}>
+						Z
+					</span>
 				</div>
 
-				{/* Tagline */}
 				<h1
-					className="text-3xl font-bold text-center mb-1"
+					className="text-xl font-bold text-center mb-1"
 					style={{ color: "hsl(var(--foreground))" }}
 				>
 					Zosma Cowork
 				</h1>
-				<p className="text-xs text-center mb-1" style={{ color: "hsl(var(--muted-foreground))" }}>
-					🇮🇳 India's first Non-Coding Agentic Work Harness
+				<p
+					className="text-sm text-center mb-8 leading-relaxed"
+					style={{ color: "hsl(var(--muted-foreground))" }}
+				>
+					Connect your AI accounts and start working — your credentials stay on your machine.
 				</p>
-				<p className="text-base text-center mb-2" style={{ color: "hsl(var(--muted-foreground))" }}>
-					Your Coworker, always on.
-				</p>
+
+				{/* Focused benefits — short, specific */}
+				<div className="w-full space-y-2 mb-8">
+					<BenefitRow icon={Zap} text="Works with Claude, ChatGPT, Copilot, and local models" />
+					<BenefitRow icon={Lock} text="Your API keys and data never leave this device" />
+				</div>
+
+				{/* Primary CTA */}
+				<button
+					type="button"
+					onClick={() => setStep("connect")}
+					className="w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
+					style={{
+						background: "hsl(var(--primary))",
+						color: "hsl(var(--primary-foreground))",
+					}}
+				>
+					Connect your AI
+				</button>
+
 				{appVersion && (
-					<p
-						className="text-xs text-center mb-6"
-						style={{ color: "hsl(var(--muted-foreground) / 0.5)" }}
-					>
+					<p className="text-[10px] mt-6" style={{ color: "hsl(var(--muted-foreground) / 0.4)" }}>
 						v{appVersion}
 					</p>
 				)}
-
-				{/* Feature highlights */}
-				<div className="w-full space-y-2.5 mb-8">
-					<FeatureRow
-						icon="⚡"
-						text="Connect to any AI — Claude, ChatGPT, Copilot, OpenAI, or local models"
-					/>
-					<FeatureRow icon="🧩" text="All pi extensions, skills & themes work out of the box" />
-					<FeatureRow icon="🔒" text="Your data stays local — nothing leaves your machine" />
-					<FeatureRow icon="🆓" text="100% free & open-source — no subscriptions, no caps" />
-					<FeatureRow
-						icon="👥"
-						text="Set up a minimal harness for non-technical friends & colleagues"
-					/>
-				</div>
-
-				{/* Made in India branding */}
-				<div className="w-full text-center mb-6">
-					<p className="text-[10px]" style={{ color: "hsl(var(--muted-foreground) / 0.6)" }}>
-						🇮🇳 Made in India — From India to the World 🌏
-					</p>
-					<p className="text-[9px]" style={{ color: "hsl(var(--muted-foreground) / 0.4)" }}>
-						Free for everyone 🆓 — Built on pi, the minimal agentic harness
-					</p>
-				</div>
-
-				{/* CTA */}
-				<div className="w-full space-y-3">
-					<button
-						type="button"
-						onClick={() => setStep("connect")}
-						className="block w-full text-center px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 cursor-pointer"
-						style={{
-							background: "hsl(var(--primary))",
-							color: "hsl(var(--primary-foreground))",
-						}}
-					>
-						Get Started
-					</button>
-					<button
-						type="button"
-						onClick={async () => {
-							const { invoke } = await import("@tauri-apps/api/core");
-							invoke("open_url", { url: "https://zosma.ai" }).catch(() => {
-								window.open("https://zosma.ai", "_blank");
-							});
-						}}
-						className="block w-full text-center text-xs py-1.5 cursor-pointer"
-						style={{ color: "hsl(var(--muted-foreground))" }}
-					>
-						Learn more at zosma.ai →
-					</button>
-				</div>
 			</div>
 		);
 	}
 
 	// ── Connect ─────────────────────────────────────────────────
 	return (
-		<div className="relative h-full w-full overflow-y-auto">
-			{onDismiss && (
+		<div className="flex flex-col h-full overflow-y-auto">
+			{/* Top bar: dismiss or back */}
+			<div className="flex items-center justify-between px-6 py-3 shrink-0">
 				<button
 					type="button"
-					onClick={onDismiss}
-					aria-label={hasSubscription ? "Continue" : "Skip"}
-					className="sticky top-4 float-right mr-4 z-20 text-xs font-medium px-3 py-1.5 rounded-full transition-colors cursor-pointer hover:opacity-90"
-					style={{
-						background: hasSubscription ? "hsl(var(--primary))" : "hsl(var(--muted))",
-						color: hasSubscription
-							? "hsl(var(--primary-foreground))"
-							: "hsl(var(--muted-foreground))",
+					onClick={() => {
+						setStep("splash");
+						setExpandedProvider(null);
 					}}
+					className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md transition-colors hover:bg-muted/50 cursor-pointer"
+					style={{ color: "hsl(var(--muted-foreground))" }}
 				>
-					{hasSubscription ? "Continue →" : "Skip"}
+					<ArrowLeft className="w-3.5 h-3.5" /> Back
 				</button>
-			)}
-			<div className="w-full">
-				<div className="flex flex-col items-center px-8 py-8 max-w-lg mx-auto">
-					<h1 className="text-xl font-bold mb-1" style={{ color: "hsl(var(--foreground))" }}>
-						Connect your AI
-					</h1>
-					<p className="text-sm mb-6 text-center" style={{ color: "hsl(var(--muted-foreground))" }}>
-						Choose how to connect — your credentials stay on your machine.
-					</p>
+				{onDismiss && (
+					<button
+						type="button"
+						onClick={onDismiss}
+						className="text-xs font-medium px-3 py-1.5 rounded-full transition-colors cursor-pointer hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+						style={{
+							background: hasSubscription ? "hsl(var(--primary))" : "hsl(var(--muted))",
+							color: hasSubscription
+								? "hsl(var(--primary-foreground))"
+								: "hsl(var(--muted-foreground))",
+						}}
+					>
+						{hasSubscription ? "Continue" : "Skip"}
+					</button>
+				)}
+			</div>
 
-					<div className="w-full space-y-5">
-						{/* ═══ ZONE 1: Quick Start — API Key (most prominent) ═══ */}
-						<div
-							className="rounded-xl border-2 p-4 space-y-3"
-							style={{
-								borderColor: "hsl(var(--primary) / 0.3)",
-								background: "hsl(var(--primary) / 0.05)",
-							}}
-						>
-							<div className="flex items-center gap-2">
-								<span className="text-lg">⚡</span>
-								<span className="text-sm font-semibold" style={{ color: "hsl(var(--foreground))" }}>
-									Quick Start — Paste an API Key
-								</span>
-							</div>
-							<p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-								The fastest way to start. Get a key from OpenCode Go and paste it below.
-							</p>
+			{/* Content */}
+			<div className="flex-1 px-6 pb-8 max-w-md mx-auto w-full">
+				<h1 className="text-lg font-semibold mb-1" style={{ color: "hsl(var(--foreground))" }}>
+					Connect your AI
+				</h1>
+				<p className="text-xs mb-5" style={{ color: "hsl(var(--muted-foreground))" }}>
+					Pick one option below.
+				</p>
 
+				<div className="space-y-4">
+					{/* ═══ API Key quick-start ═══ */}
+					<div
+						className="rounded-xl border p-4 space-y-3"
+						style={{
+							borderColor: "hsl(var(--border))",
+						}}
+					>
+						<div className="flex items-center gap-2">
+							<Zap className="w-4 h-4" style={{ color: "hsl(var(--primary))" }} />
+							<span className="text-sm font-medium" style={{ color: "hsl(var(--foreground))" }}>
+								API Key
+							</span>
+							<span
+								className="text-[10px] px-1.5 py-0.5 rounded font-medium ml-auto"
+								style={{
+									background: "hsl(var(--primary) / 0.1)",
+									color: "hsl(var(--primary))",
+								}}
+							>
+								fastest
+							</span>
+						</div>
+						<p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+							Paste your OpenCode Go API key to start immediately.
+						</p>
+
+						<div className="relative">
 							<input
-								type="password"
+								type={showKey ? "text" : "password"}
 								value={apiKey}
 								onChange={(e) => setApiKey(e.target.value)}
-								placeholder="OpenCode Go API key (sk-…)"
-								className="w-full px-4 py-2.5 rounded-xl border bg-transparent text-sm outline-none transition-colors"
+								placeholder="sk-…"
+								className="w-full px-3 py-2 rounded-md border bg-transparent text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
 								style={{
-									borderColor: "hsl(var(--border))",
+									borderColor: error ? "hsl(var(--destructive))" : "hsl(var(--border))",
 									color: "hsl(var(--foreground))",
 								}}
 								onKeyDown={(e) => {
@@ -256,151 +233,140 @@ export function HomeView({
 									}
 								}}
 							/>
-							{error && (
-								<p className="text-xs" style={{ color: "hsl(var(--destructive))" }}>
-									{error}
-								</p>
-							)}
-
 							<button
 								type="button"
-								disabled={!apiKey.trim() || saving}
-								onClick={handleSave}
-								className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 cursor-pointer"
-								style={{
-									background: "hsl(var(--primary))",
-									color: "hsl(var(--primary-foreground))",
-								}}
+								onClick={() => setShowKey((v) => !v)}
+								aria-label={showKey ? "Hide key" : "Show key"}
+								className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
 							>
-								{saving ? "Saving..." : "Save & Start Chatting"}
+								{showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
 							</button>
 						</div>
 
-						{/* ═══ ZONE 2: OAuth Provider Cards ═══ */}
-						<div>
-							<div className="flex items-center gap-2 mb-3">
-								<div className="flex-1 h-px" style={{ background: "hsl(var(--border))" }} />
-								<span
-									className="text-[10px] uppercase tracking-wider shrink-0"
-									style={{ color: "hsl(var(--muted-foreground))" }}
-								>
-									or sign in with a subscription
-								</span>
-								<div className="flex-1 h-px" style={{ background: "hsl(var(--border))" }} />
-							</div>
-
-							<div className="space-y-2">
-								{PROVIDERS.map((p) => {
-									const isExpanded = expandedProvider === p.id;
-									return (
-										<div
-											key={p.id}
-											className="rounded-xl border overflow-hidden transition-all"
-											style={{
-												borderColor: isExpanded
-													? "hsl(var(--primary) / 0.3)"
-													: "hsl(var(--border))",
-											}}
-										>
-											{/* Card header — always visible */}
-											<button
-												type="button"
-												onClick={() => handleProviderSelect(p.id)}
-												className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer"
-												style={{
-													background: isExpanded ? "hsl(var(--muted) / 0.2)" : "transparent",
-												}}
-											>
-												<span className="text-xl">{p.icon}</span>
-												<div className="flex-1 min-w-0">
-													<div
-														className="text-sm font-medium"
-														style={{ color: "hsl(var(--foreground))" }}
-													>
-														{p.label}
-													</div>
-													<div
-														className="text-xs"
-														style={{ color: "hsl(var(--muted-foreground))" }}
-													>
-														{p.desc}
-													</div>
-												</div>
-												<span
-													className="text-xs shrink-0"
-													style={{ color: "hsl(var(--muted-foreground))" }}
-												>
-													{isExpanded ? "▲" : "▼"}
-												</span>
-											</button>
-
-											{/* Expanded ProviderAuthSection */}
-											{isExpanded && (
-												<div className="px-4 pb-4">
-													<ProviderAuthSection provider={p.id} />
-												</div>
-											)}
-										</div>
-									);
-								})}
-							</div>
-						</div>
-
-						{/* ═══ ZONE 3: Advanced / Bring your own ═══ */}
-						<div className="text-center">
-							<p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-								Have a different provider? Use a local model, Google Gemini, or any API.
+						{error && (
+							<p
+								className="text-xs flex items-center gap-1"
+								style={{ color: "hsl(var(--destructive))" }}
+							>
+								{error}
 							</p>
-							{onSkipToSettings && (
-								<button
-									type="button"
-									onClick={onSkipToSettings}
-									className="mt-2 text-xs font-medium underline-offset-4 hover:underline cursor-pointer"
-									style={{ color: "hsl(var(--primary))" }}
-								>
-									Configure in Settings →
-								</button>
-							)}
-						</div>
+						)}
 
-						{/* Back */}
 						<button
 							type="button"
-							onClick={() => {
-								setStep("splash");
-								setExpandedProvider(null);
+							disabled={!apiKey.trim() || saving}
+							onClick={handleSave}
+							className="w-full px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
+							style={{
+								background: "hsl(var(--primary))",
+								color: "hsl(var(--primary-foreground))",
 							}}
-							className="block w-full text-center text-xs py-1 cursor-pointer"
-							style={{ color: "hsl(var(--muted-foreground))" }}
 						>
-							← Back
+							{saving ? (
+								<span className="flex items-center justify-center gap-2">
+									<span className="w-3.5 h-3.5 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin" />
+									Saving…
+								</span>
+							) : (
+								"Connect"
+							)}
 						</button>
-
-						{/* Made in India branding */}
-						<p
-							className="text-[10px] text-center pt-4"
-							style={{ color: "hsl(var(--muted-foreground) / 0.4)" }}
-						>
-							🇮🇳 Made in India — With ❤️ from Zosma AI
-						</p>
 					</div>
+
+					{/* ═══ Divider ═══ */}
+					<div className="flex items-center gap-3">
+						<div className="flex-1 h-px" style={{ background: "hsl(var(--border))" }} />
+						<span
+							className="text-[10px] uppercase tracking-wider shrink-0"
+							style={{ color: "hsl(var(--muted-foreground) / 0.7)" }}
+						>
+							or use a subscription
+						</span>
+						<div className="flex-1 h-px" style={{ background: "hsl(var(--border))" }} />
+					</div>
+
+					{/* ═══ OAuth Provider cards ═══ */}
+					<div className="space-y-1.5">
+						{PROVIDERS.map((p) => {
+							const isExpanded = expandedProvider === p.id;
+							return (
+								<div
+									key={p.id}
+									className="rounded-lg border overflow-hidden transition-all"
+									style={{
+										borderColor: isExpanded ? "hsl(var(--primary) / 0.3)" : "hsl(var(--border))",
+									}}
+								>
+									<button
+										type="button"
+										onClick={() => handleProviderSelect(p.id)}
+										className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/20 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
+										style={{
+											background: isExpanded ? "hsl(var(--muted) / 0.15)" : "transparent",
+										}}
+									>
+										<span style={{ color: "hsl(var(--foreground) / 0.6)" }}>
+											<p.icon className="w-5 h-5" />
+										</span>
+										<div className="flex-1 min-w-0">
+											<div
+												className="text-sm font-medium"
+												style={{ color: "hsl(var(--foreground))" }}
+											>
+												{p.label}
+											</div>
+										</div>
+										{isExpanded ? (
+											<ChevronUp
+												className="w-3.5 h-3.5 shrink-0"
+												style={{ color: "hsl(var(--muted-foreground) / 0.4)" }}
+											/>
+										) : (
+											<ChevronDown
+												className="w-3.5 h-3.5 shrink-0"
+												style={{ color: "hsl(var(--muted-foreground) / 0.4)" }}
+											/>
+										)}
+									</button>
+
+									{isExpanded && (
+										<div className="px-3.5 pb-3.5">
+											<ProviderAuthSection provider={p.id} />
+										</div>
+									)}
+								</div>
+							);
+						})}
+					</div>
+
+					{/* ═══ Other options ═══ */}
+					{onSkipToSettings && (
+						<div className="text-center pt-1">
+							<button
+								type="button"
+								onClick={onSkipToSettings}
+								className="text-xs font-medium underline-offset-4 hover:underline cursor-pointer"
+								style={{ color: "hsl(var(--muted-foreground))" }}
+							>
+								Use a different provider (local models, Gemini, etc.)
+							</button>
+						</div>
+					)}
 				</div>
 			</div>
 		</div>
 	);
 }
 
-/** A single feature highlight row */
-function FeatureRow({ icon, text }: { icon: string; text: string }) {
+/** A single benefit row — short, specific, value-driven */
+function BenefitRow({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
 	return (
 		<div
-			className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
-			style={{
-				background: "hsl(var(--muted) / 0.4)",
-			}}
+			className="flex items-center gap-3 px-3.5 py-2 rounded-lg"
+			style={{ background: "hsl(var(--muted) / 0.3)" }}
 		>
-			<span className="text-lg shrink-0">{icon}</span>
-			<span className="text-sm" style={{ color: "hsl(var(--foreground) / 0.85)" }}>
+			<Icon className="w-3.5 h-3.5 shrink-0" style={{ color: "hsl(var(--muted-foreground))" }} />
+			<span className="text-xs" style={{ color: "hsl(var(--foreground) / 0.8)" }}>
 				{text}
 			</span>
 		</div>

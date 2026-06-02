@@ -98,7 +98,7 @@ export function ChatMessageItem({ message, detailsExpanded }: ChatMessageProps) 
 
 	return (
 		<div
-			className="group flex gap-3 py-3 px-5 transition-colors animate-fade-in"
+			className="group flex gap-3.5 py-4 px-6 transition-colors animate-fade-in"
 			style={{
 				background: isUser ? "hsl(var(--chat-user-bg))" : "hsl(var(--chat-assistant-bg))",
 			}}
@@ -109,8 +109,8 @@ export function ChatMessageItem({ message, detailsExpanded }: ChatMessageProps) 
 					<div
 						className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-semibold"
 						style={{
-							background: "hsl(var(--chat-avatar-user-bg))",
-							color: "hsl(var(--chat-avatar-user-fg))",
+							background: "#000000",
+							color: "hsl(var(--primary))",
 						}}
 					>
 						You

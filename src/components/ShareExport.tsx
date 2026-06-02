@@ -1,4 +1,4 @@
-import { Download, Share2 } from "lucide-react";
+import { Check, Download, Share2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 interface Message {
@@ -43,62 +43,174 @@ function formatMessagesAsMarkdown(messages: Message[]): string {
 	return lines.join("\n");
 }
 
-export function ShareExport({ messages }: ShareExportProps) {
-	const [copiedExport, setCopiedExport] = useState(false);
-	const [copiedShare, setCopiedShare] = useState(false);
-	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+interface ActionButtonProps {
+	onClick: () => void;
+	confirmed: boolean;
+	disabled?: boolean;
+	icon: React.ReactNode;
+	label: string;
+	tooltip: string;
+	confirmedLabel: string;
+}
 
-	const showCopied = useCallback((type: "export" | "share") => {
-		if (type === "export") setCopiedExport(true);
-		else setCopiedShare(true);
-		if (timerRef.current) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => {
-			setCopiedExport(false);
-			setCopiedShare(false);
-		}, 2000);
-	}, []);
+function ActionButton({
+	onClick,
+	confirmed,
+	disabled,
+	icon,
+	label,
+	tooltip,
+	confirmedLabel,
+}: ActionButtonProps) {
+	const [hovered, setHovered] = useState(false);
+
+	return (
+		<div
+			className="relative"
+			onMouseEnter={() => setHovered(true)}
+			onMouseLeave={() => setHovered(false)}
+		>
+			<button
+				type="button"
+				onClick={onClick}
+				disabled={disabled}
+				className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-30"
+				style={{
+					color: confirmed ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
+					background:
+						hovered && !confirmed
+							? "hsl(var(--muted) / 0.8)"
+							: confirmed
+								? "hsl(var(--muted) / 0.6)"
+								: "transparent",
+					border: "1px solid",
+					borderColor: hovered ? "hsl(var(--border))" : "hsl(var(--border) / 0.4)",
+				}}
+			>
+				{/* Icon — swaps to Check on confirm */}
+				<span
+					className="transition-all duration-200"
+					style={{
+						opacity: confirmed ? 0 : 1,
+						transform: confirmed ? "scale(0.5)" : "scale(1)",
+						position: confirmed ? "absolute" : "relative",
+					}}
+				>
+					{icon}
+				</span>
+				<span
+					className="transition-all duration-200"
+					style={{
+						opacity: confirmed ? 1 : 0,
+						transform: confirmed ? "scale(1)" : "scale(0.5)",
+						position: confirmed ? "relative" : "absolute",
+						color: "hsl(142 60% 45%)",
+					}}
+				>
+					<Check size={12} strokeWidth={2.5} />
+				</span>
+
+				{/* Label */}
+				<span>{confirmed ? confirmedLabel : label}</span>
+			</button>
+
+			{/* Tooltip */}
+			{!confirmed && (
+				<div
+					className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 whitespace-nowrap rounded-md px-2 py-1 text-[10px] font-medium transition-all duration-150"
+					style={{
+						transform: `translateX(-50%) translateY(${hovered ? "0px" : "-4px"})`,
+						opacity: hovered ? 1 : 0,
+						background: "hsl(var(--foreground))",
+						color: "hsl(var(--background))",
+					}}
+				>
+					{tooltip}
+					<span
+						className="absolute left-1/2 -top-1 -translate-x-1/2 border-4 border-transparent"
+						style={{ borderBottomColor: "hsl(var(--foreground))" }}
+					/>
+				</div>
+			)}
+		</div>
+	);
+}
+
+export function ShareExport({ messages }: ShareExportProps) {
+	const [savedExport, setSavedExport] = useState(false);
+	const [copiedShare, setCopiedShare] = useState(false);
+	const exportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const handleExport = useCallback(async () => {
 		const markdown = formatMessagesAsMarkdown(messages);
+		const filename = `zosma-${new Date().toISOString().split("T")[0]}.md`;
+
 		try {
-			await navigator.clipboard.writeText(markdown);
-			showCopied("export");
+			// Tauri: native save-file dialog
+			const { save } = await import("@tauri-apps/plugin-dialog");
+			const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+			const path = await save({
+				defaultPath: filename,
+				filters: [{ name: "Markdown", extensions: ["md"] }],
+			});
+			if (!path) return; // user cancelled
+			await writeTextFile(path, markdown);
 		} catch {
-			// Clipboard not available
+			// Browser / test fallback: trigger a real file download
+			const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
 		}
-	}, [messages, showCopied]);
+
+		setSavedExport(true);
+		if (exportTimerRef.current) clearTimeout(exportTimerRef.current);
+		exportTimerRef.current = setTimeout(() => setSavedExport(false), 2000);
+	}, [messages]);
 
 	const handleShare = useCallback(async () => {
 		try {
 			await navigator.clipboard.writeText("https://github.com/zosmaai/zosma-cowork");
-			showCopied("share");
+			setCopiedShare(true);
+			if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
+			shareTimerRef.current = setTimeout(() => setCopiedShare(false), 2000);
 		} catch {
 			// Clipboard not available
 		}
-	}, [showCopied]);
+	}, []);
 
 	return (
-		<div className="flex items-center gap-1">
-			{messages.length > 0 && (
-				<button
-					type="button"
-					title="Export conversation"
-					onClick={handleExport}
-					className="flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-				>
-					<Download size={12} />
-					{copiedExport ? "Copied!" : "Export"}
-				</button>
-			)}
-			<button
-				type="button"
-				title="Share Zosma Cowork"
+		<div
+			className="flex items-center gap-1.5 rounded-xl px-1.5 py-1.5"
+			style={{
+				background: "hsl(var(--background) / 0.8)",
+				backdropFilter: "blur(10px)",
+				border: "1px solid hsl(var(--border) / 0.5)",
+			}}
+		>
+			<ActionButton
+				onClick={handleExport}
+				confirmed={savedExport}
+				disabled={messages.length === 0}
+				icon={<Download size={12} strokeWidth={1.75} />}
+				label="Export"
+				tooltip="Download as .md"
+				confirmedLabel="Saved!"
+			/>
+			<ActionButton
 				onClick={handleShare}
-				className="flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-			>
-				<Share2 size={12} />
-				{copiedShare ? "Copied!" : "Share"}
-			</button>
+				confirmed={copiedShare}
+				icon={<Share2 size={12} strokeWidth={1.75} />}
+				label="Share"
+				tooltip="Copy share link"
+				confirmedLabel="Copied!"
+			/>
 		</div>
 	);
 }

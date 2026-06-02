@@ -1,5 +1,15 @@
+import {
+	Dialog,
+	DialogBody,
+	DialogFooter,
+	DialogHeader,
+	DialogStagger,
+	DialogStaggerItem,
+} from "@/components/ui/dialog";
 import { trackEvent } from "@/lib/telemetry";
-import { useCallback, useEffect, useState } from "react";
+import { Bug, Check, MessageSquare, Sparkles } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 type Category = "bug" | "feature" | "general";
 
@@ -8,132 +18,171 @@ interface FeedbackDialogProps {
 	onClose: () => void;
 }
 
-const CATEGORIES: { value: Category; label: string }[] = [
-	{ value: "bug", label: "Bug Report" },
-	{ value: "feature", label: "Feature Request" },
-	{ value: "general", label: "General" },
+const CATEGORIES: { value: Category; label: string; Icon: typeof Bug }[] = [
+	{ value: "bug", label: "Bug", Icon: Bug },
+	{ value: "feature", label: "Feature", Icon: Sparkles },
+	{ value: "general", label: "General", Icon: MessageSquare },
 ];
 
+const MAX_MESSAGE = 500;
+
 export function FeedbackDialog({ open, onClose }: FeedbackDialogProps) {
+	const titleId = useId();
+	const reduced = useReducedMotion();
 	const [category, setCategory] = useState<Category>("general");
 	const [message, setMessage] = useState("");
 	const [email, setEmail] = useState("");
+	const [submitted, setSubmitted] = useState(false);
 
-	// Reset when dialog opens
 	useEffect(() => {
 		if (open) {
 			setCategory("general");
 			setMessage("");
 			setEmail("");
+			setSubmitted(false);
 		}
 	}, [open]);
 
 	const handleSubmit = useCallback(() => {
 		if (!message.trim()) return;
-		trackEvent("app_feedback", {
-			category,
-			message: message.trim(),
-		});
-		onClose();
+		trackEvent("app_feedback", { category, message: message.trim() });
+		setSubmitted(true);
+		// Brief success state before closing
+		window.setTimeout(onClose, 900);
 	}, [message, category, onClose]);
 
-	const handleOverlayClick = useCallback(
-		(e: React.MouseEvent | React.KeyboardEvent) => {
-			if ("key" in e) {
-				if (e.key === "Escape") onClose();
-			} else if (e.target === e.currentTarget) {
-				onClose();
-			}
-		},
-		[onClose],
-	);
-
-	if (!open) return null;
+	const remaining = MAX_MESSAGE - message.length;
+	const canSubmit = message.trim().length > 0 && remaining >= 0 && !submitted;
 
 	return (
-		<div
-			className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-			onClick={handleOverlayClick}
-			onKeyDown={handleOverlayClick}
-		>
-			<div className="w-full max-w-md mx-4 bg-background border border-border rounded-lg shadow-lg">
-				{/* Header */}
-				<div className="flex items-center justify-between px-4 py-3 border-b border-border">
-					<h2 className="text-sm font-semibold text-foreground">Send Feedback</h2>
-					<button
-						type="button"
-						onClick={onClose}
-						className="text-muted-foreground hover:text-foreground text-lg leading-none"
-					>
-						&times;
-					</button>
-				</div>
+		<Dialog open={open} onClose={onClose} size="md" labelledBy={titleId}>
+			<DialogHeader title="Send feedback" onClose={onClose} titleId={titleId} />
 
-				{/* Body */}
-				<div className="p-4 space-y-3">
+			<DialogBody>
+				<DialogStagger className="space-y-4">
 					{/* Category */}
-					<div>
-						<p className="text-xs font-medium text-foreground mb-1.5">Category</p>
-						<div className="flex gap-2">
-							{CATEGORIES.map((cat) => (
-								<button
-									key={cat.value}
-									type="button"
-									onClick={() => setCategory(cat.value)}
-									className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-										category === cat.value
-											? "bg-primary text-primary-foreground border-primary"
-											: "bg-background text-muted-foreground border-border hover:border-primary/50"
-									}`}
-								>
-									{cat.label}
-								</button>
-							))}
+					<DialogStaggerItem>
+						<p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+							What's this about?
+						</p>
+						<div
+							className="grid grid-cols-3 gap-1 p-1 rounded-lg"
+							style={{ background: "hsl(var(--muted) / 0.5)" }}
+							role="radiogroup"
+							aria-label="Feedback category"
+						>
+							{CATEGORIES.map(({ value, label, Icon }) => {
+								const active = category === value;
+								return (
+									<button
+										key={value}
+										type="button"
+										role="radio"
+										aria-checked={active}
+										onClick={() => setCategory(value)}
+										className="relative flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-colors active:scale-[0.97]"
+										style={{
+											color: active ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
+										}}
+									>
+										{active && (
+											<motion.div
+												layoutId="feedback-cat-pill"
+												className="absolute inset-0 rounded-md"
+												style={{
+													background: "hsl(var(--card))",
+													boxShadow: "0 1px 4px hsl(0 0% 0% / 0.12)",
+												}}
+												transition={{
+													type: "spring",
+													stiffness: 380,
+													damping: 32,
+												}}
+											/>
+										)}
+										<Icon className="w-3.5 h-3.5 relative" />
+										<span className="relative">{label}</span>
+									</button>
+								);
+							})}
 						</div>
-					</div>
+					</DialogStaggerItem>
 
 					{/* Message */}
-					<div>
-						<textarea
-							placeholder="Describe your feedback in detail..."
-							value={message}
-							onChange={(e) => setMessage(e.target.value)}
-							rows={5}
-							className="w-full px-3 py-2 text-sm bg-background border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
-						/>
-					</div>
+					<DialogStaggerItem>
+						<div className="relative">
+							<textarea
+								placeholder="Tell us what's on your mind..."
+								value={message}
+								onChange={(e) => setMessage(e.target.value)}
+								rows={5}
+								maxLength={MAX_MESSAGE}
+								disabled={submitted}
+								className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-ring transition-all placeholder:text-muted-foreground/60 disabled:opacity-60"
+							/>
+							<div className="absolute bottom-2 right-3 text-[10px] tabular-nums text-muted-foreground/60 pointer-events-none">
+								{message.length}/{MAX_MESSAGE}
+							</div>
+						</div>
+					</DialogStaggerItem>
 
 					{/* Email */}
-					<div>
+					<DialogStaggerItem>
 						<input
 							type="email"
-							placeholder="Email (optional, if you'd like a reply)"
+							placeholder="Email (optional, for follow-up)"
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
-							className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
+							disabled={submitted}
+							className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-ring transition-all placeholder:text-muted-foreground/60 disabled:opacity-60"
 						/>
-					</div>
-				</div>
+					</DialogStaggerItem>
+				</DialogStagger>
+			</DialogBody>
 
-				{/* Footer */}
-				<div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border">
-					<button
-						type="button"
-						onClick={onClose}
-						className="px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded hover:bg-muted/50 transition-colors"
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						disabled={!message.trim()}
-						onClick={handleSubmit}
-						className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-					>
-						Submit Feedback
-					</button>
-				</div>
-			</div>
-		</div>
+			<DialogFooter>
+				<button
+					type="button"
+					onClick={onClose}
+					disabled={submitted}
+					className="px-3 py-1.5 text-xs font-medium text-muted-foreground rounded-md hover:bg-muted/70 transition-colors active:scale-[0.97] disabled:opacity-50"
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					disabled={!canSubmit}
+					onClick={handleSubmit}
+					className="relative px-4 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-md transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 min-w-[110px]"
+				>
+					<AnimatePresence mode="wait" initial={false}>
+						{submitted ? (
+							<motion.span
+								key="done"
+								initial={reduced ? false : { opacity: 0, y: 4 }}
+								animate={{ opacity: 1, y: 0 }}
+								exit={{ opacity: 0, y: -4 }}
+								transition={{ duration: 0.18 }}
+								className="flex items-center justify-center gap-1.5"
+							>
+								<Check className="w-3.5 h-3.5" />
+								Sent
+							</motion.span>
+						) : (
+							<motion.span
+								key="send"
+								initial={reduced ? false : { opacity: 0, y: 4 }}
+								animate={{ opacity: 1, y: 0 }}
+								exit={{ opacity: 0, y: -4 }}
+								transition={{ duration: 0.18 }}
+								className="block"
+							>
+								Submit
+							</motion.span>
+						)}
+					</AnimatePresence>
+				</button>
+			</DialogFooter>
+		</Dialog>
 	);
 }

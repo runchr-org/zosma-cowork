@@ -22,42 +22,56 @@ describe("ShareExport", () => {
 
 	it("renders the export button", () => {
 		render(<ShareExport messages={mockMessages} />);
-		expect(screen.getByTitle("Export conversation")).toBeDefined();
+		expect(screen.getByRole("button", { name: /export/i })).toBeDefined();
 	});
 
 	it("renders the share button", () => {
 		render(<ShareExport messages={mockMessages} />);
-		expect(screen.getByTitle("Share Zosma Cowork")).toBeDefined();
+		expect(screen.getByRole("button", { name: /share/i })).toBeDefined();
 	});
 
-	it("copies markdown export to clipboard", async () => {
-		mockWriteText.mockResolvedValue(undefined);
+	it("exports markdown when Export is clicked", async () => {
+		// Stub URL.createObjectURL for the blob-download fallback path
+		const createObjectURL = vi.fn(() => "blob:mock");
+		const revokeObjectURL = vi.fn();
+		Object.defineProperty(URL, "createObjectURL", { value: createObjectURL, writable: true });
+		Object.defineProperty(URL, "revokeObjectURL", { value: revokeObjectURL, writable: true });
+
+		// Spy on anchor click so the test doesn't actually navigate
+		const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
 		render(<ShareExport messages={mockMessages} />);
-		fireEvent.click(screen.getByTitle("Export conversation"));
+		fireEvent.click(screen.getByRole("button", { name: /export/i }));
+
 		await vi.waitFor(() => {
-			expect(mockWriteText).toHaveBeenCalled();
+			expect(createObjectURL).toHaveBeenCalled();
 		});
-		const markdown = mockWriteText.mock.calls[0][0];
-		expect(markdown).toContain("# Zosma Cowork Conversation");
-		expect(markdown).toContain("**You:**");
-		expect(markdown).toContain("**Zosma:**");
-		expect(markdown).toContain("Hello");
-		expect(markdown).toContain("Hi there!");
+
+		// Verify the blob payload looks like our markdown export
+		const blob = (createObjectURL.mock.calls[0] as unknown as [Blob])[0];
+		const text = await blob.text();
+		expect(text).toContain("# Zosma Cowork Conversation");
+		expect(text).toContain("**You:**");
+		expect(text).toContain("**Zosma:**");
+		expect(text).toContain("Hello");
+		expect(text).toContain("Hi there!");
+
+		clickSpy.mockRestore();
 	});
 
-	it("copies app repo URL to clipboard", async () => {
+	it("copies app repo URL to clipboard when Share is clicked", async () => {
 		mockWriteText.mockResolvedValue(undefined);
 		render(<ShareExport messages={mockMessages} />);
-		fireEvent.click(screen.getByTitle("Share Zosma Cowork"));
+		fireEvent.click(screen.getByRole("button", { name: /share/i }));
 		await vi.waitFor(() => {
 			expect(mockWriteText).toHaveBeenCalledWith("https://github.com/zosmaai/zosma-cowork");
 		});
 	});
 
-	it("shows tooltip briefly after copy", async () => {
+	it("shows confirmation label briefly after copy", async () => {
 		mockWriteText.mockResolvedValue(undefined);
 		render(<ShareExport messages={mockMessages} />);
-		fireEvent.click(screen.getByTitle("Export conversation"));
+		fireEvent.click(screen.getByRole("button", { name: /share/i }));
 		await vi.waitFor(() => {
 			expect(screen.getByText("Copied!")).toBeDefined();
 		});

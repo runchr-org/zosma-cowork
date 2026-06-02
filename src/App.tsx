@@ -7,6 +7,7 @@ import { SettingsPage } from "@/components/SettingsPage";
 import { ShareExport } from "@/components/ShareExport";
 import { Sidebar } from "@/components/Sidebar";
 import { TelemetryConsentDialog } from "@/components/TelemetryConsentDialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { usePiStream } from "@/hooks/usePiStream";
 import { useProviders } from "@/hooks/useProviders";
@@ -66,14 +67,9 @@ function App() {
 			});
 	}, []);
 
-	// Prevent right-click context menu (no reload/inspect in the desktop app)
-	useEffect(() => {
-		function handler(e: MouseEvent) {
-			e.preventDefault();
-		}
-		document.addEventListener("contextmenu", handler);
-		return () => document.removeEventListener("contextmenu", handler);
-	}, []);
+	// Remove right-click prevention — users need copy/paste/inspect.
+	// The desktop app is a serious tool, not a locked-down kiosk.
+	// (Context menu prevention removed intentionally.)
 	const { models } = useProviders();
 	const { hasCredentials, loading: authLoading, saveApiKey } = useAuth();
 	const [showKeyEntry, setShowKeyEntry] = useState(false);
@@ -362,22 +358,31 @@ function App() {
 		setActiveSessionFile(`session-${Date.now()}.jsonl`);
 	}, [dispatch]);
 
+	const [pendingDelete, setPendingDelete] = useState<{ file: string; title: string } | null>(null);
+
 	const handleDeleteSession = useCallback(
-		async (file: string) => {
-			try {
-				await invoke("delete_session", { sessionFile: file });
-			} catch {
-				// ignore
-			}
-			setSessionEntries((prev) => prev.filter((s) => s.file !== file));
-			if (activeSessionFile === file) {
-				setActiveSessionFile(null);
-				setLoadedSessionMessages(null);
-				dispatch({ type: "RESET" });
-			}
+		(file: string) => {
+			const entry = sessionEntries.find((s) => s.file === file);
+			setPendingDelete({ file, title: entry?.title ?? "this chat" });
 		},
-		[activeSessionFile, dispatch],
+		[sessionEntries],
 	);
+
+	const handleConfirmDelete = useCallback(async () => {
+		if (!pendingDelete) return;
+		const file = pendingDelete.file;
+		try {
+			await invoke("delete_session", { sessionFile: file });
+		} catch {
+			// ignore
+		}
+		setSessionEntries((prev) => prev.filter((s) => s.file !== file));
+		if (activeSessionFile === file) {
+			setActiveSessionFile(null);
+			setLoadedSessionMessages(null);
+			dispatch({ type: "RESET" });
+		}
+	}, [pendingDelete, activeSessionFile, dispatch]);
 
 	const handleSessionSelect = useCallback(
 		async (file: string) => {
@@ -419,6 +424,23 @@ function App() {
 
 	return (
 		<div className="flex h-screen bg-background">
+			{/* Delete chat confirmation */}
+			<ConfirmDialog
+				open={pendingDelete !== null}
+				onClose={() => setPendingDelete(null)}
+				onConfirm={handleConfirmDelete}
+				title="Delete chat?"
+				description={
+					<>
+						<span className="text-foreground font-medium">“{pendingDelete?.title}”</span> will be
+						permanently removed. This can’t be undone.
+					</>
+				}
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				variant="destructive"
+			/>
+
 			{/* Telemetry consent dialog (overlays everything on first launch) */}
 			{showTelemetryConsent && (
 				<TelemetryConsentDialog
@@ -435,7 +457,7 @@ function App() {
 			)}
 
 			{/* Sidebar — desktop: visible, mobile: slide-over */}
-			{!showConnectModal && (
+			{!showConnectModal && !showSettings && (
 				<>
 					{/* Desktop sidebar */}
 					<div className="hidden md:block">
@@ -448,7 +470,10 @@ function App() {
 								handleSessionSelect(id);
 								setMobileMenuOpen(false);
 							}}
-							onNewSession={handleNewSession}
+							onNewSession={() => {
+								setSidebarView("chats");
+								handleNewSession();
+							}}
 							onDeleteSession={handleDeleteSession}
 							onChangeView={(view) => {
 								setSidebarView(view);
@@ -465,17 +490,18 @@ function App() {
 					{/* Mobile sidebar (slide-over) */}
 					<div
 						className={`md:hidden fixed inset-0 z-50 transition-opacity duration-200 ${
-							mobileMenuOpen
-								? "opacity-100 pointer-events-auto"
-								: "opacity-0 pointer-events-none"
+							mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
 						}`}
 					>
 						{/* Backdrop */}
 						<div
 							className="absolute inset-0 bg-black/50"
+							role="presentation"
 							onClick={() => setMobileMenuOpen(false)}
 							onKeyDown={(e) => {
-								if (e.key === "Escape") setMobileMenuOpen(false);
+								if (e.key === "Escape" || e.key === "Enter" || e.key === " ") {
+									setMobileMenuOpen(false);
+								}
 							}}
 						/>
 						{/* Sidebar panel */}
@@ -493,7 +519,10 @@ function App() {
 									handleSessionSelect(id);
 									setMobileMenuOpen(false);
 								}}
-								onNewSession={handleNewSession}
+								onNewSession={() => {
+									setSidebarView("chats");
+									handleNewSession();
+								}}
 								onDeleteSession={handleDeleteSession}
 								onChangeView={(view) => {
 									setSidebarView(view);
@@ -511,18 +540,22 @@ function App() {
 			)}
 
 			{/* Main content */}
-			<div className="flex-1 flex flex-col min-w-0">
+			<div className="relative flex-1 flex flex-col min-w-0">
 				{/* Remote connection status (browser mode only) */}
 				<RemoteConnectionBar />
 
 				{/* Mobile top bar */}
-				{!showConnectModal && (
+				{!showConnectModal && !showSettings && (
 					<MobileTopBar
 						title="Zosma Cowork"
-						subtitle={activeModelId ? (() => {
-							const m = models.find((mo) => mo.id === activeModelId);
-							return m?.name || activeModelId;
-						})() : undefined}
+						subtitle={
+							activeModelId
+								? (() => {
+										const m = models.find((mo) => mo.id === activeModelId);
+										return m?.name || activeModelId;
+									})()
+								: undefined
+						}
 						open={mobileMenuOpen}
 						onToggle={() => setMobileMenuOpen((prev) => !prev)}
 						onSettings={() => {
@@ -533,77 +566,73 @@ function App() {
 					/>
 				)}
 
-				{/* Header bar */}
-				{!showConnectModal && (
-					<header className="hidden md:flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
-						<div className="flex items-center gap-2">
-							<h1 className="text-sm font-semibold text-foreground">Zosma Cowork</h1>
-							<span className="text-xs text-muted-foreground">OpenCode Go</span>
-						</div>
-						<div className="flex items-center gap-2">
-							{activeModelId &&
-								(() => {
-									const m = models.find((m) => m.id === activeModelId);
-									const p = m?.provider?.split("-")[0] || "";
-									return (
-										<span className="text-xs text-muted-foreground/50 font-mono">
-											{m?.name || activeModelId}
-											{p && <span className="text-muted-foreground/30"> ({p})</span>}
-										</span>
-									);
-								})()}
-						</div>
-						<div className="flex items-center gap-2">
-							<ShareExport messages={displayMessages} />
-						</div>
-					</header>
+				{/* Floating action overlay — no layout cost */}
+				{!showConnectModal && !showSettings && (
+					<div className="hidden md:flex absolute top-2 right-3 z-10">
+						<ShareExport messages={displayMessages} />
+					</div>
 				)}
 
-				{/* Content */}
-				<main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
-					{showConnectModal ? (
-						<HomeView
-							onComplete={handleConnectComplete}
-							onSkipToSettings={handleSkipToSettings}
-							onDismiss={handleDismissConnect}
-							hasSubscription={hasSubscription}
-						/>
-					) : showSettings ? (
-						<SettingsPage
-							onClose={() => {
-								setShowSettings(false);
-								setSidebarView("chats");
-							}}
-							onShowKeyEntry={() => setShowKeyEntry(true)}
-							telemetryEnabled={telemetry.isEnabled}
-							onTelemetryToggle={(enabled) => {
-								if (enabled) telemetry.enable();
-								else telemetry.disable();
-							}}
-						/>
-					) : loadingSession ? (
-						<div className="flex-1 flex items-center justify-center">
-							<div className="text-sm text-muted-foreground">Loading session...</div>
-						</div>
-					) : (
-						<ChatView
-							messages={displayMessages}
-							streamingMessage={streamState.streamingMessage}
-							isRunning={streamState.isRunning}
-							status={streamState.status}
-							error={streamState.error}
-							onSend={handleSend}
-							onAbort={() => abortStream()}
-							onRetry={() => {
-								const lastUser = [...displayMessages].reverse().find((m) => m.role === "user");
-								if (lastUser?.content) handleSend(lastUser.content);
-							}}
-							models={models}
-							currentModelId={activeModelId}
-							onModelSelect={handleModelSelect}
-							toolPhase={toolPhase}
-						/>
-					)}
+				{/* Content with view transition key */}
+				<main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+					<div
+						key={
+							showConnectModal
+								? "connect"
+								: showSettings
+									? "settings"
+									: loadingSession
+										? "loading"
+										: "chat"
+						}
+						className="flex-1 flex flex-col min-h-0 animate-fade-in"
+					>
+						{showConnectModal ? (
+							<HomeView
+								onComplete={handleConnectComplete}
+								onSkipToSettings={handleSkipToSettings}
+								onDismiss={handleDismissConnect}
+								hasSubscription={hasSubscription}
+							/>
+						) : showSettings ? (
+							<SettingsPage
+								onClose={() => {
+									setShowSettings(false);
+									setSidebarView("chats");
+								}}
+								onShowKeyEntry={() => setShowKeyEntry(true)}
+								telemetryEnabled={telemetry.isEnabled}
+								onTelemetryToggle={(enabled) => {
+									if (enabled) telemetry.enable();
+									else telemetry.disable();
+								}}
+							/>
+						) : loadingSession ? (
+							<div className="flex-1 flex flex-col items-center justify-center gap-4">
+								<div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+								<div className="text-sm text-muted-foreground">Loading session...</div>
+							</div>
+						) : (
+							<ChatView
+								messages={displayMessages}
+								streamingMessage={streamState.streamingMessage}
+								isRunning={streamState.isRunning}
+								status={streamState.status}
+								error={streamState.error}
+								onSend={handleSend}
+								onAbort={() => abortStream()}
+								sessionKey={activeSessionFile ?? "new"}
+								onRetry={() => {
+									const lastUser = [...displayMessages].reverse().find((m) => m.role === "user");
+									if (lastUser?.content) handleSend(lastUser.content);
+								}}
+								models={models}
+								currentModelId={activeModelId}
+								onModelSelect={handleModelSelect}
+								toolPhase={toolPhase}
+							/>
+						)}
+					</div>
 				</main>
 
 				{/* Mobile bottom nav */}

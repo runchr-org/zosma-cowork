@@ -9,19 +9,17 @@ describe("MessageInput paste detection", () => {
 		cleanupMocks();
 	});
 
-	it("shows pasted image preview when pasteHandler gets image data", async () => {
+	it("shows pasted image preview when pasteHandler gets image data", () => {
 		render(<MessageInput onSend={vi.fn()} />);
-
-		// Access the textarea - the component uses usePasteDetection hook
-		// which we can test via the UI
-		expect(screen.getByPlaceholderText(/Message Zosma Cowork/)).toBeInTheDocument();
+		// Component renders with a textarea for input
+		expect(screen.getByRole("textbox")).toBeInTheDocument();
 	});
 
 	it("includes image data in prompt when sending with pasted image", async () => {
 		const onSend = vi.fn();
 		render(<MessageInput onSend={onSend} />);
 
-		const textarea = screen.getByPlaceholderText(/Message Zosma Cowork/);
+		const textarea = screen.getByRole("textbox");
 
 		// Type some text
 		const user = (await import("@testing-library/user-event")).default.setup();
