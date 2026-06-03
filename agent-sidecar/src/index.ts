@@ -1350,10 +1350,36 @@ async function main() {
 					} catch {
 						// older SDKs may not expose this — fail soft
 					}
+					// Expose the full list of providers pi-mono knows about, so the
+					// UI can offer an API-key entry for any of them (issue #150 —
+					// previously the UI hardcoded a single "opencode-go" slot).
+					// Built from modelRegistry.getAll() deduped by provider, with
+					// the registry's own displayName for pretty labels.
+					let apiKeyProviders: Array<{ id: string; displayName: string }> = [];
+					try {
+						if (!modelRegistry) throw new Error("model registry not ready");
+						const seen = new Set<string>();
+						for (const m of modelRegistry.getAll()) {
+							if (seen.has(m.provider)) continue;
+							seen.add(m.provider);
+							apiKeyProviders.push({
+								id: m.provider,
+								displayName:
+									modelRegistry.getProviderDisplayName?.(m.provider) ??
+									m.provider,
+							});
+						}
+						apiKeyProviders.sort((a, b) =>
+							a.displayName.localeCompare(b.displayName),
+						);
+					} catch {
+						// fail soft — UI will fall back to a freeform input
+						apiKeyProviders = [];
+					}
 					send({
 						type: "result",
 						id: cmd.id,
-						data: { providers, supported },
+						data: { providers, supported, apiKeyProviders },
 					});
 					break;
 				}
