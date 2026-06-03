@@ -328,8 +328,8 @@ function App() {
 
 	// ── Connect-modal handlers (passed to <HomeView>) ──
 	const handleConnectComplete = useCallback(
-		async (apiKey: string) => {
-			await saveApiKey(apiKey);
+		async (provider: string, apiKey: string) => {
+			await saveApiKey(provider, apiKey);
 			setShowKeyEntry(false);
 		},
 		[saveApiKey],

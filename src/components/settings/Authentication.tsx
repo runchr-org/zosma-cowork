@@ -1,3 +1,4 @@
+import type { AuthStatus } from "@/types/auth";
 import { invoke } from "@tauri-apps/api/core";
 import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { Check, ChevronDown, Eye, EyeOff, Key, Loader2 } from "lucide-react";
@@ -9,9 +10,6 @@ import { ClaudeIcon, GitHubIcon, OpenAIIcon } from "../BrandIcons";
 interface Props {
 	onShowKeyEntry?: () => void;
 }
-
-type AuthStatusEntry = { id: string; type: "api_key" | "oauth" | "unknown"; expires?: number };
-type AuthStatus = { providers: AuthStatusEntry[]; supported: string[] };
 type Phase = "idle" | "starting" | "waiting_browser" | "exchanging" | "done";
 
 const PROVIDERS_CONFIG = [
@@ -83,7 +81,7 @@ export function Authentication({ onShowKeyEntry: _onShowKeyEntry }: Props) {
 				))}
 
 				{/* Inline API key row */}
-				<ApiKeyRow onSaved={refreshStatus} />
+				<ApiKeyRow authStatus={authStatus} onSaved={refreshStatus} />
 			</div>
 		</section>
 	);
@@ -333,8 +331,18 @@ function AuthRow({
 
 // ─── Inline API key row ───────────────────────────────────────────
 
-function ApiKeyRow({ onSaved }: { onSaved: () => void }) {
+/** Provider id pre-selected when the user expands the API-key row. */
+const DEFAULT_API_KEY_PROVIDER = "openrouter";
+
+function ApiKeyRow({
+	authStatus,
+	onSaved,
+}: {
+	authStatus: AuthStatus | null;
+	onSaved: () => void;
+}) {
 	const [expanded, setExpanded] = useState(false);
+	const [provider, setProvider] = useState<string>("");
 	const [key, setKey] = useState("");
 	const [showKey, setShowKey] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -343,18 +351,33 @@ function ApiKeyRow({ onSaved }: { onSaved: () => void }) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const reduced = useReducedMotion();
 
+	const apiKeyProviders = useMemo(() => authStatus?.apiKeyProviders ?? [], [authStatus]);
+
+	// Once the provider list arrives, seed the picker. Prefer `openrouter`
+	// (the issue #150 trigger), else fall back to the first available.
+	useEffect(() => {
+		if (provider || apiKeyProviders.length === 0) return;
+		const preferred = apiKeyProviders.find((p) => p.id === DEFAULT_API_KEY_PROVIDER);
+		setProvider(preferred?.id ?? apiKeyProviders[0].id);
+	}, [provider, apiKeyProviders]);
+
 	// Focus input when expanded
 	useEffect(() => {
 		if (expanded) requestAnimationFrame(() => inputRef.current?.focus());
 	}, [expanded]);
 
 	const handleSave = useCallback(async () => {
-		const trimmed = key.trim();
-		if (!trimmed) return;
+		const trimmedKey = key.trim();
+		const trimmedProvider = provider.trim();
+		if (!trimmedKey) return;
+		if (!trimmedProvider) {
+			setError("Pick a provider");
+			return;
+		}
 		setSaving(true);
 		setError(null);
 		try {
-			await invoke("save_auth_key", { provider: "opencode-go", key: trimmed });
+			await invoke("save_auth_key", { provider: trimmedProvider, key: trimmedKey });
 			window.dispatchEvent(new CustomEvent("config-reload"));
 			onSaved();
 			setSaved(true);
@@ -368,7 +391,7 @@ function ApiKeyRow({ onSaved }: { onSaved: () => void }) {
 		} finally {
 			setSaving(false);
 		}
-	}, [key, onSaved]);
+	}, [key, provider, onSaved]);
 
 	return (
 		<div
@@ -410,9 +433,41 @@ function ApiKeyRow({ onSaved }: { onSaved: () => void }) {
 							style={{ borderTop: "1px solid hsl(var(--border))" }}
 						>
 							<p className="text-[11px] text-muted-foreground pt-3 pb-2.5 leading-relaxed">
-								Paste an API key for any provider configured or Keys are stored locally in your
-								system keychain.
+								Pick the provider this key belongs to. Keys are stored locally in your system
+								keychain.
 							</p>
+
+							{/* Provider picker — fixes #150 (was hardcoded to opencode-go) */}
+							<div className="mb-2">
+								<label
+									htmlFor="api-key-provider"
+									className="block text-[11px] mb-1 text-muted-foreground"
+								>
+									Provider
+								</label>
+								<select
+									id="api-key-provider"
+									value={provider}
+									onChange={(e) => setProvider(e.target.value)}
+									disabled={apiKeyProviders.length === 0}
+									className="w-full text-[12px] px-3 py-2 rounded-md border focus:outline-none transition-colors"
+									style={{
+										background: "hsl(var(--background))",
+										borderColor: "hsl(var(--border))",
+										color: "hsl(var(--foreground))",
+									}}
+								>
+									{apiKeyProviders.length === 0 ? (
+										<option value="">Loading providers…</option>
+									) : (
+										apiKeyProviders.map((p) => (
+											<option key={p.id} value={p.id}>
+												{p.displayName} — {p.id}
+											</option>
+										))
+									)}
+								</select>
+							</div>
 
 							<div className="flex gap-2">
 								{/* Input */}

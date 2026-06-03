@@ -58,9 +58,20 @@ export function useAuth() {
 		return () => window.removeEventListener("config-reload", handle);
 	}, [refresh]);
 
+	/**
+	 * Save an API key under the supplied pi-mono provider id.
+	 *
+	 * Caller MUST pass the provider the key belongs to (e.g. `openrouter`,
+	 * `anthropic`, `openai`). Previously this hardcoded `opencode-go`, which
+	 * mis-routed every key the user pasted (issue #150).
+	 */
 	const saveApiKey = useCallback(
-		async (apiKey: string) => {
-			await invoke("save_auth_key", { provider: "opencode-go", key: apiKey });
+		async (provider: string, apiKey: string) => {
+			const providerId = provider.trim();
+			if (!providerId) {
+				throw new Error("provider is required");
+			}
+			await invoke("save_auth_key", { provider: providerId, key: apiKey });
 			await refresh();
 			// Notify providers hook to reload models
 			window.dispatchEvent(new CustomEvent("config-reload"));

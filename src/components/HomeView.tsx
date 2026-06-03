@@ -8,6 +8,8 @@
  * Designed to disappear: get the user connected and into the app fast.
  */
 
+import type { ApiKeyProvider, AuthStatus } from "@/types/auth";
+import { invoke } from "@tauri-apps/api/core";
 import type { LucideIcon } from "lucide-react";
 import { ArrowLeft, ChevronDown, ChevronUp, Eye, EyeOff, Lock, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -15,11 +17,14 @@ import { ClaudeIcon, GitHubIcon, OpenAIIcon } from "./BrandIcons";
 import { ProviderAuthSection } from "./ProviderAuthSection";
 
 interface OnboardingProps {
-	onComplete: (apiKey: string) => Promise<void>;
+	onComplete: (provider: string, apiKey: string) => Promise<void>;
 	onSkipToSettings?: () => void;
 	onDismiss?: () => void;
 	hasSubscription?: boolean;
 }
+
+/** Provider id pre-selected in the API-key picker (issue #150). */
+const DEFAULT_API_KEY_PROVIDER = "openrouter";
 
 type Step = "splash" | "connect";
 
@@ -57,6 +62,8 @@ export function HomeView({
 	const [error, setError] = useState<string | null>(null);
 	const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
 	const [appVersion, setAppVersion] = useState<string | null>(null);
+	const [apiKeyProviders, setApiKeyProviders] = useState<ApiKeyProvider[]>([]);
+	const [provider, setProvider] = useState<string>("");
 
 	useEffect(() => {
 		import("@tauri-apps/api/app")
@@ -64,13 +71,47 @@ export function HomeView({
 			.catch(() => {});
 	}, []);
 
+	// Pull the provider catalog from the sidecar so the user can pick which
+	// provider their key belongs to (fixes #150 — was hardcoded opencode-go).
+	useEffect(() => {
+		let cancelled = false;
+		const load = async () => {
+			try {
+				const data = await invoke<AuthStatus>("get_auth_status");
+				if (cancelled) return;
+				const list = data.apiKeyProviders ?? [];
+				setApiKeyProviders(list);
+				setProvider((prev) => {
+					if (prev) return prev;
+					const preferred = list.find((p) => p.id === DEFAULT_API_KEY_PROVIDER);
+					return preferred?.id ?? list[0]?.id ?? "";
+				});
+			} catch {
+				// Sidecar may not be ready yet — retry happens via the
+				// `config-reload` listener below.
+			}
+		};
+		void load();
+		const handler = () => void load();
+		window.addEventListener("config-reload", handler);
+		return () => {
+			cancelled = true;
+			window.removeEventListener("config-reload", handler);
+		};
+	}, []);
+
 	const handleSave = useCallback(async () => {
-		const trimmed = apiKey.trim();
-		if (!trimmed) return;
+		const trimmedKey = apiKey.trim();
+		const trimmedProvider = provider.trim();
+		if (!trimmedKey) return;
+		if (!trimmedProvider) {
+			setError("Pick a provider for this key.");
+			return;
+		}
 		setSaving(true);
 		setError(null);
 		try {
-			await onComplete(trimmed);
+			await onComplete(trimmedProvider, trimmedKey);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Failed to save API key";
 			if (msg === "no sidecar" || msg.includes("ERR_MODULE_NOT_FOUND")) {
@@ -83,7 +124,7 @@ export function HomeView({
 		} finally {
 			setSaving(false);
 		}
-	}, [apiKey, onComplete]);
+	}, [apiKey, provider, onComplete]);
 
 	const handleProviderSelect = useCallback((id: string) => {
 		setExpandedProvider((prev) => (prev === id ? null : id));
@@ -213,8 +254,40 @@ export function HomeView({
 							</span>
 						</div>
 						<p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-							Paste your OpenCode Go API key to start immediately.
+							Pick the provider this key belongs to, paste the key, and you’re in.
 						</p>
+
+						{/* Provider picker — fixes #150 (was hardcoded to opencode-go) */}
+						<div>
+							<label
+								htmlFor="connect-provider"
+								className="block text-[10px] uppercase tracking-wider mb-1"
+								style={{ color: "hsl(var(--muted-foreground) / 0.8)" }}
+							>
+								Provider
+							</label>
+							<select
+								id="connect-provider"
+								value={provider}
+								onChange={(e) => setProvider(e.target.value)}
+								disabled={apiKeyProviders.length === 0}
+								className="w-full px-3 py-2 rounded-md border bg-transparent text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+								style={{
+									borderColor: "hsl(var(--border))",
+									color: "hsl(var(--foreground))",
+								}}
+							>
+								{apiKeyProviders.length === 0 ? (
+									<option value="">Loading providers…</option>
+								) : (
+									apiKeyProviders.map((p) => (
+										<option key={p.id} value={p.id}>
+											{p.displayName} — {p.id}
+										</option>
+									))
+								)}
+							</select>
+						</div>
 
 						<div className="relative">
 							<input
