@@ -90,6 +90,11 @@ import {
 // We bypass AuthStorage.login for openai-codex and call the underlying
 // loginOpenAICodex directly with a valid originator, then persist via
 // authStorage.set() the same way AuthStorage.login would have.
+//
+// pi-ai is kept as a direct dependency solely for this `/oauth` subpath:
+// pi-coding-agent does not re-export `loginOpenAICodex`, so we import it
+// from pi-ai directly. (pi-agent-core, by contrast, is only a transitive
+// dep of pi-coding-agent and is intentionally not declared here — see #154.)
 import { loginOpenAICodex } from "@earendil-works/pi-ai/oauth";
 import {
 	discoverExtensions,
