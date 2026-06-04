@@ -2,12 +2,26 @@
 # Requires:
 #   - AUR_SSH_KEY secret (SSH private key registered on AUR)
 #   - AUR package: zosma-cowork-bin maintained by arjun-zosma
+#
+# Triggering model — see #158:
+#   We deliberately do NOT use `on: release: [published]` because:
+#     1. The `release: published` event fires early in the Release
+#        workflow (before all matrix bundles are uploaded), so the
+#        `.deb` download below 404s.
+#     2. The `publish` job inside Release that flips the draft uses the
+#        workflow's own GITHUB_TOKEN, which by GitHub Actions policy
+#        cannot trigger downstream workflow runs anyway.
+#   `workflow_run` on the Release workflow's completion sidesteps both
+#   problems: it fires only after every matrix job + the publish job
+#   have finished, so all bundles are guaranteed to exist on the
+#   release.
 
 name: Update AUR
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       version:
@@ -21,17 +35,25 @@ jobs:
   update-aur:
     name: Publish to AUR
     runs-on: ubuntu-latest
+    # On workflow_run, only proceed if the Release workflow succeeded
+    # AND it was triggered by a tag push (head_branch is the tag name).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     steps:
       - name: Determine version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # head_branch on a tag-triggered workflow_run is the tag name (e.g., v0.14.0)
+            VERSION="${{ github.event.workflow_run.head_branch }}"
           else
             VERSION="${{ inputs.version }}"
           fi
           VERSION="${VERSION#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
 
       - name: Download .deb and compute sha256
         id: checksum

@@ -1,8 +1,17 @@
+# Trigger on Release workflow completion (not release: published) — see #158.
+# Aligns Homebrew dispatch timing with Update AUR / Update Winget so all three
+# downstream workflows fire after bundles are uploaded and never against an empty release.
 name: Notify Homebrew Tap
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to dispatch (e.g., 0.14.0)"
+        required: true
 
 permissions:
   contents: read
@@ -11,13 +20,21 @@ jobs:
   notify:
     name: Dispatch release to homebrew-tap
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     steps:
       - name: Attempt dispatch to homebrew-tap
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            VERSION="${{ github.event.workflow_run.head_branch }}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
           VERSION="${VERSION#v}"
           echo "Attempting to dispatch version ${VERSION} to zosmaai/homebrew-tap..."
 

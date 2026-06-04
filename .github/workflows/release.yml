@@ -217,19 +217,25 @@ jobs:
           releaseBody: "Download the latest Zosma Cowork release."
           # Keep the release as a draft until ALL matrix jobs finish
           # uploading their assets. The `publish` job below flips it to
-          # published, which is what fires `release: published` events.
-          # Without this, downstream workflows (Update AUR, Update Winget,
-          # Notify Homebrew Tap) trigger immediately when the FIRST matrix
-          # job creates the release — long before any .deb/.msi/.dmg has
-          # actually been uploaded — and curl-ing the assets 404s. See #145.
+          # published once every bundle is attached so end users never see
+          # an empty release tag page.
+          #
+          # NOTE: Downstream workflows (Update AUR, Update Winget,
+          # Notify Homebrew Tap) do NOT rely on the `release: published`
+          # event — they trigger on this workflow's completion via
+          # `workflow_run`. See #158: GITHUB_TOKEN-driven `gh release
+          # edit --draft=false` does not start new workflow runs, so the
+          # old `release: published` fan-out raced asset upload.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
 
-  # Single follow-up job that flips the draft release published once every
-  # matrix build has uploaded its bundles. This is the event that fans out
-  # to Update AUR / Update Winget / Notify Homebrew Tap — with assets
-  # actually in place, so their download steps succeed.
+  # Single follow-up job that flips the draft release to published once
+  # every matrix build has uploaded its bundles. This is purely for the
+  # human-visible release tag page — downstream packaging workflows
+  # (Update AUR / Update Winget / Notify Homebrew Tap) hook into this
+  # entire workflow's completion via `workflow_run`, NOT into the
+  # release-published event.
   publish:
     name: Publish release
     runs-on: ubuntu-latest
