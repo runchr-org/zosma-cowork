@@ -752,6 +752,11 @@ async function main() {
 	// Defaults
 	let zosmaDir = defaultZosmaDir();
 	let activePromptId: string | null = null;
+	// Serializes prompt execution WITHOUT blocking the stdin read loop. Prompts
+	// are chained onto this promise so two never run concurrently, but the loop
+	// returns immediately after scheduling so `abort` (and the next prompt) stay
+	// readable mid-generation. See runPromptTask + the "prompt" command handler.
+	let promptChain: Promise<void> = Promise.resolve();
 
 	// In-flight OAuth login (only one at a time). Holds the AbortController so
 	// `cancel_oauth` can interrupt the SDK's loopback callback server, and the
@@ -913,6 +918,97 @@ async function main() {
 		log("Sidecar ready — %d models available", models.length);
 	}
 
+	/// Runs one prompt to completion. Extracted from the "prompt" command so it
+	/// can be scheduled on promptChain instead of being awaited inline in the
+	/// stdin read loop. Awaiting inline blocked the loop for the entire
+	/// generation, so a desktop `abort` (delivered over stdin) could not be read
+	/// until the prompt finished — making "stop" a no-op mid-generation and
+	/// queuing the next prompt behind the 10-minute auto-abort timeout.
+	async function runPromptTask(cmd: {
+		id: string;
+		text: string;
+		_origin?: string;
+	}): Promise<void> {
+		const activeSession = session;
+		if (!activeSession) {
+			send({ type: "error", id: cmd.id, message: "Not initialized" });
+			send({ type: "done", id: cmd.id });
+			return;
+		}
+		const promptModel = activeSession.model;
+		log("prompt: using model %s/%s", promptModel?.provider, promptModel?.id);
+		activePromptId = cmd.id;
+
+		// Auto-abort timeout: prevents the UI from staying in "thinking" state
+		// indefinitely when a prompt hangs (e.g. streaming request interrupted,
+		// API unresponsive, tool loop stuck). The timeout calls
+		// session.abort() which triggers the agent's abort signal, cancelling
+		// the active streaming request or tool execution. The agent loop then
+		// terminates with "aborted" stop reason and session.prompt() resolves,
+		// allowing the "done" event to be sent.
+		const abortTimeout = setTimeout(() => {
+			log("prompt: timeout after %dms — aborting session", PROMPT_TIMEOUT_MS);
+			try {
+				activeSession.abort();
+			} catch {
+				// ignore if session already completed
+			}
+		}, PROMPT_TIMEOUT_MS);
+
+		const isRemote = cmd._origin === "remote";
+
+		try {
+			await activeSession.prompt(cmd.text);
+		} catch (err) {
+			// Surface SDK errors back to the UI instead of swallowing them
+			// silently with just a "done" event.
+			const msg = err instanceof Error ? err.message : String(err);
+			log("prompt: %s", msg);
+			send({ type: "error", id: cmd.id, message: msg });
+		} finally {
+			clearTimeout(abortTimeout);
+			send({ type: "done", id: cmd.id });
+			activePromptId = null;
+
+			// Persist session to shared store so the desktop UI sees it
+			if (isRemote && activeSession) {
+				try {
+					if (
+						activeSession.agent?.state?.messages &&
+						Array.isArray(activeSession.agent.state.messages)
+					) {
+						// Create session ID on first remote prompt
+						if (!remoteSessionFile) {
+							remoteSessionFirstTs = Date.now();
+							remoteSessionFile = `remote-${remoteSessionFirstTs}`;
+						}
+
+						const chatMessages = extractChatMessages(
+							activeSession.agent.state.messages as unknown[],
+						);
+						if (chatMessages.length > 0) {
+							saveSession(
+								zosmaDir,
+								remoteSessionFile,
+								"Remote Chat",
+								chatMessages,
+								activeSession.model?.id,
+								activeSession.model?.provider,
+							);
+							log(
+								"Saved remote session: %s (%d messages)",
+								remoteSessionFile,
+								chatMessages.length,
+							);
+						}
+					}
+				} catch (err) {
+					log("Failed to save remote session: %s", err);
+				}
+			}
+		}
+	}
+
 	/// Processes a single command through the sidecar's command switch.
 	/// Extracted so both stdin lines and queued remote commands use the
 	/// same dispatch logic.
@@ -951,84 +1047,25 @@ async function main() {
 						send({ type: "error", id: cmd.id, message: "Not initialized" });
 						break;
 					}
-					const promptModel = session.model;
-					log("prompt: using model %s/%s", promptModel?.provider, promptModel?.id);
-					activePromptId = cmd.id;
-
-					// Auto-abort timeout: prevents the UI from staying in "thinking"
-					// state indefinitely when a prompt hangs (e.g. streaming request
-					// interrupted, API unresponsive, tool loop stuck). The timeout
-					// calls session.abort() which triggers the agent's abort signal,
-					// cancelling the active streaming request or tool execution. The
-					// agent loop then terminates with "aborted" stop reason and
-					// session.prompt() resolves, allowing the "done" event to be sent.
-					const abortTimeout = setTimeout(() => {
-						log(
-							"prompt: timeout after %dms — aborting session",
-							PROMPT_TIMEOUT_MS,
-						);
-						// Abort the active agent run (cancels streaming HTTP request
-						// or tool execution). The agent loop will detect the abort
-						// signal and terminate with "aborted" stop reason.
-						try {
-							session!.abort();
-						} catch {
-							// ignore if session already completed
-						}
-					}, PROMPT_TIMEOUT_MS);
-
-					const isRemote = cmd._origin === "remote";
-
-					try {
-						await session.prompt(cmd.text);
-					} catch (err) {
-						// Surface SDK errors back to the UI instead of swallowing them
-						// silently with just a "done" event.
-						const msg = err instanceof Error ? err.message : String(err);
-						log("prompt: %s", msg);
-						send({ type: "error", id: cmd.id, message: msg });
-					} finally {
-						clearTimeout(abortTimeout);
-						send({ type: "done", id: cmd.id });
-						activePromptId = null;
-
-						// Persist session to shared store so the desktop UI sees it
-						if (isRemote && session) {
-							try {
-								if (
-									session.agent?.state?.messages &&
-									Array.isArray(session.agent.state.messages)
-								) {
-									// Create session ID on first remote prompt
-									if (!remoteSessionFile) {
-										remoteSessionFirstTs = Date.now();
-										remoteSessionFile = `remote-${remoteSessionFirstTs}`;
-									}
-
-									const chatMessages = extractChatMessages(
-										session.agent.state.messages as unknown[],
-									);
-									if (chatMessages.length > 0) {
-										saveSession(
-											zosmaDir,
-											remoteSessionFile,
-											"Remote Chat",
-											chatMessages,
-											session.model?.id,
-											session.model?.provider,
-										);
-										log(
-											"Saved remote session: %s (%d messages)",
-											remoteSessionFile,
-											chatMessages.length,
-										);
-									}
-								}
-							} catch (err) {
-								log("Failed to save remote session: %s", err);
-							}
-						}
-					}
+					// Schedule on the serialized chain but DO NOT await here — awaiting
+					// inside the stdin read loop would block it for the whole
+					// generation, so a desktop `abort` (sent over stdin) could not be
+					// read until the prompt finished. By scheduling and returning, the
+					// loop keeps reading stdin: `abort` is dispatched immediately
+					// (calls session.abort()), and the next prompt runs only after this
+					// one settles (the chain serializes prompts so two never overlap).
+					const promptCmd = cmd;
+					promptChain = promptChain
+						.then(() => runPromptTask(promptCmd))
+						.catch((err: unknown) => {
+							// runPromptTask handles its own errors; this is a defensive
+							// guard so a thrown task never breaks the chain for later
+							// prompts.
+							const msg = err instanceof Error ? err.message : String(err);
+							log("prompt task error: %s", msg);
+							send({ type: "error", id: promptCmd.id, message: msg });
+							send({ type: "done", id: promptCmd.id });
+						});
 					break;
 				}
 
