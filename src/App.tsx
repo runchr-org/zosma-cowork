@@ -15,22 +15,9 @@ import { useProviders } from "@/hooks/useProviders";
 import { useTelemetry } from "@/hooks/useTelemetry";
 import { trackEvent } from "@/lib/telemetry";
 import type { ChatMessage } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-/**
- * True when running inside the Tauri desktop shell (vs. remote/browser mode).
- * The native `ready` event and the sidecar boot delay only exist in Tauri, so
- * the startup splash gating (#169) is scoped to it.
- */
-function isTauri(): boolean {
-	try {
-		return !!(window as unknown as { __TAURI__?: unknown }).__TAURI__;
-	} catch {
-		return false;
-	}
-}
 
 interface SessionEntry {
 	file: string;
