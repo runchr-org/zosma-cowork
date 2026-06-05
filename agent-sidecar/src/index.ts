@@ -668,12 +668,26 @@ function restoreSessionContext(
 				contentArr.push({ type: "text", text: content });
 			}
 
+			// pi-ai's AssistantMessage requires usage/stopReason/api fields.
+			// Without them, AgentSession.prompt() -> _checkCompaction() ->
+			// calculateContextTokens(usage) throws on undefined usage, which
+			// aborts the very next prompt in a restored session (no LLM response).
 			piMessages.push({
 				role: "assistant",
 				content: contentArr,
 				timestamp,
-				model,
-				provider,
+				model: model || "",
+				provider: provider || "",
+				api: provider || "",
+				stopReason: "stop",
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
 			});
 
 			// Append tool result messages for completed tool calls
