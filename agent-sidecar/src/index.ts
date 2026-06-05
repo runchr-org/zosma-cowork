@@ -420,6 +420,20 @@ function zosmaAgentDir(zosmaDir: string): string {
 	return join(zosmaDir, "cowork");
 }
 
+/**
+ * pi's canonical agent directory (~/.pi/agent).
+ *
+ * Zosma Cowork wraps pi-coding-agent, so it shares pi's resources:
+ * extensions, skills, prompts, and themes are discovered from (and
+ * installed into) pi's own dirs rather than a private cowork silo. This
+ * keeps the GUI and the pi CLI in sync — anything installed in one shows
+ * up in the other. Cowork-private app state (auth, models, sessions,
+ * settings) stays under ~/.zosmaai/cowork via zosmaAgentDir(). See #147.
+ */
+function piAgentDir(): string {
+	return join(homedir(), ".pi", "agent");
+}
+
 function ensureDir(dir: string): void {
 	if (!existsSync(dir)) {
 		mkdirSync(dir, { recursive: true });
@@ -810,8 +824,14 @@ async function main() {
 			},
 		});
 
-		// Resource loader — discovers extensions, skills, prompts from
-		// the zosma agent dir. Also takes the vendored pi-anthropic-messages
+		// Resource loader — discovers extensions, skills, prompts, and themes
+		// from pi's agent dir (~/.pi/agent), NOT the cowork-private dir. Cowork
+		// is a GUI wrapper over pi-coding-agent, so it shares pi's resources:
+		// extensions installed via the pi CLI (or dropped into
+		// ~/.pi/agent/extensions) are picked up here, and cowork's own installs
+		// land in the same place (see extension-manager.ts). Closes #147.
+		//
+		// Also takes the vendored pi-anthropic-messages
 		// bridge as an inline factory so we don't depend on pi's disk-based
 		// extension discovery (which needs jiti + a node_modules tree to
 		// resolve `typebox`, neither of which is available in our bundled
@@ -833,9 +853,12 @@ async function main() {
 		// APPEND_SYSTEM.md the loader would otherwise pick up from
 		// ~/.zosmaai/agent (or pi's own dirs) — those files are meant for
 		// pi CLI users, not Zosma's bundled sidecar.
+		const piResourceDir = piAgentDir();
+		ensureDir(piResourceDir);
 		resourceLoader = new DefaultResourceLoader({
 			cwd: process.cwd(),
-			agentDir,
+			// Discover shared pi resources from ~/.pi/agent (not the cowork dir).
+			agentDir: piResourceDir,
 			settingsManager,
 			extensionFactories: [piAnthropicMessages, zosmaOfficeDocs],
 			systemPromptOverride: () => ZOSMA_SYSTEM_PROMPT,
@@ -1668,14 +1691,22 @@ async function main() {
 				// ── skills: list installed ───────────────────────────────────
 				case "list_skills": {
 					try {
-						// Read from global (~/.agents/skills/) and local (./agents/skills/) dirs
+						// Cowork wraps pi, so surface the same skill dirs pi loads:
+						// pi's global skills (~/.pi/agent/skills/), the shared agents
+						// dir (~/.agents/skills/), and project-local (./.agents/skills/).
+						// See #147.
 						const skills: Array<{ name: string; path: string; scope: string; agents: string[] }> = [];
 						const seen = new Set<string>();
 
+						const piSkillsDir = join(homedir(), ".pi", "agent", "skills");
 						const globalDir = join(homedir(), ".agents", "skills");
 						const localDir = join(process.cwd(), ".agents", "skills");
 
-						for (const [scope, dir] of [["global", globalDir], ["project", localDir]] as const) {
+						for (const [scope, dir] of [
+							["global", piSkillsDir],
+							["global", globalDir],
+							["project", localDir],
+						] as const) {
 							if (existsSync(dir)) {
 								for (const entry of readdirSync(dir)) {
 									const fullPath = join(dir, entry);

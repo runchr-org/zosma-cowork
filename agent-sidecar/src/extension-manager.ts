@@ -74,18 +74,35 @@ function defaultZosmaDir(): string {
 	return join(homedir(), ".zosmaai");
 }
 
-function extensionsDir(zosmaDir: string): string {
-	// Must match pi's DefaultResourceLoader agentDir + "/extensions"
-	// Currently agentDir = join(zosmaDir, "cowork")
-	return join(zosmaDir, "cowork", "extensions");
+/**
+ * pi's canonical agent directory (~/.pi/agent).
+ *
+ * Zosma Cowork is a GUI wrapper over pi-coding-agent, so skills and
+ * extensions are *shared* with the pi CLI: discovered from and installed
+ * into pi's own dirs instead of a private cowork silo. This is why the
+ * `zosmaDir` argument below is intentionally ignored for resource paths —
+ * the storage location is pi's, not cowork's. See issue #147.
+ */
+function piAgentDir(): string {
+	return join(homedir(), ".pi", "agent");
 }
 
-function registryFile(zosmaDir: string): string {
-	return join(zosmaDir, "cowork", "extensions.json");
+function extensionsDir(_zosmaDir: string): string {
+	// Must match the agentDir passed to pi's DefaultResourceLoader in the
+	// sidecar (~/.pi/agent), so installed extensions are discovered + loaded.
+	return join(piAgentDir(), "extensions");
 }
 
-function settingsFile(zosmaDir: string): string {
-	return join(zosmaDir, "cowork", "settings.json");
+function registryFile(_zosmaDir: string): string {
+	// Cowork-owned install registry, kept alongside pi's resources. Named
+	// distinctly so it never collides with pi's own settings.json.
+	return join(piAgentDir(), "cowork-extensions.json");
+}
+
+function settingsFile(_zosmaDir: string): string {
+	// pi's real settings.json — its `packages` array is surfaced as
+	// installed extensions in discoverExtensions().
+	return join(piAgentDir(), "settings.json");
 }
 
 function ensureDir(dir: string): void {
@@ -108,7 +125,7 @@ function loadRegistry(zosmaDir: string): ExtensionRegistry {
 
 function saveRegistry(zosmaDir: string, registry: ExtensionRegistry): void {
 	const fp = registryFile(zosmaDir);
-	ensureDir(join(zosmaDir, "agent"));
+	ensureDir(piAgentDir());
 	writeFileSync(fp, JSON.stringify(registry, null, 2), "utf-8");
 }
 
