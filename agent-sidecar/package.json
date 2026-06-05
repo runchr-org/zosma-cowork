@@ -12,8 +12,11 @@
 		"test": "vitest run --config vitest.config.ts"
 	},
 	"dependencies": {
+		"@earendil-works/pi-agent-core": "^0.74.0",
 		"@earendil-works/pi-ai": "^0.74.0",
 		"@earendil-works/pi-coding-agent": "^0.74.0",
+		"@earendil-works/pi-tui": "^0.74.0",
+		"jiti": "^2.7.0",
 		"typebox": "^1.1.24"
 	},
 	"devDependencies": {

@@ -75,6 +75,7 @@ Guidelines:
 import {
 	AuthStorage,
 	DefaultResourceLoader,
+	type ExtensionFactory,
 	ModelRegistry,
 	SessionManager,
 	SettingsManager,
@@ -91,10 +92,12 @@ import {
 // loginOpenAICodex directly with a valid originator, then persist via
 // authStorage.set() the same way AuthStorage.login would have.
 //
-// pi-ai is kept as a direct dependency solely for this `/oauth` subpath:
+// pi-ai is kept as a direct dependency for this `/oauth` subpath:
 // pi-coding-agent does not re-export `loginOpenAICodex`, so we import it
-// from pi-ai directly. (pi-agent-core, by contrast, is only a transitive
-// dep of pi-coding-agent and is intentionally not declared here — see #154.)
+// from pi-ai directly. (pi-ai, pi-agent-core and pi-tui are ALSO declared as
+// direct deps now because disk-extension-loader.ts statically imports them to
+// build the extension `virtualModules` map — see #147. This supersedes the
+// earlier #154 note that pi-agent-core was intentionally undeclared.)
 import { loginOpenAICodex } from "@earendil-works/pi-ai/oauth";
 import {
 	discoverExtensions,
@@ -113,11 +116,16 @@ import { extractChatMessages } from "./extract-chat-messages.js";
 // fingerprinted by Anthropic as a "third-party app" and rejected with a
 // 400 invalid_request_error pointing at claude.ai/settings/usage. The
 // bridge rewrites the system prompt and tool names so requests pass as
-// canonical Claude CLI traffic. esbuild inlines this module into our
-// bundle; we never depend on jiti / typebox at runtime.
+// canonical Claude CLI traffic. esbuild inlines this module into our bundle.
 import piAnthropicMessages from "./vendor/anthropic-messages/extensions/index.js";
 // Zosma Office Document Generation extension — registers 8 OfficeCLI tools.
 import zosmaOfficeDocs from "./office-docs/extension.js";
+// Loads pi's disk/npm/git extensions via virtualModules-backed jiti so they
+// work in the bundled sidecar (no node_modules beside it). See #147.
+import {
+	buildExtensionFactories,
+	readPiPackages,
+} from "./disk-extension-loader.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -418,6 +426,20 @@ function defaultZosmaDir(): string {
 
 function zosmaAgentDir(zosmaDir: string): string {
 	return join(zosmaDir, "cowork");
+}
+
+/**
+ * pi's canonical agent directory (~/.pi/agent).
+ *
+ * Zosma Cowork wraps pi-coding-agent, so it shares pi's resources:
+ * extensions, skills, prompts, and themes are discovered from (and
+ * installed into) pi's own dirs rather than a private cowork silo. This
+ * keeps the GUI and the pi CLI in sync — anything installed in one shows
+ * up in the other. Cowork-private app state (auth, models, sessions,
+ * settings) stays under ~/.zosmaai/cowork via zosmaAgentDir(). See #147.
+ */
+function piAgentDir(): string {
+	return join(homedir(), ".pi", "agent");
 }
 
 function ensureDir(dir: string): void {
@@ -809,13 +831,27 @@ async function main() {
 				},
 			},
 		});
+		// Share pi's installed packages (~/.pi/agent/settings.json `packages`) so
+		// the resource loader resolves pi's npm/git/local skills, prompts and
+		// themes — and so we can resolve pi's extensions below. Cowork wraps pi
+		// and surfaces the same resources. See #147.
+		const piPackages = readPiPackages(piAgentDir());
+		if (piPackages.length > 0) {
+			settingsManager.setPackages(piPackages);
+		}
 
-		// Resource loader — discovers extensions, skills, prompts from
-		// the zosma agent dir. Also takes the vendored pi-anthropic-messages
-		// bridge as an inline factory so we don't depend on pi's disk-based
-		// extension discovery (which needs jiti + a node_modules tree to
-		// resolve `typebox`, neither of which is available in our bundled
-		// sidecar).
+		// Resource loader — discovers extensions, skills, prompts, and themes
+		// from pi's agent dir (~/.pi/agent), NOT the cowork-private dir. Cowork
+		// is a GUI wrapper over pi-coding-agent, so it shares pi's resources:
+		// extensions installed via the pi CLI (or dropped into
+		// ~/.pi/agent/extensions) are picked up here, and cowork's own installs
+		// land in the same place (see extension-manager.ts). Closes #147.
+		//
+		// The vendored pi-anthropic-messages bridge and Zosma office-docs
+		// extension are passed as inline factories; pi's disk/npm/git extensions
+		// are loaded via disk-extension-loader.ts (virtualModules-backed jiti)
+		// since the bundled sidecar has no node_modules for pi's native loader
+		// to resolve extension deps against (#147).
 		//
 		// Brand the system prompt as Zosma Cowork (closes #112). Without
 		// `systemPromptOverride`, pi-coding-agent's default
@@ -833,11 +869,51 @@ async function main() {
 		// APPEND_SYSTEM.md the loader would otherwise pick up from
 		// ~/.zosmaai/agent (or pi's own dirs) — those files are meant for
 		// pi CLI users, not Zosma's bundled sidecar.
+		const piResourceDir = piAgentDir();
+		ensureDir(piResourceDir);
+
+		// Load pi's disk/npm/git extensions ourselves, via virtualModules-backed
+		// jiti (see disk-extension-loader.ts). The shipped sidecar is a single
+		// esbuild bundle with no node_modules, so pi's native loader cannot
+		// resolve extension deps and every extension fails silently (#147). We
+		// resolve entry paths with pi's own package manager and load them with
+		// the bundled package copies. This path is used in dev too (tsx) for
+		// dev/prod parity. `noExtensions: true` below stops the resource loader
+		// from also trying (and failing) to load them.
+		let diskExtensionFactories: ExtensionFactory[] = [];
+		try {
+			const built = await buildExtensionFactories({
+				cwd: process.cwd(),
+				agentDir: piResourceDir,
+				settingsManager,
+			});
+			diskExtensionFactories = built.factories;
+			log(
+				`loading ${built.paths.length} pi extension(s) via virtualModules: ${
+					built.paths.join(", ") || "(none)"
+				}`,
+			);
+		} catch (err) {
+			log(
+				`failed to resolve pi extensions: ${
+					err instanceof Error ? err.message : String(err)
+				}`,
+			);
+		}
+
 		resourceLoader = new DefaultResourceLoader({
 			cwd: process.cwd(),
-			agentDir,
+			// Discover shared pi resources from ~/.pi/agent (not the cowork dir).
+			agentDir: piResourceDir,
 			settingsManager,
-			extensionFactories: [piAnthropicMessages, zosmaOfficeDocs],
+			// We load ALL extensions ourselves (vendored inline + pi's disk/npm
+			// extensions via jiti). Skills/prompts/themes still load normally.
+			noExtensions: true,
+			extensionFactories: [
+				piAnthropicMessages,
+				zosmaOfficeDocs,
+				...diskExtensionFactories,
+			],
 			systemPromptOverride: () => ZOSMA_SYSTEM_PROMPT,
 			appendSystemPromptOverride: () => [],
 		});
@@ -1668,14 +1744,22 @@ async function main() {
 				// ── skills: list installed ───────────────────────────────────
 				case "list_skills": {
 					try {
-						// Read from global (~/.agents/skills/) and local (./agents/skills/) dirs
+						// Cowork wraps pi, so surface the same skill dirs pi loads:
+						// pi's global skills (~/.pi/agent/skills/), the shared agents
+						// dir (~/.agents/skills/), and project-local (./.agents/skills/).
+						// See #147.
 						const skills: Array<{ name: string; path: string; scope: string; agents: string[] }> = [];
 						const seen = new Set<string>();
 
+						const piSkillsDir = join(homedir(), ".pi", "agent", "skills");
 						const globalDir = join(homedir(), ".agents", "skills");
 						const localDir = join(process.cwd(), ".agents", "skills");
 
-						for (const [scope, dir] of [["global", globalDir], ["project", localDir]] as const) {
+						for (const [scope, dir] of [
+							["global", piSkillsDir],
+							["global", globalDir],
+							["project", localDir],
+						] as const) {
 							if (existsSync(dir)) {
 								for (const entry of readdirSync(dir)) {
 									const fullPath = join(dir, entry);
