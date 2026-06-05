@@ -1460,7 +1460,40 @@ async function main() {
 						const content = readFileSync(filePath, "utf-8");
 						const header = JSON.parse(content.trim().split("\n")[0]);
 
-						// Restore messages into pi-mono session so agent has context
+						// Resume semantics (like pi's /resume): reload the pi session
+						// so newly added extensions/skills/prompts are picked up
+						// without restarting the app, then continue the saved
+						// conversation inside the reloaded session.
+						//
+						// Extensions/skills are bound at session-creation time, so the
+						// currently-active session can't see resources added after it
+						// was built. We re-scan the loader and rebuild the session.
+						// Unlike the `reload` command we do NOT call initAgent(): that
+						// re-emits `ready` and would reset the frontend model selection.
+						if (authStorage && modelRegistry && settingsManager && resourceLoader) {
+							// 1. Re-scan disk for newly added extensions/skills/prompts.
+							await resourceLoader.reload();
+							// 2. Rebuild the session from the reloaded loader.
+							if (session) {
+								session.abort();
+							}
+							const resumedSessionManager = SessionManager.inMemory();
+							const resumed = await createAgentSession({
+								authStorage,
+								modelRegistry,
+								sessionManager: resumedSessionManager,
+								settingsManager,
+								resourceLoader,
+							});
+							session = resumed.session;
+							sessionManager = resumedSessionManager;
+							// Re-subscribe so the rebuilt session's events reach stdout.
+							session.subscribe((event) => {
+								send({ type: "event", event });
+							});
+						}
+
+						// 3. Restore the saved conversation into the reloaded session.
 						if (session && Array.isArray(messages) && messages.length > 0) {
 							restoreSessionContext(session, messages);
 						}
