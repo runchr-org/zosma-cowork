@@ -6,6 +6,7 @@ import { RemoteConnectionBar } from "@/components/RemoteConnectionBar";
 import { SettingsPage } from "@/components/SettingsPage";
 import { ShareExport } from "@/components/ShareExport";
 import { Sidebar } from "@/components/Sidebar";
+import { SplashScreen } from "@/components/SplashScreen";
 import { TelemetryConsentDialog } from "@/components/TelemetryConsentDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,6 +18,19 @@ import type { ChatMessage } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+/**
+ * True when running inside the Tauri desktop shell (vs. remote/browser mode).
+ * The native `ready` event and the sidecar boot delay only exist in Tauri, so
+ * the startup splash gating (#169) is scoped to it.
+ */
+function isTauri(): boolean {
+	try {
+		return !!(window as unknown as { __TAURI__?: unknown }).__TAURI__;
+	} catch {
+		return false;
+	}
+}
 
 interface SessionEntry {
 	file: string;
@@ -72,6 +86,13 @@ function App() {
 	// (Context menu prevention removed intentionally.)
 	const { models } = useProviders();
 	const { hasCredentials, loading: authLoading, saveApiKey } = useAuth();
+	// Whether the agent sidecar has finished booting. Until it has,
+	// `has_credentials` always resolves to false (see src-tauri lib.rs), so we
+	// can't yet tell authenticated users apart from new ones. We track this to
+	// show a loading splash instead of flashing the onboarding screen (#169).
+	// In remote/browser mode (no Tauri) the server is already up at page load
+	// and the native `ready` event never fires, so we start ready there.
+	const [sidecarReady, setSidecarReady] = useState(() => !isTauri());
 	const [showKeyEntry, setShowKeyEntry] = useState(false);
 	// User explicitly chose "configure in Settings" — bypass the Connect
 	// modal even without stored credentials.
@@ -92,7 +113,40 @@ function App() {
 	const [loadedSessionMessages, setLoadedSessionMessages] = useState<ChatMessage[] | null>(null);
 	const [loadingSession, setLoadingSession] = useState(false);
 
+	// ── Sidecar readiness: drives the startup splash (#169) ──
+	// Listen for the Tauri `ready` event, plus a timeout fallback so the
+	// splash never hangs forever if the sidecar fails to start.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let mounted = true;
+		let unlisten: (() => void) | undefined;
+		(async () => {
+			const u = await listen("ready", () => {
+				if (mounted) setSidecarReady(true);
+			});
+			if (!mounted) {
+				u();
+				return;
+			}
+			unlisten = u;
+		})();
+		// Fallback: stop waiting after 20s and let the normal UI take over.
+		const timeout = setTimeout(() => {
+			if (mounted) setSidecarReady(true);
+		}, 20_000);
+		return () => {
+			mounted = false;
+			clearTimeout(timeout);
+			unlisten?.();
+		};
+	}, []);
+
 	const needsOnboarding = authLoading === false && !hasCredentials;
+	// While the sidecar is still booting we can't determine credentials, so
+	// show a loading splash rather than the onboarding/Welcome screen. Keeping
+	// `authLoading` in the condition avoids a one-frame onboarding flash during
+	// the credentials re-check that fires right after the sidecar becomes ready.
+	const initializing = !sidecarReady && (authLoading || hasCredentials !== true);
 	// Whether to render the Connect / API-key modal. Either we're forcing
 	// it (initial onboarding, unless the user explicitly skipped) or the
 	// user opened "Change API Key" from Settings.
@@ -414,6 +468,11 @@ function App() {
 			: loadedSessionMessages
 		: streamState.messages;
 
+	// Hide the app chrome (sidebar, mobile bars, share button) whenever the
+	// main pane is showing a full-screen state: onboarding, settings, or the
+	// startup loading splash (#169).
+	const hideChrome = showConnectModal || showSettings || initializing;
+
 	const sidebarSessions = sessionEntries.map((s) => ({
 		id: s.file,
 		title: s.title,
@@ -457,7 +516,7 @@ function App() {
 			)}
 
 			{/* Sidebar — desktop: visible, mobile: slide-over */}
-			{!showConnectModal && !showSettings && (
+			{!hideChrome && (
 				<>
 					{/* Desktop sidebar */}
 					<div className="hidden md:block">
@@ -545,7 +604,7 @@ function App() {
 				<RemoteConnectionBar />
 
 				{/* Mobile top bar */}
-				{!showConnectModal && !showSettings && (
+				{!hideChrome && (
 					<MobileTopBar
 						title="Zosma Cowork"
 						subtitle={
@@ -567,7 +626,7 @@ function App() {
 				)}
 
 				{/* Floating action overlay — no layout cost */}
-				{!showConnectModal && !showSettings && (
+				{!hideChrome && (
 					<div className="hidden md:flex absolute top-2 right-3 z-10">
 						<ShareExport messages={displayMessages} />
 					</div>
@@ -577,17 +636,21 @@ function App() {
 				<main className="flex-1 flex flex-col min-h-0 overflow-hidden">
 					<div
 						key={
-							showConnectModal
-								? "connect"
-								: showSettings
-									? "settings"
-									: loadingSession
-										? "loading"
-										: "chat"
+							initializing
+								? "splash"
+								: showConnectModal
+									? "connect"
+									: showSettings
+										? "settings"
+										: loadingSession
+											? "loading"
+											: "chat"
 						}
 						className="flex-1 flex flex-col min-h-0 animate-fade-in"
 					>
-						{showConnectModal ? (
+						{initializing ? (
+							<SplashScreen />
+						) : showConnectModal ? (
 							<HomeView
 								onComplete={handleConnectComplete}
 								onSkipToSettings={handleSkipToSettings}
@@ -636,7 +699,7 @@ function App() {
 				</main>
 
 				{/* Mobile bottom nav */}
-				{!showConnectModal && !showSettings && (
+				{!hideChrome && (
 					<MobileBottomNav
 						view={sidebarView}
 						onChangeView={(view) => {
