@@ -107,6 +107,7 @@ import {
 import { eventBus } from "./event-bus.js";
 import { startRemoteServer, stopRemoteServer } from "./remote-server.js";
 import { commandQueue } from "./command-queue.js";
+import { createPromptScheduler } from "./prompt-scheduler.js";
 import { extractChatMessages } from "./extract-chat-messages.js";
 // Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
 // this loaded as an extension, Claude Pro/Max OAuth requests are
@@ -752,11 +753,10 @@ async function main() {
 	// Defaults
 	let zosmaDir = defaultZosmaDir();
 	let activePromptId: string | null = null;
-	// Serializes prompt execution WITHOUT blocking the stdin read loop. Prompts
-	// are chained onto this promise so two never run concurrently, but the loop
-	// returns immediately after scheduling so `abort` (and the next prompt) stay
-	// readable mid-generation. See runPromptTask + the "prompt" command handler.
-	let promptChain: Promise<void> = Promise.resolve();
+	// Serializes prompt execution WITHOUT blocking the stdin read loop, so an
+	// `abort` (and the next prompt) stay readable mid-generation. See
+	// runPromptTask + the "prompt" command handler, and prompt-scheduler.ts.
+	const promptScheduler = createPromptScheduler();
 
 	// In-flight OAuth login (only one at a time). Holds the AbortController so
 	// `cancel_oauth` can interrupt the SDK's loopback callback server, and the
@@ -1055,9 +1055,9 @@ async function main() {
 					// (calls session.abort()), and the next prompt runs only after this
 					// one settles (the chain serializes prompts so two never overlap).
 					const promptCmd = cmd;
-					promptChain = promptChain
-						.then(() => runPromptTask(promptCmd))
-						.catch((err: unknown) => {
+					promptScheduler.schedule(
+						() => runPromptTask(promptCmd),
+						(err: unknown) => {
 							// runPromptTask handles its own errors; this is a defensive
 							// guard so a thrown task never breaks the chain for later
 							// prompts.
@@ -1065,7 +1065,8 @@ async function main() {
 							log("prompt task error: %s", msg);
 							send({ type: "error", id: promptCmd.id, message: msg });
 							send({ type: "done", id: promptCmd.id });
-						});
+						},
+					);
 					break;
 				}
 
