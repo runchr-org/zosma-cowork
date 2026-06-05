@@ -119,6 +119,12 @@ npm run dev:frontend
 npm run dev
 ```
 
+> `npm run dev` runs the sidecar from TypeScript source via `tsx` — no bundle
+> needed. On a fresh checkout it auto-generates lightweight **dev stubs** for the
+> Tauri bundle resources (`src-tauri/agent-sidecar/index.cjs`, `src-tauri/binaries/node`)
+> so the Rust shell can compile. The real sidecar bundle and Node.js binary are
+> produced only by the production build (`npm run build`).
+
 ### Scripts
 
 ```bash

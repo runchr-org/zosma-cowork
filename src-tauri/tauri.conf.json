@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev:frontend",
+    "beforeDevCommand": "node scripts/ensure-dev-resources.mjs && npm run dev:frontend",
     "beforeBuildCommand": "node src-tauri/scripts/fetch-node.mjs && node scripts/prebuild.mjs && npm run build:frontend"
   },
   "app": {
