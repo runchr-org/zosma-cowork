@@ -65,11 +65,33 @@ npm run dev
 
 Under the hood this runs `tauri dev`, which:
 
-1. Starts **Vite** dev server on `http://localhost:1420` (hot-reload for React)
-2. Compiles and opens the **Tauri** desktop window (Rust relay)
-3. The Rust `setup()` hook spawns the **sidecar** (`agent-sidecar/src/index.ts`)
+1. Runs `scripts/ensure-dev-resources.mjs` (the `beforeDevCommand`) to create
+   lightweight **dev stubs** for any missing Tauri bundle resources (see below)
+2. Starts **Vite** dev server on `http://localhost:1420` (hot-reload for React)
+3. Compiles and opens the **Tauri** desktop window (Rust relay)
+4. The Rust `setup()` hook spawns the **sidecar** (`agent-sidecar/src/index.ts`)
    via `tsx` (TypeScript directly, no bundle needed)
-4. The sidecar and Rust relay communicate over stdin/stdout JSON lines
+5. The sidecar and Rust relay communicate over stdin/stdout JSON lines
+
+#### Dev bundle resources (why `ensure-dev-resources.mjs` exists)
+
+Tauri's `build.rs` validates at **compile time** that every
+`bundle.resources` entry in `src-tauri/tauri.conf.json` exists on disk —
+in dev as well as release. Two of those resources are generated, gitignored
+artifacts:
+
+- `src-tauri/agent-sidecar/index.cjs` — the esbuild sidecar bundle
+  (produced by `scripts/prebuild.mjs`)
+- `src-tauri/binaries/node` — the bundled Node.js runtime
+  (fetched by `src-tauri/scripts/fetch-node.mjs`)
+
+Those generators only run from `beforeBuildCommand` (production `tauri build`),
+so a fresh checkout running `npm run dev` would otherwise fail with
+`resource path 'agent-sidecar/index.cjs' doesn't exist`. In dev the sidecar
+runs from TS source via `tsx` and `binaries/node` is never spawned, so the
+`beforeDevCommand` writes harmless **stub placeholders** to satisfy the check
+rather than running the slow bundle + ~50 MB Node download. A production
+`npm run build` overwrites the stubs with the real artifacts.
 
 ### Individual parts
 
