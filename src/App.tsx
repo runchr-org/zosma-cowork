@@ -617,7 +617,7 @@ function App() {
 	}));
 
 	return (
-		<div className="flex h-screen bg-background">
+		<div className="flex h-screen bg-background md:gap-2.5 md:p-2.5">
 			{/* Extension UI dialogs (pi-ask-user etc. via ctx.ui) */}
 			<ExtensionUiHost />
 
@@ -656,8 +656,8 @@ function App() {
 			{/* Sidebar — desktop: visible, mobile: slide-over */}
 			{!hideChrome && (
 				<>
-					{/* Desktop sidebar */}
-					<div className="hidden md:block">
+					{/* Desktop sidebar — floating glass panel */}
+					<div className="hidden md:block panel-sidebar overflow-hidden shrink-0">
 						<Sidebar
 							view={sidebarView}
 							sessions={sidebarSessions}
@@ -738,8 +738,8 @@ function App() {
 				</>
 			)}
 
-			{/* Main content */}
-			<div className="relative flex-1 flex flex-col min-w-0">
+			{/* Main content — raised glass panel */}
+			<div className="relative flex-1 flex flex-col min-w-0 md:panel-raised md:overflow-hidden">
 				{/* Remote connection status (browser mode only) */}
 				<RemoteConnectionBar />
 
