@@ -16,6 +16,7 @@ import { trackEvent } from "@/lib/telemetry";
 import type { ChatMessage } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface SessionEntry {
@@ -88,6 +89,8 @@ function App() {
 	// Session management
 	const [sessionEntries, setSessionEntries] = useState<SessionEntry[]>([]);
 	const [activeSessionFile, setActiveSessionFile] = useState<string | null>(null);
+	// The agent's current workspace folder (where file/bash tools read & write).
+	const [workspaceCwd, setWorkspaceCwd] = useState<string | null>(null);
 	/** Messages loaded from a saved session file — merged with stream messages */
 	const [loadedSessionMessages, setLoadedSessionMessages] = useState<ChatMessage[] | null>(null);
 	const [loadingSession, setLoadingSession] = useState(false);
@@ -347,16 +350,63 @@ function App() {
 		setShowKeyEntry(false);
 	}, []);
 
-	const handleNewSession = useCallback(async () => {
+	const handleNewSession = useCallback(
+		async (cwd?: string) => {
+			try {
+				// The sidecar returns the resolved workspace (it may fall back to
+				// the default if the picked folder was invalid) — reflect that.
+				const res = await invoke<{ cwd?: string }>("new_session", cwd ? { cwd } : {});
+				if (res && typeof res.cwd === "string") {
+					setWorkspaceCwd(res.cwd);
+				}
+			} catch {
+				// ignore
+			}
+			dispatch({ type: "RESET" });
+			setLoadedSessionMessages(null);
+			setActiveSessionFile(`session-${Date.now()}.jsonl`);
+		},
+		[dispatch],
+	);
+
+	// Open a native folder picker, then start a fresh session bound to it. This
+	// is the "open from any folder" path (like pi): the chosen directory becomes
+	// the agent's working dir, so generated files land where the user expects.
+	const handleOpenFolder = useCallback(async () => {
+		let selected: string | null = null;
 		try {
-			await invoke("new_session");
+			const picked = await openDialog({
+				directory: true,
+				multiple: false,
+				title: "Choose a workspace folder",
+				...(workspaceCwd ? { defaultPath: workspaceCwd } : {}),
+			});
+			if (typeof picked === "string") selected = picked;
 		} catch {
-			// ignore
+			// dialog cancelled or unavailable — do nothing
 		}
-		dispatch({ type: "RESET" });
-		setLoadedSessionMessages(null);
-		setActiveSessionFile(`session-${Date.now()}.jsonl`);
-	}, [dispatch]);
+		if (!selected) return;
+		setSidebarView("chats");
+		await handleNewSession(selected);
+	}, [handleNewSession, workspaceCwd]);
+
+	// Load the sidecar's active workspace once it's ready, so the sidebar can
+	// show "where am I working" from the first paint.
+	useEffect(() => {
+		let cancelled = false;
+		invoke<{ cwd?: string }>("get_workspace")
+			.then((res) => {
+				if (!cancelled && res && typeof res.cwd === "string") {
+					setWorkspaceCwd(res.cwd);
+				}
+			})
+			.catch(() => {
+				// sidecar not ready yet — harmless; updated on next new_session
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const [pendingDelete, setPendingDelete] = useState<{ file: string; title: string } | null>(null);
 
@@ -474,6 +524,8 @@ function App() {
 								setSidebarView("chats");
 								handleNewSession();
 							}}
+							onOpenFolder={handleOpenFolder}
+							workspaceLabel={workspaceCwd ?? undefined}
 							onDeleteSession={handleDeleteSession}
 							onChangeView={(view) => {
 								setSidebarView(view);
@@ -523,6 +575,8 @@ function App() {
 									setSidebarView("chats");
 									handleNewSession();
 								}}
+								onOpenFolder={handleOpenFolder}
+								workspaceLabel={workspaceCwd ?? undefined}
 								onDeleteSession={handleDeleteSession}
 								onChangeView={(view) => {
 									setSidebarView(view);

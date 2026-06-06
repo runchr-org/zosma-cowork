@@ -747,10 +747,30 @@ async fn delete_session(session_file: String, s: State<'_, AppState>) -> Result<
 }
 
 #[tauri::command]
-async fn new_session(s: State<'_, AppState>) -> Result<Value, String> {
+async fn new_session(
+    cwd: Option<String>,
+    s: State<'_, AppState>,
+) -> Result<Value, String> {
+    // `cwd` is the workspace folder the user picked (via the native folder
+    // picker). Forwarded to the sidecar, which rebinds the agent's file/bash
+    // tools and project-local resource discovery to it. Omitted => the sidecar
+    // keeps its current workspace (default ~/ZosmaCowork on first run).
+    let mut payload = serde_json::json!({"type":"new_session","id":"ns"});
+    if let Some(c) = cwd {
+        if !c.trim().is_empty() {
+            payload["cwd"] = serde_json::Value::String(c);
+        }
+    }
+    scmd_r(&s, &payload, std::time::Duration::from_secs(10)).await
+}
+
+/// Report the sidecar's active workspace folder (and the default), so the UI
+/// can display "where am I working" and pre-fill the folder picker.
+#[tauri::command]
+async fn get_workspace(s: State<'_, AppState>) -> Result<Value, String> {
     scmd_r(
         &s,
-        &serde_json::json!({"type":"new_session","id":"ns"}),
+        &serde_json::json!({"type":"get_workspace","id":"gw"}),
         std::time::Duration::from_secs(10),
     )
     .await
@@ -1561,6 +1581,7 @@ pub fn run() {
             load_session,
             delete_session,
             new_session,
+            get_workspace,
             get_settings,
             save_settings,
             list_extensions,

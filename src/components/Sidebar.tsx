@@ -20,6 +20,8 @@ interface SidebarProps {
 	onDeleteSession: (id: string) => void;
 	onChangeView: (view: string) => void;
 	onSend?: (prompt: string) => void;
+	onOpenFolder?: () => void;
+	workspaceLabel?: string;
 }
 
 const TABS = [
@@ -39,6 +41,8 @@ export function Sidebar({
 	onDeleteSession,
 	onChangeView,
 	onSend,
+	onOpenFolder,
+	workspaceLabel,
 }: SidebarProps) {
 	const reduced = useReducedMotion();
 	const activeTab: "chats" | "templates" = view === "templates" ? "templates" : "chats";
@@ -124,6 +128,8 @@ export function Sidebar({
 								onSelect={onSessionSelect}
 								onNewSession={onNewSession}
 								onDeleteSession={onDeleteSession}
+								onOpenFolder={onOpenFolder}
+								workspaceLabel={workspaceLabel}
 							/>
 						</motion.div>
 					)}
