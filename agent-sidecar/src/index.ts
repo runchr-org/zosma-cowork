@@ -137,6 +137,17 @@ import piAnthropicMessages from "./vendor/anthropic-messages/extensions/index.js
 // Zosma Office Document Generation extension — registers 8 OfficeCLI tools.
 import zosmaOfficeDocs from "./office-docs/extension.js";
 import zosmaGoogleCalendar from "./google-calendar/extension.js";
+import {
+	defaultGooglePaths,
+	disconnectGoogle,
+	embeddedClient,
+	fanOutCredentials,
+	GOOGLE_SCOPES,
+	googleStatus,
+	hasEmbeddedClient,
+	migrateLegacyTokens,
+} from "./google-auth/broker.js";
+import { runConsent } from "./google-auth/consent.js";
 // Loads pi's disk/npm/git extensions via virtualModules-backed jiti so they
 // work in the bundled sidecar (no node_modules beside it). See #147.
 import {
@@ -212,6 +223,25 @@ interface GetAuthStatusCommand {
 	type: "get_auth_status";
 	id: string;
 }
+
+/** Broker the single Google OAuth consent (union scopes) and fan creds out. */
+interface ConnectGoogleCommand {
+	type: "connect_google";
+	id: string;
+}
+
+/** Read both Google config destinations and report connected state. */
+interface GetGoogleStatusCommand {
+	type: "get_google_status";
+	id: string;
+}
+
+/** Revoke + delete the brokered Google credentials. */
+interface DisconnectGoogleCommand {
+	type: "disconnect_google";
+	id: string;
+}
+
 
 interface ReloadCommand {
 	type: "reload";
@@ -393,6 +423,9 @@ type Command =
 	| CancelOAuthCommand
 	| LogoutCommand
 	| GetAuthStatusCommand
+	| ConnectGoogleCommand
+	| GetGoogleStatusCommand
+	| DisconnectGoogleCommand
 	| ReloadCommand
 	| SaveSessionCommand
 	| LoadSessionCommand
@@ -1179,6 +1212,10 @@ async function main() {
 	// can wait for the previous flow's cleanup before installing a fresh one.
 	let oauthAbort: AbortController | null = null;
 	let oauthInflight: Promise<void> | null = null;
+	// Separate slot for the Google broker consent flow (loopback+PKCE), kept
+	// distinct from provider OAuth above so a Sign-In and a Connect-Google can
+	// be in flight independently.
+	let googleConsentAbort: AbortController | null = null;
 
 	// These are set during init
 	let authStorage: AuthStorage | undefined;
@@ -1297,6 +1334,13 @@ async function main() {
 
 		// Clean stale lock files from old Rust backend
 		cleanStaleLocks(agentDir);
+
+		// One-time migration of legacy Google token files (pre-unified OAuth).
+		const piDir = piAgentDir();
+		const migration = migrateLegacyTokens(defaultGooglePaths(piDir));
+		if (migration.migrated) {
+			log("Migrated legacy Google tokens from %s", migration.from);
+		}
 
 		log("Agent dir: %s", agentDir);
 		log("Auth path: %s", authPath);
@@ -2019,6 +2063,148 @@ async function main() {
 						id: cmd.id,
 						data: { providers, supported, apiKeyProviders },
 					});
+					break;
+				}
+
+				// ── connect_google (B2 #186) ────────────────────────────────
+				case "connect_google": {
+					if (!hasEmbeddedClient()) {
+						send({
+							type: "error",
+							id: cmd.id,
+							message:
+								"Zosma Google OAuth client not configured. Set ZOSMA_GOOGLE_CLIENT_ID and ZOSMA_GOOGLE_CLIENT_SECRET.",
+						});
+						break;
+					}
+					// Abort a prior in-flight flow if the user clicks Connect again.
+					if (googleConsentAbort) {
+						googleConsentAbort.abort();
+					}
+					const ac = new AbortController();
+					googleConsentAbort = ac;
+					const cmdId = cmd.id;
+					const client = embeddedClient();
+					const paths = defaultGooglePaths();
+
+					// Fire the async consent flow (non-blocking from the handler's
+					// perspective — the send() for result/error comes from within).
+					(async () => {
+						try {
+							send({
+								type: "event",
+								event: {
+									kind: "oauth_progress",
+									provider: "google",
+									message: "Opening browser for Google consent…",
+								},
+							});
+							const result = await runConsent({
+								client,
+								onAuthUrl: (url) => {
+									send({
+										type: "event",
+										event: {
+											kind: "oauth_open_url",
+											provider: "google",
+											url,
+											instructions:
+												"Sign in with your Google account to connect Gmail, Calendar, Drive, Docs, Sheets and Slides.",
+										},
+									});
+								},
+								signal: ac.signal,
+							});
+
+							send({
+								type: "event",
+								event: {
+									kind: "oauth_progress",
+									provider: "google",
+									message: "Google consent granted. Fanning out credentials…",
+								},
+							});
+
+							fanOutCredentials(paths, {
+								client,
+								tokens: result.tokens,
+								email: result.email,
+								redirectUri: result.redirectUri,
+							});
+
+							log("Google: credentials fanned out to %s and %s + %s", paths.workspaceOAuth, paths.piSettings, paths.gmailTokens);
+							if (!ac.signal.aborted) ac.abort();
+							googleConsentAbort = null;
+
+							send({
+								type: "result",
+								id: cmdId,
+								data: { success: true, email: result.email },
+							});
+							send({
+								type: "event",
+								event: { kind: "oauth_completed", provider: "google", email: result.email },
+							});
+						} catch (err: unknown) {
+							const errMsg = err instanceof Error ? err.message : String(err);
+							const cancelled = err instanceof Error && err.name === "AbortError";
+							log("Google consent %s: %s", cancelled ? "cancelled" : "failed", errMsg);
+							// Release the abort controller slot so re-connect works.
+							if (googleConsentAbort === ac) googleConsentAbort = null;
+							send({
+								type: "result",
+								id: cmdId,
+								data: { success: false, cancelled, error: errMsg },
+							});
+							send({
+								type: "event",
+								event: {
+									kind: cancelled ? "oauth_cancelled" : "oauth_failed",
+									provider: "google",
+									error: cancelled ? undefined : errMsg,
+								},
+							});
+						}
+						void 0; // no return value expected
+					})();
+					break;
+				}
+
+				// ── get_google_status (B2 #186) ───────────────────────────────
+				case "get_google_status": {
+					try {
+						const paths = defaultGooglePaths();
+						const status = googleStatus(paths);
+						log("Google status: connected=%s email=%s", status.connected, status.email ?? "-");
+						send({ type: "result", id: cmd.id, data: status });
+					} catch (err: unknown) {
+						const errMsg = err instanceof Error ? err.message : String(err);
+						log("get_google_status error: %s", errMsg);
+						send({
+							type: "error",
+							id: cmd.id,
+							message: `Failed to check Google status: ${errMsg}`,
+						});
+					}
+					break;
+				}
+
+				// ── disconnect_google (B2 #186) ────────────────────────────
+				case "disconnect_google": {
+					try {
+						const paths = defaultGooglePaths();
+						const result = await disconnectGoogle(paths);
+						log("Google disconnected: revoked=%s removed=%s", result.revoked, result.removed.join(", "));
+						send({ type: "result", id: cmd.id, data: result });
+					} catch (err: unknown) {
+						const errMsg = err instanceof Error ? err.message : String(err);
+						log("disconnect_google error: %s", errMsg);
+						send({
+							type: "error",
+							id: cmd.id,
+							message: `Failed to disconnect Google: ${errMsg}`,
+						});
+					}
 					break;
 				}
 

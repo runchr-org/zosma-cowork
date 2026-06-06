@@ -1,6 +1,7 @@
 import {
 	BarChart2,
 	ChevronLeft,
+	Cloud,
 	FileText,
 	Globe,
 	Info,
@@ -16,6 +17,7 @@ import { FeedbackDialog } from "./FeedbackDialog";
 import { About } from "./settings/About";
 import { Authentication } from "./settings/Authentication";
 import { Extensions } from "./settings/Extensions";
+import { GoogleIntegration } from "./settings/GoogleIntegration";
 import { Instructions } from "./settings/Instructions";
 import { RemoteAccess } from "./settings/RemoteAccess";
 import { Skills } from "./settings/Skills";
@@ -32,6 +34,7 @@ interface SettingsPageProps {
 type SectionId =
 	| "authentication"
 	| "extensions"
+	| "integrations"
 	| "skills"
 	| "custom-instructions"
 	| "theme"
@@ -46,6 +49,7 @@ const SECTIONS: {
 }[] = [
 	{ id: "authentication", label: "Authentication", Icon: KeyRound },
 	{ id: "extensions", label: "Extensions", Icon: Puzzle },
+	{ id: "integrations", label: "Integrations", Icon: Cloud },
 	{ id: "skills", label: "Skills", Icon: Zap },
 	{ id: "custom-instructions", label: "Custom Instructions", Icon: FileText },
 	{ id: "theme", label: "Theme", Icon: Palette },
@@ -286,6 +290,7 @@ function SectionContent({
 		<>
 			{activeSection === "authentication" && <Authentication onShowKeyEntry={onShowKeyEntry} />}
 			{activeSection === "extensions" && <Extensions />}
+			{activeSection === "integrations" && <GoogleIntegration />}
 			{activeSection === "skills" && <Skills />}
 			{activeSection === "custom-instructions" && <Instructions />}
 			{activeSection === "theme" && <Theme />}

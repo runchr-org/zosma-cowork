@@ -750,6 +750,44 @@ async fn has_credentials(s: State<'_, AppState>) -> Result<bool, String> {
         .unwrap_or(false))
 }
 
+/// Google broker: run the single consent flow (loopback+PKCE) and fan out
+/// credentials to the real package config files.
+#[tauri::command]
+async fn google_connect(s: State<'_, AppState>) -> Result<Value, String> {
+    let id = format!("cg-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"connect_google","id":id}),
+        // Consent involves browser + user interaction — generous timeout.
+        std::time::Duration::from_secs(300),
+    )
+    .await
+}
+
+/// Google broker: probe both token destinations and report connected state.
+#[tauri::command]
+async fn google_get_status(s: State<'_, AppState>) -> Result<Value, String> {
+    let id = format!("ggs-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"get_google_status","id":id}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+}
+
+/// Google broker: revoke the refresh token and delete all local token files.
+#[tauri::command]
+async fn google_disconnect(s: State<'_, AppState>) -> Result<Value, String> {
+    let id = format!("dg-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"disconnect_google","id":id}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+}
+
 #[tauri::command]
 async fn reload_sidecar(s: State<'_, AppState>) -> Result<Value, String> {
     scmd_r(
@@ -1676,6 +1714,9 @@ pub fn run() {
             logout_provider,
             get_auth_status,
             has_credentials,
+            google_connect,
+            google_get_status,
+            google_disconnect,
             reload_sidecar,
             list_sessions,
             save_session,

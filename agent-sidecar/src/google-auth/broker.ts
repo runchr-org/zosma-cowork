@@ -1,0 +1,355 @@
+/**
+ * google-auth/broker — Cowork's single Google OAuth broker (epic #180 / B2 #186).
+ *
+ * Cowork owns ONE Zosma-embedded OAuth client and runs ONE consent for the
+ * UNION of scopes the curated Google packages need. After consent it fans the
+ * resulting credentials out to the two real config locations each package reads
+ * (the "config-routing layer"), so a single "Connect Google" provisions Gmail,
+ * Calendar, Drive, Docs, Sheets and Slides — and the same files also work from
+ * the `pi` CLI.
+ *
+ *   Destination 1 — ~/.pi/agent/google-workspace/oauth.json
+ *     Shape: AuthConfig { clientId, clientSecret, redirectUri, tokens }
+ *     Read by: pi-google-workspace AND the owned google_calendar extension
+ *     (they deliberately SHARE this one file — see google-calendar/auth.ts).
+ *
+ *   Destination 2 — ~/.pi/agent/settings.json["pi-gmail"] + ~/.pi/agent/db/gmail-tokens.json
+ *     Shape: GmailSettings { clientId, clientSecret } + OAuthTokens
+ *            { access_token, refresh_token, expires_at, scope, email }
+ *     Read by: @e9n/pi-gmail
+ *
+ * Extensions read + self-refresh these files at tool-call time; Cowork only
+ * brokers consent / disconnect. NOTE the two expiry field names differ on
+ * purpose to match each package: workspace uses `expiry_date`, gmail uses
+ * `expires_at` (both ms epoch).
+ *
+ * The actual consent (loopback redirect + PKCE) lives in `consent.ts`; this
+ * module owns the credential FAN-OUT, STATUS probe, DISCONNECT and one-time
+ * legacy MIGRATION — all pure / filesystem-only so they are unit-testable
+ * without touching the network.
+ */
+
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+
+// ── Union scopes requested at consent ───────────────────────────
+// gmail.modify + calendar + drive + documents + spreadsheets + presentations,
+// plus openid/email/profile so we can resolve the connected account email.
+export const GOOGLE_SCOPES = {
+	gmail: "https://www.googleapis.com/auth/gmail.modify",
+	calendar: "https://www.googleapis.com/auth/calendar",
+	drive: "https://www.googleapis.com/auth/drive",
+	docs: "https://www.googleapis.com/auth/documents",
+	sheets: "https://www.googleapis.com/auth/spreadsheets",
+	slides: "https://www.googleapis.com/auth/presentations",
+} as const;
+
+export type GoogleProduct = keyof typeof GOOGLE_SCOPES;
+
+export const IDENTITY_SCOPES = ["openid", "email", "profile"] as const;
+
+/** Full union scope list (products + identity). */
+export const UNION_SCOPES: string[] = [...Object.values(GOOGLE_SCOPES), ...IDENTITY_SCOPES];
+
+// ── Embedded Zosma OAuth client ─────────────────────────────────
+// Supplied at build/runtime via env so no secret is committed. Ship the OAuth
+// app in Google "Testing" mode (allowlisted users) for internal builds; full
+// verification is a release blocker for the restricted gmail.modify / drive
+// scopes. Both id AND secret are needed because the curated packages refresh
+// the access token themselves using client_secret (installed-app flow).
+export interface EmbeddedClient {
+	clientId: string;
+	clientSecret: string;
+}
+
+export function embeddedClient(): EmbeddedClient {
+	return {
+		clientId: process.env.ZOSMA_GOOGLE_CLIENT_ID ?? "",
+		clientSecret: process.env.ZOSMA_GOOGLE_CLIENT_SECRET ?? "",
+	};
+}
+
+export function hasEmbeddedClient(): boolean {
+	const c = embeddedClient();
+	return Boolean(c.clientId && c.clientSecret);
+}
+
+// ── Config destinations (path-injectable for tests) ─────────────
+export interface GooglePaths {
+	/** pi agent dir, e.g. ~/.pi/agent */
+	agentDir: string;
+	/** ~/.pi/agent/google-workspace/oauth.json */
+	workspaceOAuth: string;
+	/** ~/.pi/agent/settings.json (pi global settings — holds "pi-gmail") */
+	piSettings: string;
+	/** ~/.pi/agent/db/gmail-tokens.json */
+	gmailTokens: string;
+	/** legacy single-config path from the original plan (~/.pi/agent/google/oauth.json) */
+	legacyOAuth: string;
+}
+
+export function defaultGooglePaths(agentDir = join(homedir(), ".pi", "agent")): GooglePaths {
+	return {
+		agentDir,
+		workspaceOAuth: join(agentDir, "google-workspace", "oauth.json"),
+		piSettings: join(agentDir, "settings.json"),
+		gmailTokens: join(agentDir, "db", "gmail-tokens.json"),
+		legacyOAuth: join(agentDir, "google", "oauth.json"),
+	};
+}
+
+// ── Shapes the curated packages read ────────────────────────────
+export interface OAuthTokenResponse {
+	access_token: string;
+	refresh_token?: string;
+	expires_in?: number;
+	token_type?: string;
+	scope?: string;
+}
+
+interface WorkspaceTokens {
+	access_token: string;
+	refresh_token?: string;
+	token_type?: string;
+	scope?: string;
+	expiry_date?: number;
+}
+
+interface WorkspaceConfig {
+	clientId: string;
+	clientSecret: string;
+	redirectUri?: string;
+	tokens: WorkspaceTokens;
+}
+
+interface GmailTokens {
+	access_token: string;
+	refresh_token: string;
+	expires_at: number;
+	scope: string;
+	email: string;
+}
+
+// ── Small fs helpers ────────────────────────────────────────────
+function readJson<T = Record<string, unknown>>(path: string): T | null {
+	try {
+		if (!existsSync(path)) return null;
+		const parsed = JSON.parse(readFileSync(path, "utf-8"));
+		return parsed && typeof parsed === "object" ? (parsed as T) : null;
+	} catch {
+		return null;
+	}
+}
+
+function writeJson(path: string, value: unknown): void {
+	const dir = dirname(path);
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+}
+
+function removeIfExists(path: string): boolean {
+	try {
+		if (!existsSync(path)) return false;
+		rmSync(path, { force: true });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+// ── Fan-out ─────────────────────────────────────────────────────
+export interface FanOutInput {
+	client: EmbeddedClient;
+	tokens: OAuthTokenResponse;
+	/** account email resolved from the userinfo endpoint */
+	email: string;
+	/** the loopback redirect URI used during consent */
+	redirectUri: string;
+	/** clock injection for deterministic tests */
+	now?: number;
+}
+
+/**
+ * Write the brokered credentials into BOTH real destinations in the exact
+ * formats each package reads. Idempotent: re-running merges over existing files
+ * (e.g. preserves a Gmail refresh_token / maxResults if Google omits them on a
+ * re-consent without `prompt=consent`).
+ */
+export function fanOutCredentials(paths: GooglePaths, input: FanOutInput): void {
+	const now = input.now ?? Date.now();
+	const expiresInMs = (input.tokens.expires_in ?? 3600) * 1000;
+	const scope = input.tokens.scope ?? UNION_SCOPES.join(" ");
+
+	// Destination 1 — shared workspace + calendar oauth.json (AuthConfig shape).
+	const prevWs = readJson<WorkspaceConfig>(paths.workspaceOAuth);
+	const wsConfig: WorkspaceConfig = {
+		clientId: input.client.clientId,
+		clientSecret: input.client.clientSecret,
+		redirectUri: input.redirectUri,
+		tokens: {
+			access_token: input.tokens.access_token,
+			// Google omits refresh_token when re-consenting without prompt=consent;
+			// keep the prior one so self-refresh keeps working.
+			refresh_token: input.tokens.refresh_token ?? prevWs?.tokens?.refresh_token,
+			token_type: input.tokens.token_type ?? "Bearer",
+			scope,
+			expiry_date: now + expiresInMs,
+		},
+	};
+	writeJson(paths.workspaceOAuth, wsConfig);
+
+	// Destination 2a — pi-gmail client creds in pi's global settings.json.
+	// Merge so we never clobber unrelated settings keys or pi-gmail's own
+	// maxResults / notifications config.
+	const settings = readJson<Record<string, unknown>>(paths.piSettings) ?? {};
+	const prevGmail =
+		settings["pi-gmail"] && typeof settings["pi-gmail"] === "object"
+			? (settings["pi-gmail"] as Record<string, unknown>)
+			: {};
+	settings["pi-gmail"] = {
+		...prevGmail,
+		clientId: input.client.clientId,
+		clientSecret: input.client.clientSecret,
+	};
+	writeJson(paths.piSettings, settings);
+
+	// Destination 2b — gmail-tokens.json (OAuthTokens shape, `expires_at`).
+	const prevGmailTokens = readJson<GmailTokens>(paths.gmailTokens);
+	const gmailTokens: GmailTokens = {
+		access_token: input.tokens.access_token,
+		refresh_token: input.tokens.refresh_token ?? prevGmailTokens?.refresh_token ?? "",
+		expires_at: now + expiresInMs,
+		scope,
+		email: input.email,
+	};
+	writeJson(paths.gmailTokens, gmailTokens);
+}
+
+// ── Status ──────────────────────────────────────────────────────
+export interface GoogleStatus {
+	connected: boolean;
+	email: string | null;
+	scopes: string[];
+	products: Record<GoogleProduct, boolean>;
+	destinations: {
+		workspaceOAuth: { present: boolean; path: string };
+		gmailSettings: { present: boolean };
+		gmailTokens: { present: boolean; path: string };
+	};
+}
+
+function productsFromScope(scope: string): Record<GoogleProduct, boolean> {
+	const out = {} as Record<GoogleProduct, boolean>;
+	for (const [product, scopeUrl] of Object.entries(GOOGLE_SCOPES) as [GoogleProduct, string][]) {
+		out[product] = scope.includes(scopeUrl);
+	}
+	return out;
+}
+
+/** Read both destinations and report what's connected + which scopes/products. */
+export function googleStatus(paths: GooglePaths): GoogleStatus {
+	const ws = readJson<WorkspaceConfig>(paths.workspaceOAuth);
+	const gmailTokens = readJson<GmailTokens>(paths.gmailTokens);
+	const settings = readJson<Record<string, unknown>>(paths.piSettings) ?? {};
+	const gmailSettings = settings["pi-gmail"] as Record<string, unknown> | undefined;
+
+	const connected = Boolean(ws?.clientId && ws?.tokens?.access_token);
+	const scopeStr = ws?.tokens?.scope ?? gmailTokens?.scope ?? "";
+	const scopes = scopeStr ? scopeStr.split(/\s+/).filter(Boolean) : [];
+
+	return {
+		connected,
+		email: gmailTokens?.email ?? null,
+		scopes,
+		products: productsFromScope(scopeStr),
+		destinations: {
+			workspaceOAuth: { present: Boolean(ws), path: paths.workspaceOAuth },
+			gmailSettings: { present: Boolean(gmailSettings?.clientId) },
+			gmailTokens: { present: Boolean(gmailTokens), path: paths.gmailTokens },
+		},
+	};
+}
+
+// ── Disconnect ──────────────────────────────────────────────────
+export interface DisconnectResult {
+	revoked: boolean;
+	removed: string[];
+}
+
+/**
+ * Revoke the refresh token at Google (best-effort) then delete BOTH token
+ * files. Leaves the embedded clientId/secret in settings.json (harmless — it's
+ * Zosma's own client, not user-entered) so a reconnect needs only consent.
+ */
+export async function disconnectGoogle(
+	paths: GooglePaths,
+	revoke: (refreshToken: string) => Promise<void> = revokeAtGoogle,
+): Promise<DisconnectResult> {
+	const ws = readJson<WorkspaceConfig>(paths.workspaceOAuth);
+	const gmailTokens = readJson<GmailTokens>(paths.gmailTokens);
+	const refreshToken = ws?.tokens?.refresh_token ?? gmailTokens?.refresh_token;
+
+	let revoked = false;
+	if (refreshToken) {
+		try {
+			await revoke(refreshToken);
+			revoked = true;
+		} catch {
+			// best-effort — continue with local cleanup even if revoke fails
+		}
+	}
+
+	const removed: string[] = [];
+	if (removeIfExists(paths.workspaceOAuth)) removed.push(paths.workspaceOAuth);
+	if (removeIfExists(paths.gmailTokens)) removed.push(paths.gmailTokens);
+
+	return { revoked, removed };
+}
+
+/** Best-effort token revocation against Google's revoke endpoint. */
+export async function revokeAtGoogle(refreshToken: string): Promise<void> {
+	await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refreshToken)}`, {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+	});
+}
+
+// ── One-time legacy migration ───────────────────────────────────
+export interface MigrationResult {
+	migrated: boolean;
+	from?: string;
+}
+
+/**
+ * Import a pre-existing legacy single-config token file
+ * (~/.pi/agent/google/oauth.json — the path from the original unified-config
+ * plan) into the current shared destinations. No-op when the legacy file is
+ * absent or the workspace destination already exists (we never clobber a live
+ * connection). Safe to call on every startup.
+ */
+export function migrateLegacyTokens(paths: GooglePaths): MigrationResult {
+	if (existsSync(paths.workspaceOAuth)) return { migrated: false };
+	const legacy = readJson<WorkspaceConfig>(paths.legacyOAuth);
+	if (!legacy?.clientId || !legacy?.tokens?.access_token) return { migrated: false };
+
+	const email = readJson<GmailTokens>(paths.gmailTokens)?.email ?? "";
+	const expiry = legacy.tokens.expiry_date ?? Date.now() + 3600_000;
+
+	fanOutCredentials(paths, {
+		client: { clientId: legacy.clientId, clientSecret: legacy.clientSecret },
+		tokens: {
+			access_token: legacy.tokens.access_token,
+			refresh_token: legacy.tokens.refresh_token,
+			token_type: legacy.tokens.token_type ?? "Bearer",
+			scope: legacy.tokens.scope ?? UNION_SCOPES.join(" "),
+			// fanOut recomputes expiry from expires_in; preserve the original
+			// absolute expiry by deriving a remaining-seconds value (min 60s).
+			expires_in: Math.max(60, Math.floor((expiry - Date.now()) / 1000)),
+		},
+		email,
+		redirectUri: legacy.redirectUri ?? "",
+	});
+
+	return { migrated: true, from: paths.legacyOAuth };
+}
