@@ -1,4 +1,4 @@
-import { FolderOpen, MessageSquarePlus, MessagesSquare, Search, Trash2 } from "lucide-react";
+import { Folder, FolderPlus, MessagesSquare, Search, Trash2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 
@@ -7,6 +7,25 @@ interface Session {
 	title: string;
 	lastMessage: string;
 	timestamp: number;
+	active?: boolean;
+	/** Workspace folder this session was opened in (shown VSCode-style). */
+	folder?: string;
+}
+
+/**
+ * Render a session's folder the way editors show recent-project paths: home is
+ * collapsed to `~`, paths under home become `~/sub/dir`, everything else is the
+ * absolute path. Missing folder (legacy sessions) is treated as home.
+ */
+function displayPath(folder: string | undefined, homeDir: string | undefined): string {
+	if (!folder) return "~";
+	if (!homeDir) return folder;
+	const home = homeDir.replace(/[/\\]+$/, "");
+	if (folder === home) return "~";
+	if (folder.startsWith(`${home}/`) || folder.startsWith(`${home}\\`)) {
+		return `~/${folder.slice(home.length + 1).replace(/\\/g, "/")}`;
+	}
+	return folder;
 }
 
 interface ConversationSearchProps {
@@ -15,10 +34,8 @@ interface ConversationSearchProps {
 	onNewSession: () => void;
 	onDeleteSession: (id: string) => void;
 	activeSessionId?: string;
-	/** Open a native folder picker, then start a session in that folder. */
-	onOpenFolder?: () => void;
-	/** Current workspace folder (where the agent reads/writes files). */
-	workspaceLabel?: string;
+	/** The user's home dir, used to collapse session paths to `~`. */
+	homeDir?: string;
 }
 
 function formatTime(ts: number): string {
@@ -42,8 +59,7 @@ export function ConversationSearch({
 	onNewSession,
 	onDeleteSession,
 	activeSessionId,
-	onOpenFolder,
-	workspaceLabel,
+	homeDir,
 }: ConversationSearchProps) {
 	const [query, setQuery] = useState("");
 	const [focused, setFocused] = useState(false);
@@ -68,55 +84,21 @@ export function ConversationSearch({
 				>
 					Sessions
 				</span>
-				<div className="flex items-center gap-1">
-					{onOpenFolder && (
-						<motion.button
-							type="button"
-							onClick={onOpenFolder}
-							aria-label="Open folder as new session"
-							title="Open a folder — the agent reads & writes files there"
-							className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium"
-							style={{
-								color: "hsl(var(--muted-foreground) / 0.8)",
-								background: "hsl(var(--muted) / 0.6)",
-							}}
-							whileHover={reduced ? {} : { scale: 1.04, background: "hsl(var(--muted))" }}
-							whileTap={reduced ? {} : { scale: 0.96 }}
-							transition={{ duration: 0.15, ease: easeOutExpo }}
-						>
-							<FolderOpen className="w-3.5 h-3.5" />
-							Open
-						</motion.button>
-					)}
-					<motion.button
-						type="button"
-						onClick={onNewSession}
-						aria-label="New session"
-						className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium"
-						style={{ color: "hsl(var(--primary))", background: "hsl(var(--primary) / 0.08)" }}
-						whileHover={reduced ? {} : { scale: 1.04, background: "hsl(var(--primary) / 0.15)" }}
-						whileTap={reduced ? {} : { scale: 0.96 }}
-						transition={{ duration: 0.15, ease: easeOutExpo }}
-					>
-						<MessageSquarePlus className="w-3.5 h-3.5" />
-						New
-					</motion.button>
-				</div>
+				<motion.button
+					type="button"
+					onClick={onNewSession}
+					aria-label="New session"
+					title="New session — pick a folder for the agent to work in"
+					className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium"
+					style={{ color: "hsl(var(--primary))", background: "hsl(var(--primary) / 0.08)" }}
+					whileHover={reduced ? {} : { scale: 1.04, background: "hsl(var(--primary) / 0.15)" }}
+					whileTap={reduced ? {} : { scale: 0.96 }}
+					transition={{ duration: 0.15, ease: easeOutExpo }}
+				>
+					<FolderPlus className="w-3.5 h-3.5" />
+					New
+				</motion.button>
 			</div>
-
-			{/* ── Workspace folder indicator ── */}
-			{workspaceLabel && (
-				<div className="px-4 pb-1.5 -mt-1">
-					<span
-						className="flex items-center gap-1 text-[10px] truncate"
-						style={{ color: "hsl(var(--muted-foreground) / 0.5)" }}
-						title={workspaceLabel}
-					>
-						<FolderOpen className="w-3 h-3 shrink-0" />
-						<span className="truncate">{workspaceLabel}</span>
-					</span>
-				</div>
-			)}
 
 			{/* ── Search ── */}
 			<div className="px-3 pb-2">
@@ -217,6 +199,7 @@ export function ConversationSearch({
 						isActive={session.id === activeSessionId}
 						index={i}
 						reduced={!!reduced}
+						homeDir={homeDir}
 						onSelect={onSelect}
 						onDelete={onDeleteSession}
 					/>
@@ -234,12 +217,22 @@ interface SessionRowProps {
 	isActive: boolean;
 	index: number;
 	reduced: boolean;
+	homeDir?: string;
 	onSelect: (id: string) => void;
 	onDelete: (id: string) => void;
 }
 
-function SessionRow({ session, isActive, index, reduced, onSelect, onDelete }: SessionRowProps) {
+function SessionRow({
+	session,
+	isActive,
+	index,
+	reduced,
+	homeDir,
+	onSelect,
+	onDelete,
+}: SessionRowProps) {
 	const [hovered, setHovered] = useState(false);
+	const path = displayPath(session.folder, homeDir);
 
 	return (
 		<motion.div
@@ -293,6 +286,16 @@ function SessionRow({ session, isActive, index, reduced, onSelect, onDelete }: S
 					}}
 				>
 					{session.title}
+				</span>
+
+				{/* Folder path — where this session was opened (VSCode-style) */}
+				<span
+					className="flex items-center gap-1 mt-0.5 text-[10px] truncate"
+					style={{ color: "hsl(var(--muted-foreground) / 0.5)" }}
+					title={session.folder || path}
+				>
+					<Folder className="w-2.5 h-2.5 shrink-0" />
+					<span className="truncate">{path}</span>
 				</span>
 
 				{/* Last message + timestamp */}

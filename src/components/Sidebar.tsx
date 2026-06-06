@@ -9,6 +9,8 @@ interface Session {
 	lastMessage: string;
 	timestamp: number;
 	active?: boolean;
+	/** Workspace folder this session ran in (drives folder grouping). */
+	folder?: string;
 }
 
 interface SidebarProps {
@@ -20,8 +22,8 @@ interface SidebarProps {
 	onDeleteSession: (id: string) => void;
 	onChangeView: (view: string) => void;
 	onSend?: (prompt: string) => void;
-	onOpenFolder?: () => void;
-	workspaceLabel?: string;
+	/** The user's home dir, used to collapse session paths to `~`. */
+	homeDir?: string;
 }
 
 const TABS = [
@@ -41,8 +43,7 @@ export function Sidebar({
 	onDeleteSession,
 	onChangeView,
 	onSend,
-	onOpenFolder,
-	workspaceLabel,
+	homeDir,
 }: SidebarProps) {
 	const reduced = useReducedMotion();
 	const activeTab: "chats" | "templates" = view === "templates" ? "templates" : "chats";
@@ -128,8 +129,7 @@ export function Sidebar({
 								onSelect={onSessionSelect}
 								onNewSession={onNewSession}
 								onDeleteSession={onDeleteSession}
-								onOpenFolder={onOpenFolder}
-								workspaceLabel={workspaceLabel}
+								homeDir={homeDir}
 							/>
 						</motion.div>
 					)}
