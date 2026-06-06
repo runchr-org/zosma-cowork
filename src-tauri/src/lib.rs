@@ -656,9 +656,13 @@ async fn logout_provider(provider: String, s: State<'_, AppState>) -> Result<Val
 
 #[tauri::command]
 async fn get_auth_status(s: State<'_, AppState>) -> Result<Value, String> {
+    // Unique id per call: a hardcoded id collides in `pending_requests` when
+    // several callers invoke the same command concurrently (the map insert
+    // overwrites, so all-but-one request resolves as "closed" and errors).
+    let id = format!("gas-{}", uuid_v4());
     scmd_r(
         &s,
-        &serde_json::json!({"type":"get_auth_status","id":"gas"}),
+        &serde_json::json!({"type":"get_auth_status","id":id}),
         std::time::Duration::from_secs(10),
     )
     .await
@@ -669,9 +673,10 @@ async fn has_credentials(s: State<'_, AppState>) -> Result<bool, String> {
     if !s.sidecar.ready.load(Ordering::Acquire) {
         return Ok(false);
     }
+    let id = format!("hc-{}", uuid_v4());
     let r = scmd_r(
         &s,
-        &serde_json::json!({"type":"get_models","id":"hc"}),
+        &serde_json::json!({"type":"get_models","id":id}),
         std::time::Duration::from_secs(30),
     )
     .await?;
@@ -758,9 +763,10 @@ async fn new_session(s: State<'_, AppState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn get_settings(s: State<'_, AppState>) -> Result<Value, String> {
+    let id = format!("gs-{}", uuid_v4());
     scmd_r(
         &s,
-        &serde_json::json!({"type":"get_settings","id":"gs"}),
+        &serde_json::json!({"type":"get_settings","id":id}),
         std::time::Duration::from_secs(10),
     )
     .await
@@ -773,7 +779,8 @@ async fn get_settings(s: State<'_, AppState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn save_settings(settings: Value, s: State<'_, AppState>) -> Result<Value, String> {
-    let mut payload = serde_json::json!({"type":"save_settings","id":"ss"});
+    let mut payload =
+        serde_json::json!({"type":"save_settings","id":format!("ss-{}", uuid_v4())});
     if let Some(obj) = settings.as_object() {
         for (k, v) in obj {
             payload[k] = v.clone();

@@ -107,36 +107,47 @@ function App() {
 	}, []);
 
 	// ── First-run telemetry consent (#169 follow-up) ──
-	// Decide whether to show the consent popup ONLY after the sidecar is ready,
-	// so `get_settings` returns the persisted decision reliably. Running this on
-	// mount (before readiness) used to throw → the catch silently set it to
-	// `false`, so genuine first launches never showed the prompt; meanwhile a
-	// non-merging save wiped the stored decision, so it reappeared every launch.
+	// POLL `get_settings` until it succeeds, then decide. The sidecar may still
+	// be booting (get_settings throws "no sidecar"/"timeout"), and concurrent
+	// callers can transiently collide. The previous single-shot version gave up
+	// on the first failure (catch → false), so a fresh install silently skipped
+	// the prompt and dropped straight to the Welcome screen. We only set a
+	// definitive state on a SUCCESSFUL read, and only give up after ~30s.
 	useEffect(() => {
-		if (!sidecarReady) return;
 		let cancelled = false;
-		invoke<{ telemetry?: { enabled?: boolean } }>("get_settings")
-			.then((settings) => {
-				if (cancelled) return;
-				// Show the popup only when no decision has been stored yet
-				// (new user, or upgrade from a pre-telemetry version).
-				if (settings?.telemetry === undefined) {
-					setShowTelemetryConsent(true);
-				} else {
-					setShowTelemetryConsent(false);
-					if (settings.telemetry.enabled) {
-						trackEvent("app_launch");
+		const startedAt = Date.now();
+		async function decide() {
+			while (!cancelled) {
+				try {
+					const settings = await invoke<{ telemetry?: { enabled?: boolean } }>("get_settings");
+					if (cancelled) return;
+					// Show the popup only when no decision has been stored yet
+					// (new user, or upgrade from a pre-telemetry version).
+					if (settings?.telemetry === undefined) {
+						setShowTelemetryConsent(true);
+					} else {
+						setShowTelemetryConsent(false);
+						if (settings.telemetry.enabled) {
+							trackEvent("app_launch");
+						}
 					}
+					return; // authoritative answer — stop polling
+				} catch {
+					if (cancelled) return;
+					if (Date.now() - startedAt > 30_000) {
+						// Couldn't read settings after 30s — don't block forever.
+						setShowTelemetryConsent(false);
+						return;
+					}
+					await new Promise((r) => setTimeout(r, 400));
 				}
-			})
-			.catch(() => {
-				// Couldn't read settings — don't block the app on a popup.
-				if (!cancelled) setShowTelemetryConsent(false);
-			});
+			}
+		}
+		void decide();
 		return () => {
 			cancelled = true;
 		};
-	}, [sidecarReady]);
+	}, []);
 
 	const needsOnboarding = authLoading === false && !hasCredentials;
 	// True until the first-run telemetry decision is resolved: `null` while we're
