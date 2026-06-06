@@ -479,7 +479,15 @@ async fn read_stdout(
             }
             "done" => {
                 if let Some(id) = m.get("id").and_then(|v| v.as_str()) {
-                    pp.lock().await.remove(id);
+                    // Forward a terminal `done` to the prompt channel BEFORE
+                    // dropping it. The UI ends a turn on `agent_end` OR `done`;
+                    // without this forward the only completion signal is
+                    // `agent_end`, so any turn that doesn't emit one (incl. the
+                    // sidecar's prompt-timeout abort, which only sends `done`)
+                    // leaves the UI stuck in "thinking" forever.
+                    if let Some(p) = pp.lock().await.remove(id) {
+                        let _ = p.channel.send(serde_json::json!({"type":"done"}));
+                    }
                 }
             }
             "result" => {
@@ -563,6 +571,20 @@ async fn get_models(s: State<'_, AppState>) -> Result<Value, String> {
     )
     .await
     .map(|r| r.get("models").cloned().unwrap_or(Value::Array(vec![])))
+}
+
+/// Returns the model the engine will actually run (`session.model`) as
+/// `{provider, id, name}` or null. The frontend mirrors this on startup so the
+/// model shown near the input matches the model that actually answers.
+#[tauri::command]
+async fn get_active_model(s: State<'_, AppState>) -> Result<Value, String> {
+    let id = format!("gam-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"get_active_model","id":id}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -656,9 +678,13 @@ async fn logout_provider(provider: String, s: State<'_, AppState>) -> Result<Val
 
 #[tauri::command]
 async fn get_auth_status(s: State<'_, AppState>) -> Result<Value, String> {
+    // Unique id per call: a hardcoded id collides in `pending_requests` when
+    // several callers invoke the same command concurrently (the map insert
+    // overwrites, so all-but-one request resolves as "closed" and errors).
+    let id = format!("gas-{}", uuid_v4());
     scmd_r(
         &s,
-        &serde_json::json!({"type":"get_auth_status","id":"gas"}),
+        &serde_json::json!({"type":"get_auth_status","id":id}),
         std::time::Duration::from_secs(10),
     )
     .await
@@ -669,17 +695,24 @@ async fn has_credentials(s: State<'_, AppState>) -> Result<bool, String> {
     if !s.sidecar.ready.load(Ordering::Acquire) {
         return Ok(false);
     }
+    // "Has credentials" must mean the user has actually AUTHENTICATED at least
+    // one provider — not that the model catalog is non-empty. Shared pi
+    // extensions (e.g. `pi-crofai`) register provider model catalogs WITHOUT
+    // any stored credential, so counting `get_models` made a freshly-wiped
+    // install look authenticated and skipped onboarding, dropping the user into
+    // chat with non-working models. Count authenticated providers from auth
+    // storage instead (the same list the onboarding/Connect screen reflects).
+    let id = format!("hc-{}", uuid_v4());
     let r = scmd_r(
         &s,
-        &serde_json::json!({"type":"get_models","id":"hc"}),
+        &serde_json::json!({"type":"get_auth_status","id":id}),
         std::time::Duration::from_secs(30),
     )
     .await?;
-    Ok(r.get("models")
+    Ok(r.get("providers")
         .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0)
-        > 0)
+        .map(|a| !a.is_empty())
+        .unwrap_or(false))
 }
 
 #[tauri::command]
@@ -758,9 +791,10 @@ async fn new_session(s: State<'_, AppState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn get_settings(s: State<'_, AppState>) -> Result<Value, String> {
+    let id = format!("gs-{}", uuid_v4());
     scmd_r(
         &s,
-        &serde_json::json!({"type":"get_settings","id":"gs"}),
+        &serde_json::json!({"type":"get_settings","id":id}),
         std::time::Duration::from_secs(10),
     )
     .await
@@ -773,7 +807,7 @@ async fn get_settings(s: State<'_, AppState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn save_settings(settings: Value, s: State<'_, AppState>) -> Result<Value, String> {
-    let mut payload = serde_json::json!({"type":"save_settings","id":"ss"});
+    let mut payload = serde_json::json!({"type":"save_settings","id":format!("ss-{}", uuid_v4())});
     if let Some(obj) = settings.as_object() {
         for (k, v) in obj {
             payload[k] = v.clone();
@@ -1546,6 +1580,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_models,
+            get_active_model,
             send_prompt,
             abort_prompt,
             set_active_model,

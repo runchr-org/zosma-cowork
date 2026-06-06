@@ -1,5 +1,5 @@
 import { trackEvent } from "@/lib/telemetry";
-import type { ChatMessage as ChatMessageType } from "@/types";
+import type { ChatMessage as ChatMessageType, ModelInfo } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { Clipboard, Download, FolderOpen } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -12,6 +12,21 @@ import { ToolCallSummary, ToolCallTimeline } from "./ToolCallTimeline";
 interface ChatMessageProps {
 	message: ChatMessageType;
 	detailsExpanded?: boolean;
+	/** Model catalog, used to show a friendly model name instead of raw id. */
+	models?: ModelInfo[];
+}
+
+/**
+ * Friendly label for the model that produced a message. Prefer the catalog's
+ * display name (e.g. "Claude Sonnet 4") so it matches the model selector; fall
+ * back to the raw `provider/id` when the model isn't in the catalog.
+ */
+function modelLabel(message: ChatMessageType, models?: ModelInfo[]): string {
+	// Match on provider+id: ids are not unique across providers, so matching by
+	// id alone could show the wrong provider's display name.
+	const match = models?.find((m) => m.id === message.model && m.provider === message.provider);
+	if (match) return match.name;
+	return message.provider ? `${message.provider}/${message.model}` : (message.model ?? "");
 }
 
 function extractFilePath(content: string): string | null {
@@ -21,7 +36,7 @@ function extractFilePath(content: string): string | null {
 	return match?.[1]?.trim() ?? null;
 }
 
-export function ChatMessageItem({ message, detailsExpanded }: ChatMessageProps) {
+export function ChatMessageItem({ message, detailsExpanded, models }: ChatMessageProps) {
 	const [copied, setCopied] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const isUser = message.role === "user";
@@ -143,7 +158,7 @@ export function ChatMessageItem({ message, detailsExpanded }: ChatMessageProps) 
 					</span>
 					{message.model && (
 						<span className="text-[10px] text-muted-foreground/50 bg-muted/60 px-1.5 py-0 rounded font-mono">
-							{message.provider}/{message.model}
+							{modelLabel(message, models)}
 						</span>
 					)}
 					{message.isStreaming && (

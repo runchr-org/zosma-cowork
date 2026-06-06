@@ -112,6 +112,15 @@ import { startRemoteServer, stopRemoteServer } from "./remote-server.js";
 import { commandQueue } from "./command-queue.js";
 import { createPromptScheduler } from "./prompt-scheduler.js";
 import { extractChatMessages } from "./extract-chat-messages.js";
+import {
+	loadSettings as loadSettingsStore,
+	saveSettings as saveSettingsStore,
+} from "./settings-store.js";
+import {
+	computeInheritedCredentials,
+	piAuthPath,
+	readAuthFile,
+} from "./auth-seed.js";
 // Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
 // this loaded as an extension, Claude Pro/Max OAuth requests are
 // fingerprinted by Anthropic as a "third-party app" and rejected with a
@@ -139,6 +148,11 @@ interface InitCommand {
 
 interface GetModelsCommand {
 	type: "get_models";
+	id: string;
+}
+
+interface GetActiveModelCommand {
+	type: "get_active_model";
 	id: string;
 }
 
@@ -324,6 +338,7 @@ interface GetRemoteStatusCommand {
 type Command =
 	| InitCommand
 	| GetModelsCommand
+	| GetActiveModelCommand
 	| PromptCommand
 	| AbortCommand
 	| SetModelCommand
@@ -744,24 +759,15 @@ function restoreSessionContext(
 // Settings persistence
 // ---------------------------------------------------------------------------
 
-function settingsFilePath(zosmaDir: string): string {
-	return join(zosmaAgentDir(zosmaDir), "settings.json");
-}
-
 function loadSettings(zosmaDir: string): Record<string, unknown> {
-	const fp = settingsFilePath(zosmaDir);
-	if (!existsSync(fp)) return {};
-	try {
-		return JSON.parse(readFileSync(fp, "utf-8"));
-	} catch {
-		return {};
-	}
+	return loadSettingsStore(zosmaAgentDir(zosmaDir));
 }
 
+// Persist a PARTIAL settings update. Delegates to the settings-store, which
+// merges into the existing file so independent keys (model, persona, telemetry
+// consent) don't clobber one another.
 function saveSettings(zosmaDir: string, settings: Record<string, unknown>): void {
-	const fp = settingsFilePath(zosmaDir);
-	ensureDir(zosmaAgentDir(zosmaDir));
-	writeFileSync(fp, JSON.stringify(settings, null, 2), "utf-8");
+	saveSettingsStore(zosmaAgentDir(zosmaDir), settings);
 	log("Settings saved");
 }
 
@@ -815,6 +821,35 @@ async function main() {
 
 		// Auth storage — points at our zosma dir
 		authStorage = AuthStorage.create(authPath);
+
+		// Credential inheritance from the pi CLI. When Cowork has NO credentials of
+		// its own, fall back to ~/.pi/agent/auth.json and seed every provider the
+		// user already configured in pi (API keys AND OAuth). This makes those
+		// providers work immediately and means the onboarding/Connect screen only
+		// appears when NOTHING is configured anywhere (in pi OR Cowork). Once Cowork
+		// has any credential of its own we stop inheriting, so a deliberate logout
+		// of a single provider sticks; only a fully-empty Cowork auth falls back to
+		// pi again. See user request in the #169 thread.
+		if (authStorage.list().length === 0) {
+			try {
+				const inherited = computeInheritedCredentials(
+					{},
+					readAuthFile(piAuthPath(piAgentDir())),
+				);
+				const ids = Object.keys(inherited);
+				for (const id of ids) {
+					authStorage.set(id, inherited[id] as Parameters<typeof authStorage.set>[1]);
+				}
+				if (ids.length > 0) {
+					log("Seeded %d credential(s) from pi: %s", ids.length, ids.join(", "));
+				}
+			} catch (err) {
+				log(
+					"pi credential seed failed: %s",
+					err instanceof Error ? err.message : String(err),
+				);
+			}
+		}
 
 		// Model registry — reads built-in + custom models from our dir
 		modelRegistry = ModelRegistry.create(authStorage, modelsPath);
@@ -989,6 +1024,15 @@ async function main() {
 			type: "ready",
 			models,
 			providers: Array.from(providerMap.values()),
+			// The model the engine will actually run unless/until the UI sets one.
+			// Lets the frontend mirror reality instead of guessing models[0].
+			activeModel: session?.model
+				? {
+						provider: session.model.provider,
+						id: session.model.id,
+						name: session.model.name,
+					}
+				: null,
 		});
 
 		log("Sidecar ready — %d models available", models.length);
@@ -1160,6 +1204,26 @@ async function main() {
 				}
 
 				// ── set_model ──────────────────────────────────────────────
+				// ── get_active_model ───────────────────────────────────────
+				// Returns the model the engine will actually run (session.model).
+				// The frontend uses this to mirror the engine on startup so the
+				// model shown near the input matches the model that answers.
+				case "get_active_model": {
+					if (!initialized || !session) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					const m = session.model;
+					send({
+						type: "result",
+						id: cmd.id,
+						data: m
+							? { provider: m.provider, id: m.id, name: m.name }
+							: null,
+					});
+					break;
+				}
+
 				case "set_model": {
 					if (!initialized || !session) {
 						send({ type: "error", id: cmd.id, message: "Not initialized" });

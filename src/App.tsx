@@ -6,15 +6,17 @@ import { RemoteConnectionBar } from "@/components/RemoteConnectionBar";
 import { SettingsPage } from "@/components/SettingsPage";
 import { ShareExport } from "@/components/ShareExport";
 import { Sidebar } from "@/components/Sidebar";
+import { SplashScreen } from "@/components/SplashScreen";
 import { TelemetryConsentDialog } from "@/components/TelemetryConsentDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { usePiStream } from "@/hooks/usePiStream";
 import { useProviders } from "@/hooks/useProviders";
 import { useTelemetry } from "@/hooks/useTelemetry";
+import { findModel, modelKey } from "@/lib/model-key";
 import { trackEvent } from "@/lib/telemetry";
 import type { ChatMessage } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -45,33 +47,18 @@ function App() {
 			.catch(() => {});
 	}, []);
 
-	// Check if telemetry consent has been decided (first-run detection)
-	useEffect(() => {
-		invoke<{ telemetry?: { enabled?: boolean } }>("get_settings")
-			.then((settings) => {
-				// Show consent dialog only if the telemetry key is absent
-				// (new user or upgrade from pre-telemetry version)
-				if (settings?.telemetry === undefined) {
-					setShowTelemetryConsent(true);
-				} else {
-					setShowTelemetryConsent(false);
-				}
-
-				// Track app launch if consent was already enabled
-				if (settings?.telemetry?.enabled) {
-					trackEvent("app_launch");
-				}
-			})
-			.catch(() => {
-				setShowTelemetryConsent(false);
-			});
-	}, []);
-
 	// Remove right-click prevention — users need copy/paste/inspect.
 	// The desktop app is a serious tool, not a locked-down kiosk.
 	// (Context menu prevention removed intentionally.)
 	const { models } = useProviders();
 	const { hasCredentials, loading: authLoading, saveApiKey } = useAuth();
+	// Whether the agent sidecar has finished booting. Until it has,
+	// `has_credentials` always resolves to false (see src-tauri lib.rs), so we
+	// can't yet tell authenticated users apart from new ones. We track this to
+	// show a loading splash instead of flashing the onboarding screen (#169).
+	// In remote/browser mode (no Tauri) the server is already up at page load
+	// and the native `ready` event never fires, so we start ready there.
+	const [sidecarReady, setSidecarReady] = useState(() => !isTauri());
 	const [showKeyEntry, setShowKeyEntry] = useState(false);
 	// User explicitly chose "configure in Settings" — bypass the Connect
 	// modal even without stored credentials.
@@ -92,7 +79,89 @@ function App() {
 	const [loadedSessionMessages, setLoadedSessionMessages] = useState<ChatMessage[] | null>(null);
 	const [loadingSession, setLoadingSession] = useState(false);
 
+	// ── Sidecar readiness: drives the startup splash (#169) ──
+	// Listen for the Tauri `ready` event, plus a timeout fallback so the
+	// splash never hangs forever if the sidecar fails to start.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let mounted = true;
+		let unlisten: (() => void) | undefined;
+		(async () => {
+			const u = await listen("ready", () => {
+				if (mounted) setSidecarReady(true);
+			});
+			if (!mounted) {
+				u();
+				return;
+			}
+			unlisten = u;
+		})();
+		// Fallback: stop waiting after 20s and let the normal UI take over.
+		const timeout = setTimeout(() => {
+			if (mounted) setSidecarReady(true);
+		}, 20_000);
+		return () => {
+			mounted = false;
+			clearTimeout(timeout);
+			unlisten?.();
+		};
+	}, []);
+
+	// ── First-run telemetry consent (#169 follow-up) ──
+	// POLL `get_settings` until it succeeds, then decide. The sidecar may still
+	// be booting (get_settings throws "no sidecar"/"timeout"), and concurrent
+	// callers can transiently collide. The previous single-shot version gave up
+	// on the first failure (catch → false), so a fresh install silently skipped
+	// the prompt and dropped straight to the Welcome screen. We only set a
+	// definitive state on a SUCCESSFUL read, and only give up after ~30s.
+	useEffect(() => {
+		let cancelled = false;
+		const startedAt = Date.now();
+		async function decide() {
+			while (!cancelled) {
+				try {
+					const settings = await invoke<{ telemetry?: { enabled?: boolean } }>("get_settings");
+					if (cancelled) return;
+					// Show the popup only when no decision has been stored yet
+					// (new user, or upgrade from a pre-telemetry version).
+					if (settings?.telemetry === undefined) {
+						setShowTelemetryConsent(true);
+					} else {
+						setShowTelemetryConsent(false);
+						if (settings.telemetry.enabled) {
+							trackEvent("app_launch");
+						}
+					}
+					return; // authoritative answer — stop polling
+				} catch {
+					if (cancelled) return;
+					if (Date.now() - startedAt > 30_000) {
+						// Couldn't read settings after 30s — don't block forever.
+						setShowTelemetryConsent(false);
+						return;
+					}
+					await new Promise((r) => setTimeout(r, 400));
+				}
+			}
+		}
+		void decide();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
 	const needsOnboarding = authLoading === false && !hasCredentials;
+	// True until the first-run telemetry decision is resolved: `null` while we're
+	// still reading settings, `true` while the popup is awaiting the user's
+	// choice. We keep the neutral splash behind the consent modal so telemetry is
+	// genuinely the FIRST thing a new user sees — not the onboarding screen.
+	const telemetryUndecided = showTelemetryConsent !== false;
+	// While the sidecar is still booting we can't determine credentials, so
+	// show a loading splash rather than the onboarding/Welcome screen. Keeping
+	// `authLoading` in the condition avoids a one-frame onboarding flash during
+	// the credentials re-check that fires right after the sidecar becomes ready.
+	const initializing =
+		telemetryUndecided || (!sidecarReady && (authLoading || hasCredentials !== true));
 	// Whether to render the Connect / API-key modal. Either we're forcing
 	// it (initial onboarding, unless the user explicitly skipped) or the
 	// user opened "Change API Key" from Settings.
@@ -108,30 +177,63 @@ function App() {
 	useEffect(() => {
 		if (models.length > 0 && !settingsLoadedRef.current) {
 			settingsLoadedRef.current = true;
-			invoke("get_settings")
-				.then((result) => {
-					const data = result as { defaultModel?: string; defaultProvider?: string };
+			(async () => {
+				let data: { defaultModel?: string; defaultProvider?: string } = {};
+				try {
+					data = (await invoke("get_settings")) as typeof data;
 					console.log("[settings] loaded:", data);
-					if (data.defaultModel) {
-						const match = models.find((m) => m.id === data.defaultModel);
-						if (match) {
-							console.log("[settings] restoring model:", match.id);
-							setActiveModelId(match.id);
-							invoke("set_active_model", {
-								provider: match.provider,
-								model: match.id,
-							}).catch(() => {});
-							return;
-						}
-					}
-					setActiveModelId(models[0].id);
-				})
-				.catch((err) => {
+				} catch (err) {
 					console.warn("[settings] load failed:", err);
-					if (models.length > 0) setActiveModelId(models[0].id);
-				});
+				}
+
+				// 1. Honour the user's explicitly-saved model and push it to the
+				//    engine so it actually takes effect. Match on provider+id: ids
+				//    are NOT unique across providers, so matching by id alone could
+				//    bind the wrong provider (e.g. zai/glm vs opencode-go/glm).
+				if (data.defaultModel) {
+					const match =
+						models.find((m) => m.id === data.defaultModel && m.provider === data.defaultProvider) ??
+						models.find((m) => m.id === data.defaultModel);
+					if (match) {
+						console.log("[settings] restoring model:", match.provider, match.id);
+						setActiveModelId(modelKey(match.provider, match.id));
+						invoke("set_active_model", {
+							provider: match.provider,
+							model: match.id,
+						}).catch(() => {});
+						return;
+					}
+				}
+
+				// 2. No saved preference: MIRROR the engine's actual model so the
+				//    selector matches the model that will really answer (the
+				//    per-message usage label). No push needed — it's already active.
+				try {
+					const engine = (await invoke("get_active_model")) as {
+						provider?: string;
+						id?: string;
+					} | null;
+					const key = engine?.id ? modelKey(engine.provider, engine.id) : undefined;
+					if (key && findModel(models, key)) {
+						console.log("[settings] mirroring engine model:", key);
+						setActiveModelId(key);
+						return;
+					}
+				} catch (err) {
+					console.warn("[settings] get_active_model failed:", err);
+				}
+
+				// 3. Last resort: pick the first model AND push it so the UI and
+				//    engine still agree even if the mirror query failed.
+				const fallback = models[0];
+				setActiveModelId(modelKey(fallback.provider, fallback.id));
+				invoke("set_active_model", {
+					provider: fallback.provider,
+					model: fallback.id,
+				}).catch(() => {});
+			})();
 		} else if (models.length > 0 && !activeModelId) {
-			setActiveModelId(models[0].id);
+			setActiveModelId(modelKey(models[0].provider, models[0].id));
 		}
 	}, [models, activeModelId]);
 
@@ -291,7 +393,7 @@ function App() {
 			}
 
 			// Track message with provider/model info
-			const activeModel = models.find((m) => m.id === activeModelId);
+			const activeModel = findModel(models, activeModelId);
 			trackEvent("message_sent", {
 				provider: activeModel?.provider?.split("-")[0] ?? "unknown",
 				model: activeModel?.id ?? "unknown",
@@ -305,20 +407,19 @@ function App() {
 		[activeSessionFile, startStream, models, activeModelId],
 	);
 
-	const handleModelSelect = async (_provider: string, modelId: string) => {
-		setActiveModelId(modelId);
+	const handleModelSelect = async (provider: string, modelId: string) => {
+		setActiveModelId(modelKey(provider, modelId));
 		try {
-			const model = models.find((m) => m.id === modelId);
-			console.log("[settings] saving model:", modelId);
+			console.log("[settings] saving model:", provider, modelId);
 			await invoke("save_settings", {
 				settings: {
 					defaultModel: modelId,
-					defaultProvider: model?.provider || _provider,
+					defaultProvider: provider,
 				},
 			});
 			// Actually set the model on the sidecar so it takes effect immediately
 			await invoke("set_active_model", {
-				provider: model?.provider || _provider,
+				provider,
 				model: modelId,
 			});
 		} catch (err) {
@@ -414,6 +515,11 @@ function App() {
 			: loadedSessionMessages
 		: streamState.messages;
 
+	// Hide the app chrome (sidebar, mobile bars, share button) whenever the
+	// main pane is showing a full-screen state: onboarding, settings, or the
+	// startup loading splash (#169).
+	const hideChrome = showConnectModal || showSettings || initializing;
+
 	const sidebarSessions = sessionEntries.map((s) => ({
 		id: s.file,
 		title: s.title,
@@ -457,7 +563,7 @@ function App() {
 			)}
 
 			{/* Sidebar — desktop: visible, mobile: slide-over */}
-			{!showConnectModal && !showSettings && (
+			{!hideChrome && (
 				<>
 					{/* Desktop sidebar */}
 					<div className="hidden md:block">
@@ -545,16 +651,11 @@ function App() {
 				<RemoteConnectionBar />
 
 				{/* Mobile top bar */}
-				{!showConnectModal && !showSettings && (
+				{!hideChrome && (
 					<MobileTopBar
 						title="Zosma Cowork"
 						subtitle={
-							activeModelId
-								? (() => {
-										const m = models.find((mo) => mo.id === activeModelId);
-										return m?.name || activeModelId;
-									})()
-								: undefined
+							activeModelId ? (findModel(models, activeModelId)?.name ?? activeModelId) : undefined
 						}
 						open={mobileMenuOpen}
 						onToggle={() => setMobileMenuOpen((prev) => !prev)}
@@ -567,7 +668,7 @@ function App() {
 				)}
 
 				{/* Floating action overlay — no layout cost */}
-				{!showConnectModal && !showSettings && (
+				{!hideChrome && (
 					<div className="hidden md:flex absolute top-2 right-3 z-10">
 						<ShareExport messages={displayMessages} />
 					</div>
@@ -577,17 +678,21 @@ function App() {
 				<main className="flex-1 flex flex-col min-h-0 overflow-hidden">
 					<div
 						key={
-							showConnectModal
-								? "connect"
-								: showSettings
-									? "settings"
-									: loadingSession
-										? "loading"
-										: "chat"
+							initializing
+								? "splash"
+								: showConnectModal
+									? "connect"
+									: showSettings
+										? "settings"
+										: loadingSession
+											? "loading"
+											: "chat"
 						}
 						className="flex-1 flex flex-col min-h-0 animate-fade-in"
 					>
-						{showConnectModal ? (
+						{initializing ? (
+							<SplashScreen />
+						) : showConnectModal ? (
 							<HomeView
 								onComplete={handleConnectComplete}
 								onSkipToSettings={handleSkipToSettings}
@@ -636,7 +741,7 @@ function App() {
 				</main>
 
 				{/* Mobile bottom nav */}
-				{!showConnectModal && !showSettings && (
+				{!hideChrome && (
 					<MobileBottomNav
 						view={sidebarView}
 						onChangeView={(view) => {

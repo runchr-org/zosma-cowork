@@ -1,11 +1,12 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 function isRemoteMode(): boolean {
-	try {
-		return !(window as unknown as { __TAURI__?: Record<string, unknown> }).__TAURI__;
-	} catch {
-		return true;
-	}
+	// `isTauri()` checks `window.isTauri`, which the Tauri v2 runtime injects
+	// always — unlike `window.__TAURI__`, which only exists when
+	// `app.withGlobalTauri` is enabled (it isn't here). Remote/browser mode is
+	// simply "not running inside the Tauri shell".
+	return !isTauri();
 }
 
 interface RemoteConnectionBarProps {

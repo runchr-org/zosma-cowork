@@ -107,3 +107,73 @@ describe("ChatMessage export actions", () => {
 		expect(screen.queryByRole("button", { name: /open folder/i })).not.toBeInTheDocument();
 	});
 });
+
+describe("ChatMessage model label", () => {
+	afterEach(() => cleanupMocks());
+
+	const msg = {
+		id: "m",
+		role: "assistant" as const,
+		content: "hi",
+		timestamp: Date.now(),
+		provider: "anthropic",
+		model: "claude-sonnet-4",
+	};
+
+	const models = [
+		{
+			id: "claude-sonnet-4",
+			name: "Claude Sonnet 4",
+			provider: "anthropic",
+			reasoning: false,
+			contextWindow: 200000,
+			maxTokens: 8192,
+		},
+	];
+
+	it("shows the friendly catalog name when the model is known", () => {
+		render(<ChatMessageItem message={msg} models={models} />);
+		expect(screen.getByText("Claude Sonnet 4")).toBeInTheDocument();
+		expect(screen.queryByText("anthropic/claude-sonnet-4")).not.toBeInTheDocument();
+	});
+
+	it("falls back to provider/id when the model is not in the catalog", () => {
+		render(<ChatMessageItem message={msg} models={[]} />);
+		expect(screen.getByText("anthropic/claude-sonnet-4")).toBeInTheDocument();
+	});
+
+	it("falls back to provider/id when no catalog is provided", () => {
+		render(<ChatMessageItem message={msg} />);
+		expect(screen.getByText("anthropic/claude-sonnet-4")).toBeInTheDocument();
+	});
+
+	it("resolves the name for the right provider when ids collide", () => {
+		// Same id under two providers — must pick the message's actual provider.
+		const collide = [
+			{
+				id: "glm-4.6",
+				name: "GLM 4.6 (zai)",
+				provider: "zai",
+				reasoning: false,
+				contextWindow: 0,
+				maxTokens: 0,
+			},
+			{
+				id: "glm-4.6",
+				name: "GLM 4.6 (opencode-go)",
+				provider: "opencode-go",
+				reasoning: false,
+				contextWindow: 0,
+				maxTokens: 0,
+			},
+		];
+		render(
+			<ChatMessageItem
+				message={{ ...msg, provider: "opencode-go", model: "glm-4.6" }}
+				models={collide}
+			/>,
+		);
+		expect(screen.getByText("GLM 4.6 (opencode-go)")).toBeInTheDocument();
+		expect(screen.queryByText("GLM 4.6 (zai)")).not.toBeInTheDocument();
+	});
+});

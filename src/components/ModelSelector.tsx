@@ -1,3 +1,4 @@
+import { findModel, modelKey } from "@/lib/model-key";
 import type { ModelInfo } from "@/types";
 import { Check, ChevronUp, Search, Sparkles, Zap } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -6,6 +7,7 @@ import { createPortal } from "react-dom";
 
 interface ModelSelectorProps {
 	models: ModelInfo[];
+	/** Active model identity as a `provider/id` key (see lib/model-key). */
 	currentModelId?: string;
 	onSelect: (provider: string, modelId: string) => void;
 }
@@ -22,8 +24,8 @@ export function ModelSelector({ models, currentModelId, onSelect }: ModelSelecto
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const searchRef = useRef<HTMLInputElement>(null);
 
-	const current = models.find((m) => m.id === currentModelId);
-	const label = current ? current.name : currentModelId || "Default";
+	const current = findModel(models, currentModelId);
+	const label = current ? current.name : "Default";
 	const shortProvider = current ? providerShort(current.provider) : "";
 
 	// Position the portal dropdown; prefer above since input sits at the bottom
@@ -183,10 +185,10 @@ export function ModelSelector({ models, currentModelId, onSelect }: ModelSelecto
 
 											{/* Models */}
 											{providerModels.map((model) => {
-												const isActive = model.id === currentModelId;
+												const isActive = modelKey(model.provider, model.id) === currentModelId;
 												return (
 													<button
-														key={model.id}
+														key={modelKey(model.provider, model.id)}
 														type="button"
 														onClick={() => {
 															onSelect(model.provider, model.id);

@@ -1,3 +1,4 @@
+import { modelKey } from "@/lib/model-key";
 import type { ChatMessage, ModelInfo, ToolCallInfo } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -428,7 +429,7 @@ export function useRemoteChat({ pin }: UseRemoteChatOptions): RemoteChatState {
 	// ── Switch model ─────────────────────────────────────────────────
 	const switchModel = useCallback(
 		async (provider: string, modelId: string) => {
-			setCurrentModelId(modelId);
+			setCurrentModelId(modelKey(provider, modelId));
 			try {
 				const res = await fetch(`${base}/api/command${auth}`, {
 					method: "POST",
