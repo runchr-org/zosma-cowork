@@ -1,4 +1,5 @@
 import { ChatView } from "@/chat/ChatView";
+import { ExtensionUiHost } from "@/components/ExtensionUiHost";
 import { HomeView } from "@/components/HomeView";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { MobileTopBar } from "@/components/MobileTopBar";
@@ -617,6 +618,9 @@ function App() {
 
 	return (
 		<div className="flex h-screen bg-background">
+			{/* Extension UI dialogs (pi-ask-user etc. via ctx.ui) */}
+			<ExtensionUiHost />
+
 			{/* Delete chat confirmation */}
 			<ConfirmDialog
 				open={pendingDelete !== null}
