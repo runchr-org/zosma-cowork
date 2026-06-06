@@ -115,6 +115,11 @@ import {
 	loadSettings as loadSettingsStore,
 	saveSettings as saveSettingsStore,
 } from "./settings-store.js";
+import {
+	computeInheritedCredentials,
+	piAuthPath,
+	readAuthFile,
+} from "./auth-seed.js";
 // Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
 // this loaded as an extension, Claude Pro/Max OAuth requests are
 // fingerprinted by Anthropic as a "third-party app" and rejected with a
@@ -805,6 +810,35 @@ async function main() {
 
 		// Auth storage — points at our zosma dir
 		authStorage = AuthStorage.create(authPath);
+
+		// Credential inheritance from the pi CLI. When Cowork has NO credentials of
+		// its own, fall back to ~/.pi/agent/auth.json and seed every provider the
+		// user already configured in pi (API keys AND OAuth). This makes those
+		// providers work immediately and means the onboarding/Connect screen only
+		// appears when NOTHING is configured anywhere (in pi OR Cowork). Once Cowork
+		// has any credential of its own we stop inheriting, so a deliberate logout
+		// of a single provider sticks; only a fully-empty Cowork auth falls back to
+		// pi again. See user request in the #169 thread.
+		if (authStorage.list().length === 0) {
+			try {
+				const inherited = computeInheritedCredentials(
+					{},
+					readAuthFile(piAuthPath(piAgentDir())),
+				);
+				const ids = Object.keys(inherited);
+				for (const id of ids) {
+					authStorage.set(id, inherited[id] as Parameters<typeof authStorage.set>[1]);
+				}
+				if (ids.length > 0) {
+					log("Seeded %d credential(s) from pi: %s", ids.length, ids.join(", "));
+				}
+			} catch (err) {
+				log(
+					"pi credential seed failed: %s",
+					err instanceof Error ? err.message : String(err),
+				);
+			}
+		}
 
 		// Model registry — reads built-in + custom models from our dir
 		modelRegistry = ModelRegistry.create(authStorage, modelsPath);
