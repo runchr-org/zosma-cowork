@@ -21,7 +21,8 @@ interface SidebarProps {
 	onNewSession: () => void;
 	onDeleteSession: (id: string) => void;
 	onChangeView: (view: string) => void;
-	onSend?: (prompt: string) => void;
+	/** Load a prompt template into the composer for editing (does not send). */
+	onUseTemplate?: (prompt: string) => void;
 	/** The user's home dir, used to collapse session paths to `~`. */
 	homeDir?: string;
 }
@@ -42,7 +43,7 @@ export function Sidebar({
 	onNewSession,
 	onDeleteSession,
 	onChangeView,
-	onSend,
+	onUseTemplate,
 	homeDir,
 }: SidebarProps) {
 	const reduced = useReducedMotion();
@@ -103,7 +104,7 @@ export function Sidebar({
 			{/* ── Content area ── */}
 			<div className="flex-1 min-h-0 relative overflow-hidden">
 				<AnimatePresence mode="wait" initial={false}>
-					{activeTab === "templates" && onSend ? (
+					{activeTab === "templates" && onUseTemplate ? (
 						<motion.div
 							key="templates"
 							className="absolute inset-0"
@@ -112,7 +113,7 @@ export function Sidebar({
 							exit={reduced ? { opacity: 0 } : { opacity: 0, x: -16 }}
 							transition={{ duration: 0.2, ease: easeOutExpo }}
 						>
-							<PromptTemplates onSend={onSend} />
+							<PromptTemplates onUseTemplate={onUseTemplate} />
 						</motion.div>
 					) : (
 						<motion.div

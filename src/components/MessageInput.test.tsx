@@ -123,3 +123,41 @@ describe("MessageInput file picker", () => {
 		expect(screen.getByText((content) => content.includes("…"))).toBeInTheDocument();
 	});
 });
+
+describe("MessageInput draft (prompt templates)", () => {
+	afterEach(() => {
+		cleanupMocks();
+	});
+
+	it("fills the textarea with the draft text without sending", () => {
+		const onSend = vi.fn();
+		render(<MessageInput onSend={onSend} draft={{ text: "Draft prompt", nonce: 1 }} />);
+
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		expect(textarea.value).toBe("Draft prompt");
+		// Loading a template must NOT auto-send.
+		expect(onSend).not.toHaveBeenCalled();
+	});
+
+	it("replaces the draft when the nonce changes", () => {
+		const { rerender } = render(
+			<MessageInput onSend={vi.fn()} draft={{ text: "First", nonce: 1 }} />,
+		);
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		expect(textarea.value).toBe("First");
+
+		rerender(<MessageInput onSend={vi.fn()} draft={{ text: "Second", nonce: 2 }} />);
+		expect(textarea.value).toBe("Second");
+	});
+
+	it("sends the draft text once the user submits", async () => {
+		const onSend = vi.fn();
+		const user = userEvent.setup();
+		render(<MessageInput onSend={onSend} draft={{ text: "Editable prompt", nonce: 1 }} />);
+
+		await user.click(screen.getByRole("button", { name: /send/i }));
+
+		expect(onSend).toHaveBeenCalledTimes(1);
+		expect(onSend.mock.calls[0][0]).toBe("Editable prompt");
+	});
+});

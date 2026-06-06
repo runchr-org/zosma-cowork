@@ -13,6 +13,12 @@ interface MessageInputProps {
 	models?: ModelInfo[];
 	currentModelId?: string;
 	onModelSelect?: (provider: string, modelId: string) => void;
+	/**
+	 * External draft to load into the composer (e.g. a prompt template).
+	 * Setting a new `nonce` fills the textarea with `text` and focuses it,
+	 * letting the user edit before sending — it does NOT auto-send.
+	 */
+	draft?: { text: string; nonce: number };
 }
 
 export interface MessageInputHandle {
@@ -20,7 +26,7 @@ export interface MessageInputHandle {
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
-	({ onSend, disabled, modelLabel, models, currentModelId, onModelSelect }, ref) => {
+	({ onSend, disabled, modelLabel, models, currentModelId, onModelSelect, draft }, ref) => {
 		const [text, setText] = useState("");
 		const [attachedFiles, setAttachedFiles] = useState<{ path: string; name: string }[]>([]);
 		const [isListening, setIsListening] = useState(false);
@@ -32,6 +38,21 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 		useImperativeHandle(ref, () => ({
 			focus: () => textareaRef.current?.focus(),
 		}));
+
+		// Load an external draft (prompt template) into the composer for editing.
+		// biome-ignore lint/correctness/useExhaustiveDependencies: only react to a new draft nonce
+		useEffect(() => {
+			if (!draft || !draft.text) return;
+			setText(draft.text);
+			// Focus and move the caret to the end after the value is applied.
+			requestAnimationFrame(() => {
+				const textarea = textareaRef.current;
+				if (!textarea) return;
+				textarea.focus();
+				const end = textarea.value.length;
+				textarea.setSelectionRange(end, end);
+			});
+		}, [draft?.nonce]);
 
 		// Auto-resize textarea
 		// biome-ignore lint/correctness/useExhaustiveDependencies: textareaRef is stable

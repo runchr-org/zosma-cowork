@@ -2,7 +2,8 @@
  * PromptTemplates — sidebar panel with reusable prompt templates
  *
  * Shows templates grouped by category. Clicking a template card
- * sends its prompt via the onSend callback.
+ * loads its prompt into the message composer (via onUseTemplate) so the
+ * user can review/edit before sending — it does NOT auto-send.
  */
 
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,7 +23,8 @@ import {
 import type { ComponentType } from "react";
 
 interface PromptTemplatesProps {
-	onSend: (prompt: string) => void;
+	/** Load the template prompt into the composer for editing (does not send). */
+	onUseTemplate: (prompt: string) => void;
 }
 
 /** Map icon string → lucide component */
@@ -44,7 +46,7 @@ function getIcon(iconName: string) {
 	return Icon ? <Icon className="w-3.5 h-3.5" /> : null;
 }
 
-export function PromptTemplates({ onSend }: PromptTemplatesProps) {
+export function PromptTemplates({ onUseTemplate }: PromptTemplatesProps) {
 	// Group templates by category
 	const grouped = TEMPLATES.reduce(
 		(acc, tpl) => {
@@ -78,7 +80,7 @@ export function PromptTemplates({ onSend }: PromptTemplatesProps) {
 							</div>
 							<div className="space-y-1">
 								{templates.map((tpl) => (
-									<TemplateCard key={tpl.id} template={tpl} onSend={onSend} />
+									<TemplateCard key={tpl.id} template={tpl} onUseTemplate={onUseTemplate} />
 								))}
 							</div>
 						</div>
@@ -91,15 +93,15 @@ export function PromptTemplates({ onSend }: PromptTemplatesProps) {
 
 function TemplateCard({
 	template,
-	onSend,
+	onUseTemplate,
 }: {
 	template: PromptTemplate;
-	onSend: (prompt: string) => void;
+	onUseTemplate: (prompt: string) => void;
 }) {
 	return (
 		<button
 			type="button"
-			onClick={() => onSend(template.prompt)}
+			onClick={() => onUseTemplate(template.prompt)}
 			className="w-full text-left px-2.5 py-2 rounded-md transition-colors hover:bg-sidebar-accent/50 group"
 			style={{ color: "hsl(var(--sidebar-foreground))" }}
 		>

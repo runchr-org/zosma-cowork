@@ -2,6 +2,8 @@
  * PromptTemplates test
  *
  * Tests for the templates sidebar panel that shows reusable prompt templates.
+ * Clicking a template loads its prompt into the composer (onUseTemplate) for
+ * editing — it must NOT auto-send.
  */
 
 import { CATEGORIES, TEMPLATES } from "@/data/templates";
@@ -11,19 +13,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PromptTemplates } from "./PromptTemplates";
 
 describe("PromptTemplates", () => {
-	const mockOnSend = vi.fn();
+	const mockOnUseTemplate = vi.fn();
 
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
 
 	it("renders the section title", () => {
-		render(<PromptTemplates onSend={mockOnSend} />);
+		render(<PromptTemplates onUseTemplate={mockOnUseTemplate} />);
 		expect(screen.getByText("Templates")).toBeInTheDocument();
 	});
 
 	it("renders all category sections", () => {
-		render(<PromptTemplates onSend={mockOnSend} />);
+		render(<PromptTemplates onUseTemplate={mockOnUseTemplate} />);
 		for (const cat of Object.values(CATEGORIES)) {
 			// Use getAllByText with substring match — at least one element should match
 			const matches = screen.getAllByText((content) => content.includes(cat.label));
@@ -32,21 +34,21 @@ describe("PromptTemplates", () => {
 	});
 
 	it("renders all template cards with titles", () => {
-		render(<PromptTemplates onSend={mockOnSend} />);
+		render(<PromptTemplates onUseTemplate={mockOnUseTemplate} />);
 		for (const tpl of TEMPLATES) {
 			expect(screen.getByText(tpl.title)).toBeInTheDocument();
 		}
 	});
 
 	it("renders template descriptions", () => {
-		render(<PromptTemplates onSend={mockOnSend} />);
+		render(<PromptTemplates onUseTemplate={mockOnUseTemplate} />);
 		for (const tpl of TEMPLATES) {
 			expect(screen.getByText(tpl.description)).toBeInTheDocument();
 		}
 	});
 
 	it("templates are rendered under their category section", () => {
-		render(<PromptTemplates onSend={mockOnSend} />);
+		render(<PromptTemplates onUseTemplate={mockOnUseTemplate} />);
 		// Verify writing templates appear in the rendered output
 		const writingTemplates = TEMPLATES.filter((t) => t.category === "writing");
 		for (const tpl of writingTemplates) {
@@ -54,27 +56,27 @@ describe("PromptTemplates", () => {
 		}
 	});
 
-	it("calls onSend with the template prompt when a card is clicked", async () => {
+	it("calls onUseTemplate with the template prompt when a card is clicked", async () => {
 		const user = userEvent.setup();
-		render(<PromptTemplates onSend={mockOnSend} />);
+		render(<PromptTemplates onUseTemplate={mockOnUseTemplate} />);
 
 		const firstTemplate = TEMPLATES[0];
 		const card = screen.getByText(firstTemplate.title).closest("button");
 		if (!card) throw new Error("Card element not found");
 		await user.click(card);
-		expect(mockOnSend).toHaveBeenCalledWith(firstTemplate.prompt);
+		expect(mockOnUseTemplate).toHaveBeenCalledWith(firstTemplate.prompt);
 	});
 
-	it("calls onSend with the correct prompt for each template", async () => {
+	it("calls onUseTemplate with the correct prompt for each template", async () => {
 		const user = userEvent.setup();
-		render(<PromptTemplates onSend={mockOnSend} />);
+		render(<PromptTemplates onUseTemplate={mockOnUseTemplate} />);
 
 		for (const tpl of TEMPLATES) {
 			vi.clearAllMocks();
 			const card = screen.getByText(tpl.title).closest("button");
 			if (!card) throw new Error("Card element not found");
 			await user.click(card);
-			expect(mockOnSend).toHaveBeenCalledWith(tpl.prompt);
+			expect(mockOnUseTemplate).toHaveBeenCalledWith(tpl.prompt);
 		}
 	});
 });

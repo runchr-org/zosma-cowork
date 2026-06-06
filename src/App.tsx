@@ -78,6 +78,9 @@ function App() {
 	// Session management
 	const [sessionEntries, setSessionEntries] = useState<SessionEntry[]>([]);
 	const [activeSessionFile, setActiveSessionFile] = useState<string | null>(null);
+	// Draft prompt pushed into the composer (e.g. when a template is clicked).
+	// The bumping `nonce` lets the same prompt be re-applied on repeated clicks.
+	const [composerDraft, setComposerDraft] = useState<{ text: string; nonce: number }>();
 	// The agent's current workspace folder (where file/bash tools read & write).
 	const [workspaceCwd, setWorkspaceCwd] = useState<string | null>(null);
 	// The user's home dir (sidecar's default workspace) — used to label the
@@ -421,6 +424,15 @@ function App() {
 		[activeSessionFile, startStream, models, activeModelId, workspaceCwd],
 	);
 
+	// Load a prompt template into the composer instead of sending it directly,
+	// so the user can review/edit before hitting send.
+	const handleUseTemplate = useCallback((prompt: string) => {
+		setSidebarView("chats");
+		setShowSettings(false);
+		setMobileMenuOpen(false);
+		setComposerDraft((prev) => ({ text: prompt, nonce: (prev?.nonce ?? 0) + 1 }));
+	}, []);
+
 	const handleModelSelect = async (provider: string, modelId: string) => {
 		setActiveModelId(modelKey(provider, modelId));
 		try {
@@ -665,7 +677,7 @@ function App() {
 									setShowSettings(false);
 								}
 							}}
-							onSend={handleSend}
+							onUseTemplate={handleUseTemplate}
 						/>
 					</div>
 
@@ -715,7 +727,7 @@ function App() {
 										setShowSettings(false);
 									}
 								}}
-								onSend={handleSend}
+								onUseTemplate={handleUseTemplate}
 							/>
 						</div>
 					</div>
@@ -812,6 +824,7 @@ function App() {
 								currentModelId={activeModelId}
 								onModelSelect={handleModelSelect}
 								toolPhase={toolPhase}
+								draft={composerDraft}
 							/>
 						)}
 					</div>

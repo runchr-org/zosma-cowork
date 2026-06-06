@@ -24,6 +24,8 @@ interface ChatViewProps {
 	toolPhase?: ToolPhase | null;
 	/** Changing this remounts the input, retriggering its entrance animation */
 	sessionKey?: string;
+	/** External draft (e.g. a prompt template) to load into the composer for editing. */
+	draft?: { text: string; nonce: number };
 }
 
 export function ChatView({
@@ -40,6 +42,7 @@ export function ChatView({
 	onModelSelect,
 	toolPhase,
 	sessionKey,
+	draft,
 }: ChatViewProps) {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -135,6 +138,7 @@ export function ChatView({
 					models={models}
 					currentModelId={currentModelId}
 					onModelSelect={onModelSelect}
+					draft={draft}
 				/>
 			</div>
 		</div>
