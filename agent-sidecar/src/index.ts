@@ -136,6 +136,7 @@ import {
 import piAnthropicMessages from "./vendor/anthropic-messages/extensions/index.js";
 // Zosma Office Document Generation extension — registers 8 OfficeCLI tools.
 import zosmaOfficeDocs from "./office-docs/extension.js";
+import zosmaGoogleCalendar from "./google-calendar/extension.js";
 // Loads pi's disk/npm/git extensions via virtualModules-backed jiti so they
 // work in the bundled sidecar (no node_modules beside it). See #147.
 import {
@@ -1249,6 +1250,7 @@ async function main() {
 			extensionFactories: [
 				piAnthropicMessages,
 				zosmaOfficeDocs,
+				zosmaGoogleCalendar,
 				...diskExtensionFactories,
 			],
 			systemPromptOverride: () => ZOSMA_SYSTEM_PROMPT,
