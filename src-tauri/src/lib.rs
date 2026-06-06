@@ -754,7 +754,7 @@ async fn new_session(
     // `cwd` is the workspace folder the user picked (via the native folder
     // picker). Forwarded to the sidecar, which rebinds the agent's file/bash
     // tools and project-local resource discovery to it. Omitted => the sidecar
-    // keeps its current workspace (default ~/ZosmaCowork on first run).
+    // keeps its current workspace (defaults to the user's home dir).
     let mut payload = serde_json::json!({"type":"new_session","id":"ns"});
     if let Some(c) = cwd {
         if !c.trim().is_empty() {

@@ -136,7 +136,7 @@ import {
 interface InitCommand {
 	type: "init";
 	zosmaDir?: string;
-	/** Optional initial workspace folder; defaults to ~/ZosmaCowork. */
+	/** Optional initial workspace folder; defaults to the home directory. */
 	workspace?: string;
 }
 
@@ -445,19 +445,21 @@ function zosmaAgentDir(zosmaDir: string): string {
 }
 
 /**
- * Default workspace directory — where the agent reads/writes the user's project
- * files when no folder is explicitly chosen.
+ * Default workspace directory — where the agent reads/writes files when no
+ * folder is explicitly chosen.
  *
- * Cowork's sidecar is spawned by the Tauri shell, which (for a GUI launch)
- * inherits an arbitrary, user-invisible `process.cwd()` — `/` on a Linux
- * .desktop launch, the app bundle dir on macOS, system32-ish on Windows. Using
- * that as the agent's working directory scattered generated files into places
- * the user never chose. Instead we pin a dedicated, predictable home-relative
- * folder and create it on first use. A user-selected folder (per session)
- * overrides this via resolveWorkspace().
+ * This is the user's HOME directory, treated as the "full system" — the same
+ * mental model as opening pi in `~`: the agent can range across the whole home
+ * tree. New sessions either pick a specific folder (native picker) or fall back
+ * here; legacy sessions with no saved cwd also resume here.
+ *
+ * Why not `process.cwd()`? Cowork's sidecar is spawned by the Tauri shell,
+ * which (for a GUI launch) inherits an arbitrary, user-invisible cwd — `/` on a
+ * Linux .desktop launch, the app bundle dir on macOS, system32-ish on Windows.
+ * Home is predictable and always exists.
  */
 function defaultWorkspaceDir(): string {
-	return join(homedir(), "ZosmaCowork");
+	return homedir();
 }
 
 /**
@@ -562,6 +564,7 @@ function listSessionFiles(zosmaDir: string): Array<{
 	title: string;
 	model?: string;
 	provider?: string;
+	cwd?: string;
 	messageCount: number;
 	createdAt: number;
 	lastActivity: number;
@@ -579,6 +582,7 @@ function listSessionFiles(zosmaDir: string): Array<{
 		title: string;
 		model?: string;
 		provider?: string;
+		cwd?: string;
 		messageCount: number;
 		createdAt: number;
 		lastActivity: number;
@@ -614,6 +618,7 @@ function listSessionFiles(zosmaDir: string): Array<{
 				title: header.title || file.replace(".jsonl", ""),
 				model: header.model,
 				provider: header.provider,
+				cwd: typeof header.cwd === "string" ? header.cwd : undefined,
 				messageCount,
 				createdAt: header.createdAt || 0,
 				lastActivity,
@@ -639,6 +644,7 @@ function saveSession(
 	messages: unknown[],
 	model?: string,
 	provider?: string,
+	cwd?: string,
 ): void {
 	const sDir = sessionsDir(zosmaDir);
 	ensureDir(sDir);
@@ -653,6 +659,9 @@ function saveSession(
 		createdAt: Date.now(),
 		model,
 		provider,
+		// Workspace folder this conversation ran in, so resuming restores the
+		// same cwd. Absent on legacy sessions → they fall back to the default.
+		cwd,
 		messageCount: messages.length,
 	};
 
@@ -1175,6 +1184,7 @@ async function main() {
 								chatMessages,
 								activeSession.model?.id,
 								activeSession.model?.provider,
+								workspaceCwd,
 							);
 							log(
 								"Saved remote session: %s (%d messages)",
@@ -1704,6 +1714,8 @@ async function main() {
 						cmd.messages || [],
 						cmd.model,
 						cmd.provider,
+						// Stamp the active workspace so resume restores this folder.
+						workspaceCwd,
 					);
 					send({ type: "done", id: cmd.id });
 					break;
@@ -1729,9 +1741,23 @@ async function main() {
 						// Unlike the `reload` command we do NOT call initAgent(): that
 						// re-emits `ready` and would reset the frontend model selection.
 						if (authStorage && modelRegistry && settingsManager && resourceLoader) {
-							// 1. Re-scan disk for newly added extensions/skills/prompts.
-							await resourceLoader.reload();
-							// 2. Rebuild the session from the reloaded loader.
+							// 0. Restore the workspace this conversation ran in. Legacy
+							//    sessions have no saved cwd → resolveWorkspace(undefined)
+							//    falls back to the default (home).
+							const sessionCwd = resolveWorkspace(
+								typeof header.cwd === "string" ? header.cwd : undefined,
+							);
+							if (sessionCwd !== workspaceCwd) {
+								// Folder changed: rebuild the loader bound to the restored
+								// cwd (this also re-scans disk for new extensions/skills).
+								workspaceCwd = sessionCwd;
+								log("load_session: workspace → %s", workspaceCwd);
+								resourceLoader = await buildResourceLoader(workspaceCwd);
+							} else {
+								// Same folder: just re-scan for newly added resources.
+								await resourceLoader.reload();
+							}
+							// Rebuild the session from the (re)loaded loader.
 							if (session) {
 								session.abort();
 							}
@@ -1766,6 +1792,7 @@ async function main() {
 								title: header.title || "",
 								model: header.model,
 								provider: header.provider,
+								cwd: workspaceCwd,
 							},
 						});
 					} catch (err) {

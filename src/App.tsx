@@ -443,9 +443,14 @@ function App() {
 			dispatch({ type: "RESET" });
 			try {
 				const result = await invoke("load_session", { sessionFile: file });
-				const data = result as { messages: ChatMessage[] };
+				const data = result as { messages: ChatMessage[]; cwd?: string };
 				if (data.messages && data.messages.length > 0) {
 					setLoadedSessionMessages(data.messages);
+				}
+				// Reflect the workspace this session was restored into (the sidecar
+				// rebinds to the session's saved folder, or home for legacy chats).
+				if (typeof data.cwd === "string") {
+					setWorkspaceCwd(data.cwd);
 				}
 			} catch (err) {
 				console.error("Failed to load session:", err);
