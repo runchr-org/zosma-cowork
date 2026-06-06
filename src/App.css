@@ -382,6 +382,119 @@ body {
 	background: hsl(var(--primary) / 0.25);
 }
 
+/* ── SKILL.md reader typography ── */
+.skill-md {
+	font-size: 13px;
+	line-height: 1.65;
+	color: hsl(var(--foreground));
+}
+.skill-md > *:first-child {
+	margin-top: 0;
+}
+.skill-md h1,
+.skill-md h2,
+.skill-md h3,
+.skill-md h4 {
+	font-weight: 600;
+	line-height: 1.3;
+	margin: 1.4em 0 0.5em;
+	color: hsl(var(--foreground));
+}
+.skill-md h1 {
+	font-size: 1.4em;
+}
+.skill-md h2 {
+	font-size: 1.2em;
+	padding-bottom: 0.3em;
+	border-bottom: 1px solid hsl(var(--border));
+}
+.skill-md h3 {
+	font-size: 1.05em;
+}
+.skill-md h4 {
+	font-size: 0.95em;
+}
+.skill-md p,
+.skill-md ul,
+.skill-md ol,
+.skill-md blockquote,
+.skill-md table {
+	margin: 0.6em 0;
+}
+.skill-md ul,
+.skill-md ol {
+	padding-left: 1.4em;
+}
+.skill-md ul {
+	list-style: disc;
+}
+.skill-md ol {
+	list-style: decimal;
+}
+.skill-md li {
+	margin: 0.25em 0;
+}
+.skill-md li::marker {
+	color: hsl(var(--muted-foreground));
+}
+.skill-md a {
+	color: hsl(var(--primary));
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.skill-md strong {
+	font-weight: 600;
+}
+.skill-md blockquote {
+	border-left: 3px solid hsl(var(--border));
+	padding-left: 0.9em;
+	color: hsl(var(--muted-foreground));
+}
+.skill-md hr {
+	border: none;
+	border-top: 1px solid hsl(var(--border));
+	margin: 1.2em 0;
+}
+.skill-md code {
+	background: hsl(var(--muted));
+	padding: 0.12rem 0.36rem;
+	border-radius: var(--radius-sm);
+	font-size: 0.85em;
+	font-family: var(--font-mono);
+}
+.skill-md pre {
+	background: hsl(var(--muted)) !important;
+	border: 1px solid hsl(var(--border));
+	border-radius: var(--radius-md);
+	padding: 0.9rem;
+	overflow-x: auto;
+	margin: 0.7em 0;
+}
+.skill-md pre code {
+	background: transparent;
+	padding: 0;
+	font-size: 0.82em;
+}
+.skill-md table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9em;
+}
+.skill-md th,
+.skill-md td {
+	border: 1px solid hsl(var(--border));
+	padding: 0.4em 0.6em;
+	text-align: left;
+}
+.skill-md th {
+	background: hsl(var(--muted) / 0.6);
+	font-weight: 600;
+}
+.skill-md img {
+	max-width: 100%;
+	border-radius: var(--radius-md);
+}
+
 /* ── Animations ── */
 @keyframes fade-in {
 	from {

@@ -1057,6 +1057,35 @@ async fn list_skills(_s: State<'_, AppState>) -> Result<Value, String> {
     Ok(serde_json::json!(result))
 }
 
+/// Read the raw SKILL.md content for an installed skill directory.
+///
+/// `path` is the skill directory path (as returned by `list_skills`). The file
+/// `<path>/SKILL.md` is read and returned verbatim so the UI can render it.
+#[tauri::command]
+async fn read_skill_md(path: String, _s: State<'_, AppState>) -> Result<Value, String> {
+    let dir = PathBuf::from(&path);
+    // Accept either a directory (append SKILL.md) or a direct SKILL.md path.
+    let skill_md = if dir.is_dir() {
+        dir.join("SKILL.md")
+    } else if dir.file_name().map(|f| f == "SKILL.md").unwrap_or(false) {
+        dir
+    } else {
+        dir.join("SKILL.md")
+    };
+
+    if !skill_md.exists() {
+        return Err(format!("SKILL.md not found at {}", skill_md.display()));
+    }
+
+    let content =
+        fs::read_to_string(&skill_md).map_err(|e| format!("Failed to read SKILL.md: {e}"))?;
+
+    Ok(serde_json::json!({
+        "content": content,
+        "path": skill_md.to_string_lossy().to_string(),
+    }))
+}
+
 /// Extract a YAML frontmatter field from SKILL.md content
 fn extract_field_from_frontmatter(content: &str, field: &str) -> String {
     let content = content.trim_start();
@@ -1695,6 +1724,7 @@ pub fn run() {
             search_discover,
             search_skills,
             list_skills,
+            read_skill_md,
             install_skill,
             remove_skill,
             start_remote_server,
