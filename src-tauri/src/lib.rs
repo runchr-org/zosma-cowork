@@ -799,8 +799,7 @@ async fn get_settings(s: State<'_, AppState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn save_settings(settings: Value, s: State<'_, AppState>) -> Result<Value, String> {
-    let mut payload =
-        serde_json::json!({"type":"save_settings","id":format!("ss-{}", uuid_v4())});
+    let mut payload = serde_json::json!({"type":"save_settings","id":format!("ss-{}", uuid_v4())});
     if let Some(obj) = settings.as_object() {
         for (k, v) in obj {
             payload[k] = v.clone();
