@@ -22,6 +22,16 @@ export function friendlyToolPhrase(toolName: string): string {
 	if (name.startsWith("google_drive")) return "Organizing your files";
 	if (name === "gmail") return "Checking email";
 
+	// Knowledge / memory tools (memex, llm-wiki, context-mode search)
+	if (name.startsWith("memex") || name.startsWith("wiki") || name.startsWith("ctx_search"))
+		return "Gathering knowledge";
+
+	// Planning / orchestration
+	if (name.includes("todo") || name.includes("plan_tracker")) return "Planning the steps";
+	if (name === "subagent") return "Delegating a task";
+	if (name === "ask_user") return "Asking you a question";
+	if (name.startsWith("schedule")) return "Setting a reminder";
+
 	switch (name) {
 		case "write":
 			return "Creating a document";

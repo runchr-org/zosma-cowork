@@ -93,8 +93,10 @@ function SimpleThinking({
 		<div
 			className="my-1.5 rounded-md px-3 py-2 animate-fade-in"
 			style={{
-				background: "hsl(var(--tool-running-bg))",
-				borderLeft: "2px solid hsl(var(--muted-foreground) / 0.4)",
+				// Neutral/muted — deliberately distinct from the green "activity"
+				// (tool) block so thinking doesn't look like a tool is running.
+				background: "hsl(var(--muted) / 0.5)",
+				borderLeft: "2px solid hsl(var(--muted-foreground) / 0.35)",
 			}}
 		>
 			<button type="button" onClick={onToggle} className="flex w-full items-center gap-2 text-left">
