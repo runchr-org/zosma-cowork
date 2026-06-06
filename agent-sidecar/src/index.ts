@@ -150,6 +150,11 @@ interface GetModelsCommand {
 	id: string;
 }
 
+interface GetActiveModelCommand {
+	type: "get_active_model";
+	id: string;
+}
+
 interface PromptCommand {
 	type: "prompt";
 	id: string;
@@ -332,6 +337,7 @@ interface GetRemoteStatusCommand {
 type Command =
 	| InitCommand
 	| GetModelsCommand
+	| GetActiveModelCommand
 	| PromptCommand
 	| AbortCommand
 	| SetModelCommand
@@ -1013,6 +1019,15 @@ async function main() {
 			type: "ready",
 			models,
 			providers: Array.from(providerMap.values()),
+			// The model the engine will actually run unless/until the UI sets one.
+			// Lets the frontend mirror reality instead of guessing models[0].
+			activeModel: session?.model
+				? {
+						provider: session.model.provider,
+						id: session.model.id,
+						name: session.model.name,
+					}
+				: null,
 		});
 
 		log("Sidecar ready — %d models available", models.length);
@@ -1151,6 +1166,26 @@ async function main() {
 				}
 
 				// ── set_model ──────────────────────────────────────────────
+				// ── get_active_model ───────────────────────────────────────
+				// Returns the model the engine will actually run (session.model).
+				// The frontend uses this to mirror the engine on startup so the
+				// model shown near the input matches the model that answers.
+				case "get_active_model": {
+					if (!initialized || !session) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					const m = session.model;
+					send({
+						type: "result",
+						id: cmd.id,
+						data: m
+							? { provider: m.provider, id: m.id, name: m.name }
+							: null,
+					});
+					break;
+				}
+
 				case "set_model": {
 					if (!initialized || !session) {
 						send({ type: "error", id: cmd.id, message: "Not initialized" });

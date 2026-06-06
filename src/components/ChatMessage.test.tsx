@@ -107,3 +107,43 @@ describe("ChatMessage export actions", () => {
 		expect(screen.queryByRole("button", { name: /open folder/i })).not.toBeInTheDocument();
 	});
 });
+
+describe("ChatMessage model label", () => {
+	afterEach(() => cleanupMocks());
+
+	const msg = {
+		id: "m",
+		role: "assistant" as const,
+		content: "hi",
+		timestamp: Date.now(),
+		provider: "anthropic",
+		model: "claude-sonnet-4",
+	};
+
+	const models = [
+		{
+			id: "claude-sonnet-4",
+			name: "Claude Sonnet 4",
+			provider: "anthropic",
+			reasoning: false,
+			contextWindow: 200000,
+			maxTokens: 8192,
+		},
+	];
+
+	it("shows the friendly catalog name when the model is known", () => {
+		render(<ChatMessageItem message={msg} models={models} />);
+		expect(screen.getByText("Claude Sonnet 4")).toBeInTheDocument();
+		expect(screen.queryByText("anthropic/claude-sonnet-4")).not.toBeInTheDocument();
+	});
+
+	it("falls back to provider/id when the model is not in the catalog", () => {
+		render(<ChatMessageItem message={msg} models={[]} />);
+		expect(screen.getByText("anthropic/claude-sonnet-4")).toBeInTheDocument();
+	});
+
+	it("falls back to provider/id when no catalog is provided", () => {
+		render(<ChatMessageItem message={msg} />);
+		expect(screen.getByText("anthropic/claude-sonnet-4")).toBeInTheDocument();
+	});
+});

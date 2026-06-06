@@ -103,7 +103,12 @@ export function ChatView({
 				) : (
 					<div className="pt-1 pb-6">
 						{allMessages.map((msg) => (
-							<ChatMessageItem key={msg.id} message={msg} detailsExpanded={detailsExpanded} />
+							<ChatMessageItem
+								key={msg.id}
+								message={msg}
+								detailsExpanded={detailsExpanded}
+								models={models}
+							/>
 						))}
 						<div ref={messagesEndRef} />
 					</div>

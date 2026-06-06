@@ -565,6 +565,20 @@ async fn get_models(s: State<'_, AppState>) -> Result<Value, String> {
     .map(|r| r.get("models").cloned().unwrap_or(Value::Array(vec![])))
 }
 
+/// Returns the model the engine will actually run (`session.model`) as
+/// `{provider, id, name}` or null. The frontend mirrors this on startup so the
+/// model shown near the input matches the model that actually answers.
+#[tauri::command]
+async fn get_active_model(s: State<'_, AppState>) -> Result<Value, String> {
+    let id = format!("gam-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"get_active_model","id":id}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+}
+
 #[tauri::command]
 async fn send_prompt(
     text: String,
@@ -1559,6 +1573,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_models,
+            get_active_model,
             send_prompt,
             abort_prompt,
             set_active_model,

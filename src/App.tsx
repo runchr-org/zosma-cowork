@@ -176,28 +176,55 @@ function App() {
 	useEffect(() => {
 		if (models.length > 0 && !settingsLoadedRef.current) {
 			settingsLoadedRef.current = true;
-			invoke("get_settings")
-				.then((result) => {
-					const data = result as { defaultModel?: string; defaultProvider?: string };
+			(async () => {
+				let data: { defaultModel?: string; defaultProvider?: string } = {};
+				try {
+					data = (await invoke("get_settings")) as typeof data;
 					console.log("[settings] loaded:", data);
-					if (data.defaultModel) {
-						const match = models.find((m) => m.id === data.defaultModel);
-						if (match) {
-							console.log("[settings] restoring model:", match.id);
-							setActiveModelId(match.id);
-							invoke("set_active_model", {
-								provider: match.provider,
-								model: match.id,
-							}).catch(() => {});
-							return;
-						}
-					}
-					setActiveModelId(models[0].id);
-				})
-				.catch((err) => {
+				} catch (err) {
 					console.warn("[settings] load failed:", err);
-					if (models.length > 0) setActiveModelId(models[0].id);
-				});
+				}
+
+				// 1. Honour the user's explicitly-saved model and push it to the
+				//    engine so it actually takes effect.
+				if (data.defaultModel) {
+					const match = models.find((m) => m.id === data.defaultModel);
+					if (match) {
+						console.log("[settings] restoring model:", match.id);
+						setActiveModelId(match.id);
+						invoke("set_active_model", {
+							provider: match.provider,
+							model: match.id,
+						}).catch(() => {});
+						return;
+					}
+				}
+
+				// 2. No saved preference: MIRROR the engine's actual model so the
+				//    selector matches the model that will really answer (the
+				//    per-message usage label). No push needed — it's already active.
+				try {
+					const engine = (await invoke("get_active_model")) as {
+						id?: string;
+					} | null;
+					if (engine?.id && models.some((m) => m.id === engine.id)) {
+						console.log("[settings] mirroring engine model:", engine.id);
+						setActiveModelId(engine.id);
+						return;
+					}
+				} catch (err) {
+					console.warn("[settings] get_active_model failed:", err);
+				}
+
+				// 3. Last resort: pick the first model AND push it so the UI and
+				//    engine still agree even if the mirror query failed.
+				const fallback = models[0];
+				setActiveModelId(fallback.id);
+				invoke("set_active_model", {
+					provider: fallback.provider,
+					model: fallback.id,
+				}).catch(() => {});
+			})();
 		} else if (models.length > 0 && !activeModelId) {
 			setActiveModelId(models[0].id);
 		}
