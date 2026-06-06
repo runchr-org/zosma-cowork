@@ -937,6 +937,39 @@ async fn set_extension_config(
 	.await
 }
 
+/// Read a whitelisted extension's own config file (e.g. pi-messenger-bridge's
+/// ~/.pi/msg-bridge.json) so the UI can offer a bespoke setup screen.
+#[tauri::command]
+async fn get_extension_config_file(
+    extension_id: String,
+    s: State<'_, AppState>,
+) -> Result<Value, String> {
+    let id = format!("gecf-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"get_extension_config_file","id":id,"extensionId": extension_id}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+}
+
+/// Merge a patch into a whitelisted extension's own config file (written with
+/// 0600 perms by the sidecar).
+#[tauri::command]
+async fn save_extension_config_file(
+    extension_id: String,
+    patch: Value,
+    s: State<'_, AppState>,
+) -> Result<Value, String> {
+    let id = format!("secf-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &serde_json::json!({"type":"save_extension_config_file","id":id,"extensionId": extension_id, "patch": patch}),
+        std::time::Duration::from_secs(10),
+    )
+    .await
+}
+
 #[tauri::command]
 async fn search_discover(query: String, s: State<'_, AppState>) -> Result<Value, String> {
     scmd_r(
@@ -1657,6 +1690,8 @@ pub fn run() {
             uninstall_extension,
             set_extension_enabled,
             set_extension_config,
+            get_extension_config_file,
+            save_extension_config_file,
             search_discover,
             search_skills,
             list_skills,

@@ -8,6 +8,7 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useExtensions } from "@/hooks/useExtensions";
+import { getExtensionSetup } from "@/lib/extension-setup-registry";
 import type { ZemExtension } from "@/types";
 import { AlertCircle, Loader2, Package, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -442,6 +443,21 @@ function ExtensionDetail({
 					<span className="uppercase">{ext.runtime}</span>
 				</div>
 			</div>
+
+			{/* Bespoke configuration (whitelisted extensions only) */}
+			{(() => {
+				const setup = getExtensionSetup(ext);
+				if (!setup) return null;
+				const SetupComponent = setup.Component;
+				return (
+					<div>
+						<h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">
+							Configuration
+						</h4>
+						<SetupComponent ext={ext} configKey={setup.key} />
+					</div>
+				);
+			})()}
 
 			{/* Capabilities */}
 			{ext.capabilities.tools && ext.capabilities.tools.length > 0 && (

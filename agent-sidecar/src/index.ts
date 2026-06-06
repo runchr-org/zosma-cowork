@@ -13,6 +13,7 @@
  */
 
 import {
+	chmodSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
@@ -22,7 +23,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 
@@ -308,6 +309,19 @@ interface SetExtensionConfigCommand {
 	config: Record<string, unknown>;
 }
 
+interface GetExtensionConfigFileCommand {
+	type: "get_extension_config_file";
+	id: string;
+	extensionId: string;
+}
+
+interface SaveExtensionConfigFileCommand {
+	type: "save_extension_config_file";
+	id: string;
+	extensionId: string;
+	patch: Record<string, unknown>;
+}
+
 interface SearchDiscoverCommand {
 	type: "search_discover";
 	id: string;
@@ -392,6 +406,8 @@ type Command =
 	| UninstallExtensionCommand
 	| SetExtensionEnabledCommand
 	| SetExtensionConfigCommand
+	| GetExtensionConfigFileCommand
+	| SaveExtensionConfigFileCommand
 	| SearchDiscoverCommand
 	| SearchSkillsCommand
 	| ListSkillsCommand
@@ -562,6 +578,80 @@ function createUiDialog<T>(
 		});
 		emitUiRequest({ id, ...request });
 	});
+}
+
+// ---------------------------------------------------------------------------
+// Whitelisted extension config files
+// ---------------------------------------------------------------------------
+//
+// Some extensions store their config in their OWN file rather than Cowork's
+// extension registry (set_extension_config). pi-messenger-bridge, for example,
+// reads ~/.pi/msg-bridge.json directly. To offer a bespoke setup screen for
+// such an extension, Cowork needs to read/write that exact file. Only known
+// extensions mapped here are writable from the UI — arbitrary paths are never
+// exposed to the renderer.
+const WHITELISTED_CONFIG_FILES: Record<string, () => string> = {
+	"pi-messenger-bridge": () => join(homedir(), ".pi", "msg-bridge.json"),
+};
+
+/** Resolve a whitelisted extension id (lenient: matches `npm:<pkg>` too) to its config-file path. */
+function resolveWhitelistedConfigPath(extensionId: string): string | undefined {
+	for (const [key, pathFn] of Object.entries(WHITELISTED_CONFIG_FILES)) {
+		if (extensionId === key || extensionId.includes(key)) return pathFn();
+	}
+	return undefined;
+}
+
+/** Read+parse a JSON config file, returning {} if missing or malformed. */
+function readJsonFile(path: string): Record<string, unknown> {
+	try {
+		if (!existsSync(path)) return {};
+		const parsed = JSON.parse(readFileSync(path, "utf8"));
+		return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+	} catch {
+		return {};
+	}
+}
+
+/** Recursively merge `patch` into `base` (objects merge; everything else replaces). */
+function deepMerge(
+	base: Record<string, unknown>,
+	patch: Record<string, unknown>,
+): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...base };
+	for (const [k, v] of Object.entries(patch)) {
+		const cur = out[k];
+		if (
+			v &&
+			typeof v === "object" &&
+			!Array.isArray(v) &&
+			cur &&
+			typeof cur === "object" &&
+			!Array.isArray(cur)
+		) {
+			out[k] = deepMerge(cur as Record<string, unknown>, v as Record<string, unknown>);
+		} else {
+			out[k] = v;
+		}
+	}
+	return out;
+}
+
+/** Merge `patch` into a whitelisted config file and persist it with 0600 perms. */
+function writeWhitelistedConfig(
+	path: string,
+	patch: Record<string, unknown>,
+): Record<string, unknown> {
+	const next = deepMerge(readJsonFile(path), patch);
+	const dir = dirname(path);
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+	writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+	try {
+		chmodSync(path, 0o600);
+	} catch {
+		// best-effort on platforms without POSIX perms (Windows)
+	}
+	return next;
 }
 
 /** Build an ExtensionUIContext that bridges ctx.ui to the desktop UI. */
@@ -2187,6 +2277,40 @@ async function main() {
 				case "set_extension_config": {
 					setExtensionConfig(zosmaDir, cmd.extensionId, cmd.config);
 					send({ type: "result", id: cmd.id, data: { success: true } });
+					break;
+				}
+
+				// ── get_extension_config_file ───────────────────────────────
+				// Read a whitelisted extension's OWN config file (e.g.
+				// pi-messenger-bridge → ~/.pi/msg-bridge.json), so Cowork can
+				// offer a bespoke setup screen for it.
+				case "get_extension_config_file": {
+					const path = resolveWhitelistedConfigPath(cmd.extensionId);
+					if (!path) {
+						send({
+							type: "error",
+							id: cmd.id,
+							message: `Extension "${cmd.extensionId}" is not whitelisted for file-based config`,
+						});
+						break;
+					}
+					send({ type: "result", id: cmd.id, data: { config: readJsonFile(path), path } });
+					break;
+				}
+
+				// ── save_extension_config_file ──────────────────────────────
+				case "save_extension_config_file": {
+					const path = resolveWhitelistedConfigPath(cmd.extensionId);
+					if (!path) {
+						send({
+							type: "error",
+							id: cmd.id,
+							message: `Extension "${cmd.extensionId}" is not whitelisted for file-based config`,
+						});
+						break;
+					}
+					const config = writeWhitelistedConfig(path, cmd.patch ?? {});
+					send({ type: "result", id: cmd.id, data: { config, path } });
 					break;
 				}
 
