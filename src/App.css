@@ -428,3 +428,26 @@ body {
 .animate-pulse-dot {
 	animation: pulse-dot 1.5s ease-in-out infinite;
 }
+
+/* Shimmer sweep for "loading" activity blocks (issue #173 activity view) */
+@keyframes shimmer {
+	0% {
+		background-position: -200% 0;
+	}
+	100% {
+		background-position: 200% 0;
+	}
+}
+.animate-shimmer-text {
+	background: linear-gradient(
+		90deg,
+		hsl(var(--foreground) / 0.45) 0%,
+		hsl(var(--foreground) / 0.95) 50%,
+		hsl(var(--foreground) / 0.45) 100%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: shimmer 2s linear infinite;
+}
