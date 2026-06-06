@@ -111,6 +111,10 @@ import { eventBus } from "./event-bus.js";
 import { startRemoteServer, stopRemoteServer } from "./remote-server.js";
 import { commandQueue } from "./command-queue.js";
 import { extractChatMessages } from "./extract-chat-messages.js";
+import {
+	loadSettings as loadSettingsStore,
+	saveSettings as saveSettingsStore,
+} from "./settings-store.js";
 // Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
 // this loaded as an extension, Claude Pro/Max OAuth requests are
 // fingerprinted by Anthropic as a "third-party app" and rejected with a
@@ -743,24 +747,15 @@ function restoreSessionContext(
 // Settings persistence
 // ---------------------------------------------------------------------------
 
-function settingsFilePath(zosmaDir: string): string {
-	return join(zosmaAgentDir(zosmaDir), "settings.json");
-}
-
 function loadSettings(zosmaDir: string): Record<string, unknown> {
-	const fp = settingsFilePath(zosmaDir);
-	if (!existsSync(fp)) return {};
-	try {
-		return JSON.parse(readFileSync(fp, "utf-8"));
-	} catch {
-		return {};
-	}
+	return loadSettingsStore(zosmaAgentDir(zosmaDir));
 }
 
+// Persist a PARTIAL settings update. Delegates to the settings-store, which
+// merges into the existing file so independent keys (model, persona, telemetry
+// consent) don't clobber one another.
 function saveSettings(zosmaDir: string, settings: Record<string, unknown>): void {
-	const fp = settingsFilePath(zosmaDir);
-	ensureDir(zosmaAgentDir(zosmaDir));
-	writeFileSync(fp, JSON.stringify(settings, null, 2), "utf-8");
+	saveSettingsStore(zosmaAgentDir(zosmaDir), settings);
 	log("Settings saved");
 }
 

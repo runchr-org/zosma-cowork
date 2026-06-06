@@ -46,28 +46,6 @@ function App() {
 			.catch(() => {});
 	}, []);
 
-	// Check if telemetry consent has been decided (first-run detection)
-	useEffect(() => {
-		invoke<{ telemetry?: { enabled?: boolean } }>("get_settings")
-			.then((settings) => {
-				// Show consent dialog only if the telemetry key is absent
-				// (new user or upgrade from pre-telemetry version)
-				if (settings?.telemetry === undefined) {
-					setShowTelemetryConsent(true);
-				} else {
-					setShowTelemetryConsent(false);
-				}
-
-				// Track app launch if consent was already enabled
-				if (settings?.telemetry?.enabled) {
-					trackEvent("app_launch");
-				}
-			})
-			.catch(() => {
-				setShowTelemetryConsent(false);
-			});
-	}, []);
-
 	// Remove right-click prevention — users need copy/paste/inspect.
 	// The desktop app is a serious tool, not a locked-down kiosk.
 	// (Context menu prevention removed intentionally.)
@@ -128,12 +106,50 @@ function App() {
 		};
 	}, []);
 
+	// ── First-run telemetry consent (#169 follow-up) ──
+	// Decide whether to show the consent popup ONLY after the sidecar is ready,
+	// so `get_settings` returns the persisted decision reliably. Running this on
+	// mount (before readiness) used to throw → the catch silently set it to
+	// `false`, so genuine first launches never showed the prompt; meanwhile a
+	// non-merging save wiped the stored decision, so it reappeared every launch.
+	useEffect(() => {
+		if (!sidecarReady) return;
+		let cancelled = false;
+		invoke<{ telemetry?: { enabled?: boolean } }>("get_settings")
+			.then((settings) => {
+				if (cancelled) return;
+				// Show the popup only when no decision has been stored yet
+				// (new user, or upgrade from a pre-telemetry version).
+				if (settings?.telemetry === undefined) {
+					setShowTelemetryConsent(true);
+				} else {
+					setShowTelemetryConsent(false);
+					if (settings.telemetry.enabled) {
+						trackEvent("app_launch");
+					}
+				}
+			})
+			.catch(() => {
+				// Couldn't read settings — don't block the app on a popup.
+				if (!cancelled) setShowTelemetryConsent(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [sidecarReady]);
+
 	const needsOnboarding = authLoading === false && !hasCredentials;
+	// True until the first-run telemetry decision is resolved: `null` while we're
+	// still reading settings, `true` while the popup is awaiting the user's
+	// choice. We keep the neutral splash behind the consent modal so telemetry is
+	// genuinely the FIRST thing a new user sees — not the onboarding screen.
+	const telemetryUndecided = showTelemetryConsent !== false;
 	// While the sidecar is still booting we can't determine credentials, so
 	// show a loading splash rather than the onboarding/Welcome screen. Keeping
 	// `authLoading` in the condition avoids a one-frame onboarding flash during
 	// the credentials re-check that fires right after the sidecar becomes ready.
-	const initializing = !sidecarReady && (authLoading || hasCredentials !== true);
+	const initializing =
+		telemetryUndecided || (!sidecarReady && (authLoading || hasCredentials !== true));
 	// Whether to render the Connect / API-key modal. Either we're forcing
 	// it (initial onboarding, unless the user explicitly skipped) or the
 	// user opened "Change API Key" from Settings.
