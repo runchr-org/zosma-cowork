@@ -29,6 +29,8 @@ interface SettingsPageProps {
 	onShowKeyEntry?: () => void;
 	telemetryEnabled?: boolean;
 	onTelemetryToggle?: (enabled: boolean) => void;
+	fontScale?: number;
+	onFontScaleChange?: (scale: number) => void;
 }
 
 type SectionId =
@@ -65,6 +67,8 @@ export function SettingsPage({
 	onShowKeyEntry,
 	telemetryEnabled,
 	onTelemetryToggle,
+	fontScale,
+	onFontScaleChange,
 }: SettingsPageProps) {
 	const [showFeedback, setShowFeedback] = useState(false);
 	const [activeSection, setActiveSection] = useState<SectionId>("authentication");
@@ -263,6 +267,8 @@ export function SettingsPage({
 								onShowKeyEntry={onShowKeyEntry}
 								telemetryEnabled={telemetryEnabled}
 								onTelemetryToggle={onTelemetryToggle}
+								fontScale={fontScale}
+								onFontScaleChange={onFontScaleChange}
 							/>
 						</div>
 					</motion.div>
@@ -280,11 +286,15 @@ function SectionContent({
 	onShowKeyEntry,
 	telemetryEnabled,
 	onTelemetryToggle,
+	fontScale,
+	onFontScaleChange,
 }: {
 	activeSection: SectionId;
 	onShowKeyEntry?: () => void;
 	telemetryEnabled?: boolean;
 	onTelemetryToggle?: (enabled: boolean) => void;
+	fontScale?: number;
+	onFontScaleChange?: (scale: number) => void;
 }) {
 	return (
 		<>
@@ -293,7 +303,7 @@ function SectionContent({
 			{activeSection === "integrations" && <GoogleIntegration />}
 			{activeSection === "skills" && <Skills />}
 			{activeSection === "custom-instructions" && <Instructions />}
-			{activeSection === "theme" && <Theme />}
+			{activeSection === "theme" && <Theme fontScale={fontScale} onFontScaleChange={onFontScaleChange} />}
 			{activeSection === "telemetry" && (
 				<Telemetry enabled={telemetryEnabled} onToggle={onTelemetryToggle} />
 			)}
