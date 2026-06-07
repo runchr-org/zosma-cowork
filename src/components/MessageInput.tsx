@@ -182,7 +182,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 			<motion.form
 				onSubmit={handleSubmit}
 				className="px-4 pb-4 mx-auto w-full"
-				style={{ maxWidth: "calc(var(--chat-max-width, 820px) + 2rem)" }}
+				style={{ maxWidth: "var(--chat-composer-max-width, 852px)" }}
 				initial={prefersReducedMotion ? false : { y: 72, opacity: 0 }}
 				animate={{ y: 0, opacity: 1 }}
 				transition={{

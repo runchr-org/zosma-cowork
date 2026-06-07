@@ -97,11 +97,15 @@ export function StatusBar({
 
 	return (
 		<div
-			className="flex items-center justify-between px-4 py-2 border-t animate-fade-in"
+			className="px-4 py-2 border-t animate-fade-in"
 			style={{
 				background: "hsl(var(--status-bg))",
 				borderColor: "hsl(var(--status-divider))",
 			}}
+		>
+		<div
+			className="flex items-center justify-between mx-auto w-full"
+			style={{ maxWidth: "var(--chat-composer-max-width, 852px)" }}
 		>
 			<div className="flex items-center gap-2.5 min-w-0">
 				{/* Spin icon */}
@@ -161,6 +165,7 @@ export function StatusBar({
 				<Square className="w-3 h-3 fill-current" />
 				Stop
 			</button>
+		</div>
 		</div>
 	);
 }

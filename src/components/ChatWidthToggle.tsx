@@ -6,7 +6,7 @@ import {
 	getChatWidth,
 	setChatWidth,
 } from "@/lib/chat-width";
-import { AlignCenter, AlignJustify, Equal } from "lucide-react";
+import { AlignCenter, Equal, MoveHorizontal } from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -26,7 +26,7 @@ export function ChatWidthToggle() {
 	const ICONS: Record<ChatWidth, React.ComponentType<{ className?: string }>> = {
 		small: AlignCenter,
 		medium: Equal,
-		large: AlignJustify,
+		full: MoveHorizontal,
 	};
 
 	return (

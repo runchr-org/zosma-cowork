@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ActivityBlock, ActivityRecap } from "./ActivityBlock";
+import { markdownComponents } from "./MarkdownComponents";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallSummary, ToolCallTimeline } from "./ToolCallTimeline";
@@ -113,15 +114,13 @@ export function ChatMessageItem({ message, detailsExpanded, models }: ChatMessag
 	}
 
 	return (
-		<div
-			className="group py-4 px-6 transition-colors animate-fade-in"
-			style={{
-				background: isUser ? "hsl(var(--chat-user-bg))" : "hsl(var(--chat-assistant-bg))",
-			}}
-		>
+		<div className="group px-4 py-1.5 animate-fade-in">
 			<div
-				className="flex gap-3.5 mx-auto w-full"
-				style={{ maxWidth: "var(--chat-max-width, 820px)" }}
+				className="flex gap-3.5 mx-auto w-full rounded-2xl px-4 py-3 transition-colors"
+				style={{
+					maxWidth: "var(--chat-max-width, 820px)",
+					background: isUser ? "hsl(var(--chat-user-bg))" : "hsl(var(--chat-assistant-bg))",
+				}}
 			>
 			{/* Avatar */}
 			<div className="flex-shrink-0">
@@ -213,7 +212,9 @@ export function ChatMessageItem({ message, detailsExpanded, models }: ChatMessag
 						className="chat-markdown"
 						style={{ color: isUser ? "hsl(var(--chat-user-fg))" : "hsl(var(--chat-assistant-fg))" }}
 					>
-						<ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content || ""}</ReactMarkdown>
+						<ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+							{message.content || ""}
+						</ReactMarkdown>
 						{message.isStreaming && (
 							<span
 								className="inline-block w-2 h-4 ml-0.5 align-middle animate-pulse"

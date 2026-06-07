@@ -4,12 +4,15 @@ import { createRoot } from "react-dom/client";
 import "./App.css";
 import App from "./App";
 import { initChatWidth } from "./lib/chat-width";
+import { installExternalLinkHandler } from "./lib/external-links";
 import { initTheme } from "./lib/themes";
 
 // Apply saved dark/light preference before rendering to avoid flash
 initTheme();
 // Apply saved chat content width (sets --chat-max-width)
 initChatWidth();
+// Route external links to the system browser instead of the Tauri webview
+installExternalLinkHandler();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element not found");

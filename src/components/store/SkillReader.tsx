@@ -10,6 +10,7 @@ import { ExternalLink, FileText } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownComponents } from "../MarkdownComponents";
 import { parseSkillId } from "../../lib/skillBrowse";
 import { openExternalUrl } from "../../lib/utils";
 
@@ -83,7 +84,9 @@ export function SkillReader({
 					</div>
 				) : md ? (
 					<div className="skill-md">
-						<ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+						<ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+							{md}
+						</ReactMarkdown>
 					</div>
 				) : (
 					<div className="flex flex-col items-center text-center py-12 gap-2">
