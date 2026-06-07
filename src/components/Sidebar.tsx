@@ -51,11 +51,7 @@ export function Sidebar({
 
 	return (
 		<motion.div
-			className="w-72 flex flex-col h-full"
-			style={{
-				background: "hsl(var(--sidebar-background))",
-				borderRight: "1px solid hsl(var(--sidebar-border))",
-			}}
+			className="w-72 flex flex-col h-full bg-transparent"
 			initial={reduced ? false : { x: -12, opacity: 0 }}
 			animate={{ x: 0, opacity: 1 }}
 			transition={{ duration: 0.32, ease: easeOutExpo }}

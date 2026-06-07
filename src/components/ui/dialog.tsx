@@ -104,8 +104,7 @@ export function Dialog({
 						aria-modal="true"
 						aria-labelledby={labelledBy}
 						className={cn(
-							"relative w-full mx-4 bg-card border border-border rounded-xl overflow-hidden",
-							"shadow-[0_20px_60px_-15px_rgba(0,0,0,0.4),0_8px_24px_-8px_rgba(0,0,0,0.2)]",
+							"relative w-full mx-4 overflow-hidden panel-raised",
 							SIZE_CLASS[size],
 							className,
 						)}

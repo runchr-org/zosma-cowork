@@ -544,9 +544,9 @@ function App() {
 	}, []);
 
 	// Font scale / zoom preference
-const [fontScale, setFontScale] = useState<number>(() => getFontScale());
+	const [fontScale, setFontScale] = useState<number>(() => getFontScale());
 
-const [pendingDelete, setPendingDelete] = useState<{ file: string; title: string } | null>(null);
+	const [pendingDelete, setPendingDelete] = useState<{ file: string; title: string } | null>(null);
 
 	const handleDeleteSession = useCallback(
 		(file: string) => {
@@ -622,7 +622,7 @@ const [pendingDelete, setPendingDelete] = useState<{ file: string; title: string
 	}));
 
 	return (
-		<div className="flex h-screen bg-background" style={{ zoom: fontScale }}>
+		<div className="flex h-screen bg-background md:gap-2.5 md:p-2.5" style={{ zoom: fontScale }}>
 			{/* Extension UI dialogs (pi-ask-user etc. via ctx.ui) */}
 			<ExtensionUiHost />
 
@@ -661,8 +661,8 @@ const [pendingDelete, setPendingDelete] = useState<{ file: string; title: string
 			{/* Sidebar — desktop: visible, mobile: slide-over */}
 			{!hideChrome && (
 				<>
-					{/* Desktop sidebar */}
-					<div className="hidden md:block">
+					{/* Desktop sidebar — floating glass panel */}
+					<div className="hidden md:block panel-sidebar overflow-hidden shrink-0">
 						<Sidebar
 							view={sidebarView}
 							sessions={sidebarSessions}
@@ -743,8 +743,8 @@ const [pendingDelete, setPendingDelete] = useState<{ file: string; title: string
 				</>
 			)}
 
-			{/* Main content */}
-			<div className="relative flex-1 flex flex-col min-w-0">
+			{/* Main content — raised glass panel */}
+			<div className="relative flex-1 flex flex-col min-w-0 md:panel-raised md:overflow-hidden">
 				{/* Remote connection status (browser mode only) */}
 				<RemoteConnectionBar />
 
