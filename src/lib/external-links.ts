@@ -12,17 +12,7 @@
  * components that already handle their own links (e.g. the react-markdown
  * anchor override) win and this never double-opens.
  */
-import { openExternalUrl } from "./utils";
-
-function isExternalHref(href: string): boolean {
-	if (!href) return false;
-	// In-page anchors and non-navigational schemes are left alone.
-	if (href.startsWith("#")) return false;
-	if (href.startsWith("javascript:")) return false;
-	if (href.startsWith("blob:") || href.startsWith("data:")) return false;
-	// http(s), mailto, tel, and protocol-relative URLs go to the OS handler.
-	return /^(https?:|mailto:|tel:|\/\/)/i.test(href);
-}
+import { isExternalUrl, openExternalUrl } from "./utils";
 
 let installed = false;
 
@@ -43,7 +33,7 @@ export function installExternalLinkHandler(): void {
 			if (!anchor) return;
 
 			const href = anchor.getAttribute("href") ?? "";
-			if (!isExternalHref(href)) return;
+			if (!isExternalUrl(href)) return;
 
 			e.preventDefault();
 			void openExternalUrl(anchor.href || href);

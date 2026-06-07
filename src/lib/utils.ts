@@ -49,6 +49,22 @@ export async function retryOnClosed<T>(
 }
 
 /**
+ * Whether a URL should be opened in the external system browser.
+ *
+ * Uses an ALLOWLIST of known-safe navigable schemes rather than a
+ * blocklist of dangerous ones. This is deliberately strict: anything
+ * that is not plainly http(s)/mailto/tel/protocol-relative (including
+ * in-page `#anchors` and dangerous schemes like `javascript:`,
+ * `vbscript:`, `data:`, `blob:`) returns false and is never force-opened.
+ */
+export function isExternalUrl(href: string | null | undefined): boolean {
+	if (!href) return false;
+	const trimmed = href.trim();
+	if (trimmed.startsWith("//")) return true; // protocol-relative
+	return /^(https?|mailto|tel):/i.test(trimmed);
+}
+
+/**
  * Open a URL in the system browser via the Tauri backend.
  * Falls back to window.open if the IPC call fails.
  */

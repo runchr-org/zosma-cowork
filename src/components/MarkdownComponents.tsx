@@ -1,4 +1,4 @@
-import { openExternalUrl } from "@/lib/utils";
+import { isExternalUrl, openExternalUrl } from "@/lib/utils";
 import type { Components } from "react-markdown";
 
 /**
@@ -14,7 +14,7 @@ import type { Components } from "react-markdown";
  */
 export const markdownComponents: Components = {
 	a({ href, children, ...props }) {
-		const isExternal = !!href && !href.startsWith("#");
+		const isExternal = isExternalUrl(href);
 
 		return (
 			<a
