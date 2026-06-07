@@ -1,0 +1,9 @@
+# Linguist overrides for accurate language stats.
+#
+# The agent skill bundles below are vendored content (authored skill packs
+# plus their bundled runtime scripts), not first-party application code.
+# Counting them was making JavaScript the repo's primary language even though
+# the app itself is TypeScript (React frontend + Node sidecar) on a thin Rust
+# (Tauri) relay. Excluding them gives an accurate language breakdown.
+.agents/skills/**   linguist-vendored
+.github/skills/**   linguist-vendored
