@@ -1943,7 +1943,11 @@ mod tests {
         // Defensive: ensure no extra fields snuck in that the sidecar
         // doesn't expect (sidecar's strict TS Command union would refuse).
         let obj = p.as_object().expect("clear_queue payload is an object");
-        assert_eq!(obj.len(), 2, "unexpected fields in clear_queue payload: {p}");
+        assert_eq!(
+            obj.len(),
+            2,
+            "unexpected fields in clear_queue payload: {p}"
+        );
     }
 
     #[test]
