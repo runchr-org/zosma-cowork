@@ -623,6 +623,71 @@ async fn abort_prompt(s: State<'_, AppState>) -> Result<(), String> {
     scmd(&s, &serde_json::json!({"type":"abort","id":"ab"})).await
 }
 
+/// Build the JSONL payload sent to the sidecar for a `steer` command.
+///
+/// Factored out as a pure function so the wire shape is unit-testable
+/// without spinning up a real sidecar process. The Tauri command
+/// [`steer_prompt`] is a thin wrapper that generates an id and forwards
+/// the payload via [`scmd_r`].
+///
+/// See `agent-sidecar/src/steering.ts` for the matching handler and
+/// pi-coding-agent's `docs/rpc.md` for the protocol reference (cowork
+/// uses `text` rather than pi's `message` to stay internally consistent
+/// with the existing `prompt` command).
+fn build_steer_payload(id: &str, text: &str) -> Value {
+    serde_json::json!({
+        "type": "steer",
+        "id": id,
+        "text": text,
+    })
+}
+
+/// Build the JSONL payload sent to the sidecar for a `follow_up` command.
+/// See [`build_steer_payload`] for rationale.
+fn build_follow_up_payload(id: &str, text: &str) -> Value {
+    serde_json::json!({
+        "type": "follow_up",
+        "id": id,
+        "text": text,
+    })
+}
+
+/// Queue a steering message on the active session. Delivered after the
+/// current assistant turn finishes its tool calls, before the next LLM
+/// call. Round-trips through `scmd_r` with a short timeout because the
+/// sidecar replies with a one-shot `result` / `error` envelope (no
+/// streaming channel — streaming events keep flowing on the existing
+/// prompt channel).
+#[tauri::command]
+async fn steer_prompt(text: String, s: State<'_, AppState>) -> Result<Value, String> {
+    if !s.sidecar.ready.load(Ordering::Acquire) {
+        return Err("not ready".into());
+    }
+    let id = format!("st-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &build_steer_payload(&id, &text),
+        std::time::Duration::from_secs(5),
+    )
+    .await
+}
+
+/// Queue a follow-up message on the active session. Delivered after the
+/// agent has no more tool calls or steering messages pending.
+#[tauri::command]
+async fn follow_up_prompt(text: String, s: State<'_, AppState>) -> Result<Value, String> {
+    if !s.sidecar.ready.load(Ordering::Acquire) {
+        return Err("not ready".into());
+    }
+    let id = format!("fu-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &build_follow_up_payload(&id, &text),
+        std::time::Duration::from_secs(5),
+    )
+    .await
+}
+
 /// Answer an extension UI dialog (ctx.ui.select/confirm/input/editor). `id` is
 /// the UI-request id from the `ui_request` event. Exactly one of `value`/
 /// `confirmed` is set, or `cancelled` is true. Fire-and-forget: the sidecar
@@ -1735,6 +1800,8 @@ pub fn run() {
             get_active_model,
             send_prompt,
             abort_prompt,
+            steer_prompt,
+            follow_up_prompt,
             send_ui_response,
             set_active_model,
             save_auth_key,
@@ -1779,4 +1846,57 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_follow_up_payload, build_steer_payload};
+
+    // Wire-format guards: the sidecar's `case "steer"` / `case "follow_up"`
+    // handlers (agent-sidecar/src/index.ts) read these exact fields. Drift
+    // here = silent breakage on the React → Rust → sidecar path.
+
+    #[test]
+    fn steer_payload_uses_steer_type_with_text_and_id() {
+        let p = build_steer_payload("st-abc", "hi there");
+        assert_eq!(p["type"], "steer");
+        assert_eq!(p["id"], "st-abc");
+        assert_eq!(p["text"], "hi there");
+    }
+
+    #[test]
+    fn follow_up_payload_uses_follow_up_type_with_text_and_id() {
+        let p = build_follow_up_payload("fu-xyz", "after you finish");
+        assert_eq!(p["type"], "follow_up");
+        assert_eq!(p["id"], "fu-xyz");
+        assert_eq!(p["text"], "after you finish");
+    }
+
+    #[test]
+    fn steer_payload_preserves_text_with_newlines_and_unicode() {
+        // Steering messages are user-authored composer input — must not
+        // be mangled by serialization. The Tauri → sidecar transport is
+        // LF-delimited JSONL so embedded `\n` and Unicode line separators
+        // must round-trip via JSON escaping.
+        let p = build_steer_payload("id", "line one\nline two — café");
+        let serialized = serde_json::to_string(&p).unwrap();
+        // The newline inside the user's text is escaped, never raw.
+        assert!(
+            !serialized.contains("line one\nline two"),
+            "raw newline leaked into JSONL frame: {serialized}"
+        );
+        assert!(serialized.contains("line one\\nline two"));
+        assert!(serialized.contains("caf\u{00e9}"));
+    }
+
+    #[test]
+    fn payloads_are_pure_no_shared_state_between_calls() {
+        // Two calls with the same id must produce byte-identical JSON.
+        let a = build_steer_payload("same", "hello");
+        let b = build_steer_payload("same", "hello");
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            serde_json::to_string(&b).unwrap()
+        );
+    }
 }

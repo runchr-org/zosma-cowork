@@ -117,6 +117,10 @@ import { eventBus } from "./event-bus.js";
 import { startRemoteServer, stopRemoteServer } from "./remote-server.js";
 import { commandQueue } from "./command-queue.js";
 import { createPromptScheduler } from "./prompt-scheduler.js";
+import {
+	handleFollowUpCommand,
+	handleSteerCommand,
+} from "./steering.js";
 import { extractChatMessages } from "./extract-chat-messages.js";
 import {
 	loadSettings as loadSettingsStore,
@@ -187,6 +191,34 @@ interface AbortCommand {
 	type: "abort";
 	id: string;
 }
+
+/**
+ * Queue a steering message on the active session — delivered after the
+ * current assistant turn finishes executing its tool calls, before the
+ * next LLM call. Routed via the SDK's `AgentSession.steer()`, NOT through
+ * the prompt-scheduler chain. See {@link ./steering.ts}.
+ */
+interface SteerCommand {
+	type: "steer";
+	id: string;
+	text: string;
+	images?: SteerImage[];
+}
+
+/**
+ * Queue a follow-up message on the active session — delivered after the
+ * agent has no more tool calls or steering messages pending. Routed via
+ * `AgentSession.followUp()`. See {@link ./steering.ts}.
+ */
+interface FollowUpCommand {
+	type: "follow_up";
+	id: string;
+	text: string;
+	images?: SteerImage[];
+}
+
+/** Re-export of the steering module's image type to avoid duplicate shapes. */
+type SteerImage = import("./steering.js").ImageAttachment;
 
 interface SetModelCommand {
 	type: "set_model";
@@ -417,6 +449,8 @@ type Command =
 	| GetActiveModelCommand
 	| PromptCommand
 	| AbortCommand
+	| SteerCommand
+	| FollowUpCommand
 	| SetModelCommand
 	| SaveAuthCommand
 	| StartOAuthCommand
@@ -1671,6 +1705,33 @@ async function main() {
 						id: cmd.id ?? activePromptId ?? "abort",
 					});
 					activePromptId = null;
+					break;
+				}
+
+				// ── steer ─────────────────────────────────────────────────
+				// Queue a steering message on the running session. Delivered
+				// after the current assistant turn's tool calls finish, before
+				// the next LLM call. Bypasses promptScheduler deliberately —
+				// see steering.ts for the protocol contract.
+				case "steer": {
+					if (!initialized || !session) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					await handleSteerCommand(session, cmd, send);
+					break;
+				}
+
+				// ── follow_up ─────────────────────────────────────────────
+				// Queue a follow-up message; delivered once the agent has no
+				// more tool calls or steering messages pending. Bypasses
+				// promptScheduler — see steering.ts.
+				case "follow_up": {
+					if (!initialized || !session) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					await handleFollowUpCommand(session, cmd, send);
 					break;
 				}
 
