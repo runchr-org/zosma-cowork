@@ -125,29 +125,66 @@ describe("streamReducer — queue slice (#201 PR 3)", () => {
 		expect(s.queue).toEqual({ steering: [], followUp: [] });
 	});
 
-	it("QUEUE_OPTIMISTIC(steer) appends a user-message bubble tagged steer AND adds to queue.steering", () => {
-		const s = run([
-			{ type: "START_STREAM", prompt: "long task" },
-			{ type: "QUEUE_OPTIMISTIC", kind: "steer", text: "stop, do A" },
-		]);
-		expect(s.queue.steering).toEqual(["stop, do A"]);
-		expect(s.queue.followUp).toEqual([]);
-		// Last message in conversation is the optimistic queued bubble.
-		const last = s.messages[s.messages.length - 1];
-		expect(last.role).toBe("user");
-		expect(last.content).toBe("stop, do A");
-		expect(last.kind).toBe("queued-steer");
+	// Issue #201 PR3 follow-up: optimistic queue bubbles must NOT be pushed
+	// into state.messages (the canonical chat log). Reasons:
+	//   1. Position — messages renders BEFORE streamingMessage in ChatView,
+	//      so optimistic bubbles in messages appear above the streaming AI
+	//      message instead of below where they belong chronologically.
+	//   2. Edit — when the user presses Ctrl+↑ to pull the queue back into
+	//      the composer, we call clearQueue() which triggers a QUEUE_UPDATE
+	//      that empties state.queue. If the bubbles also live in messages,
+	//      they survive that clear and become orphaned duplicates.
+	// Source of truth for queued bubble rendering is state.queue.
+	it("QUEUE_OPTIMISTIC(steer) adds to queue.steering and does NOT touch state.messages", () => {
+		const before = run([{ type: "START_STREAM", prompt: "long task" }]);
+		const after = streamReducer(before, {
+			type: "QUEUE_OPTIMISTIC",
+			kind: "steer",
+			text: "stop, do A",
+		});
+		expect(after.queue.steering).toEqual(["stop, do A"]);
+		expect(after.queue.followUp).toEqual([]);
+		// messages array is unchanged — queue is the only source for queued bubbles.
+		expect(after.messages).toBe(before.messages);
 	});
 
-	it("QUEUE_OPTIMISTIC(follow_up) appends a queued-follow-up bubble AND adds to queue.followUp", () => {
+	it("QUEUE_OPTIMISTIC(follow_up) adds to queue.followUp and does NOT touch state.messages", () => {
+		const before = run([{ type: "START_STREAM", prompt: "long task" }]);
+		const after = streamReducer(before, {
+			type: "QUEUE_OPTIMISTIC",
+			kind: "follow_up",
+			text: "after, do B",
+		});
+		expect(after.queue.followUp).toEqual(["after, do B"]);
+		expect(after.queue.steering).toEqual([]);
+		expect(after.messages).toBe(before.messages);
+	});
+
+	it("QUEUE_UPDATE with empty arrays after a pull clears all queued bubbles atomically", () => {
+		// Models the Ctrl+↑ pull flow: user has 2 queued items, presses Ctrl+↑,
+		// App calls clearQueue() → SDK emits QUEUE_UPDATE with empty arrays.
 		const s = run([
-			{ type: "START_STREAM", prompt: "long task" },
-			{ type: "QUEUE_OPTIMISTIC", kind: "follow_up", text: "after, do B" },
+			{ type: "START_STREAM", prompt: "task" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "steer", text: "x" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "follow_up", text: "y" },
+			{ type: "QUEUE_UPDATE", steering: [], followUp: [] },
 		]);
-		expect(s.queue.followUp).toEqual(["after, do B"]);
-		expect(s.queue.steering).toEqual([]);
-		const last = s.messages[s.messages.length - 1];
-		expect(last.kind).toBe("queued-follow-up");
+		expect(s.queue).toEqual({ steering: [], followUp: [] });
+	});
+
+	it("queued bubbles do NOT pollute state.messages even after many dispatches", () => {
+		// Defense-in-depth: chat log stays clean even with rapid queueing.
+		const s = run([
+			{ type: "START_STREAM", prompt: "task" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "steer", text: "a" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "steer", text: "b" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "follow_up", text: "c" },
+		]);
+		// None of the optimistic items landed in messages.
+		for (const m of s.messages) {
+			expect(m.kind).not.toBe("queued-steer");
+			expect(m.kind).not.toBe("queued-follow-up");
+		}
 	});
 
 	it("multiple QUEUE_OPTIMISTIC dispatches append in order (FIFO, no de-dup)", () => {

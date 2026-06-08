@@ -158,33 +158,10 @@ export function ChatMessageItem({ message, detailsExpanded, models }: ChatMessag
 							minute: "2-digit",
 						})}
 					</span>
-					{/* Queued badge for #201 PR 3. Distinguishes mid-turn
-					    queued user messages from plain prompts so the user
-					    can see which were steers vs follow-ups. */}
-					{isUser && message.kind === "queued-steer" && (
-						<span
-							className="text-[10px] font-medium px-1.5 py-0 rounded"
-							style={{
-								background: "hsl(var(--primary) / 0.15)",
-								color: "hsl(var(--primary))",
-							}}
-							title="Steering message — delivered after the current tool batch finishes"
-						>
-							queued · steer
-						</span>
-					)}
-					{isUser && message.kind === "queued-follow-up" && (
-						<span
-							className="text-[10px] font-medium px-1.5 py-0 rounded"
-							style={{
-								background: "hsl(var(--muted))",
-								color: "hsl(var(--muted-foreground))",
-							}}
-							title="Follow-up message — delivered after the agent finishes the current turn"
-						>
-							queued · follow-up
-						</span>
-					)}
+					{/* Queued steer/follow-up badges were removed in the #201 PR3
+					    follow-up: queued messages no longer live in state.messages,
+					    so this code path is unreachable. ChatView renders queued
+					    items inline (pi-style) from streamState.queue instead. */}
 					{message.model && (
 						<span className="text-[10px] text-muted-foreground/50 bg-muted/60 px-1.5 py-0 rounded font-mono">
 							{modelLabel(message, models)}

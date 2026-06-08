@@ -227,6 +227,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 			clearImages();
 			if (textareaRef.current) {
 				textareaRef.current.style.height = "auto";
+				// PR3 follow-up: keep focus on the textarea after submit so
+				// the user can type the next prompt / steer / follow-up
+				// without a mouse trip. Form submission and the React
+				// re-render that clears `text` can briefly shift focus to
+				// document.body on real DOM — explicit refocus is harmless
+				// when focus is already on the textarea.
+				textareaRef.current.focus();
 			}
 		}
 
@@ -259,7 +266,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 		const placeholder = disabled
 			? "Not ready..."
 			: streaming
-				? "Enter to steer · Alt+Enter to queue follow-up"
+				? queueCount > 0
+					? `Steer with Enter · Alt+Enter for follow-up · ${queueCount} queued (Ctrl+↑ to edit)`
+					: "Steer with Enter · Alt+Enter to queue follow-up"
 				: "Message (Enter to send, Shift+Enter for newline)";
 
 		const hasContent = !!(text.trim() || attachedFiles.length > 0 || pastedImages.length > 0);
@@ -299,24 +308,15 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 						className="w-full resize-none bg-transparent px-4 pt-3 pb-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
 					/>
 
-					{/* Steering / follow-up affordance — visible only mid-turn.
-					    Without this hint the keyboard shortcuts are invisible. */}
-					{streaming && !disabled && (
-						<div
-							className="px-4 pb-1 text-[11px] leading-tight"
-							style={{ color: "hsl(var(--muted-foreground) / 0.7)" }}
-						>
-							<span>Enter to steer</span>
-							<span className="opacity-50"> · </span>
-							<span>Alt+Enter to queue follow-up</span>
-						</div>
-					)}
-
-					{/* Queue summary (#201 PR 3) — shown when there are pending
-					    queued messages and the composer isn't hard-disabled.
-					    Renders in both streaming and idle state because a
-					    follow-up can outlive its originating turn. */}
-					{queueCount > 0 && !disabled && (
+					{/* PR3 follow-up: the standalone steer/follow-up hint row and
+					    queue-summary row were removed — they looked like a second
+					    input above the main input. Hints now live in the textarea
+					    placeholder (mode-aware), and the queue surface lives in
+					    the chat as a threaded section above the composer. Idle
+					    state keeps a tiny queue chip (data-testid below) for
+					    discoverability when a follow-up survives STREAM_COMPLETE
+					    and the placeholder reverts to the idle wording. */}
+					{queueCount > 0 && !streaming && !disabled && (
 						<div
 							className="px-4 pb-1 text-[11px] leading-tight"
 							style={{ color: "hsl(var(--muted-foreground) / 0.85)" }}

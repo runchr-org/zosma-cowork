@@ -344,18 +344,15 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 			};
 
 		case "QUEUE_OPTIMISTIC": {
-			const tag: "queued-steer" | "queued-follow-up" =
-				action.kind === "steer" ? "queued-steer" : "queued-follow-up";
-			const bubble: ChatMessage = {
-				id: crypto.randomUUID(),
-				role: "user",
-				content: action.text,
-				timestamp: Date.now(),
-				kind: tag,
-			};
+			// Issue #201 PR3 follow-up: optimistic queue bubbles live ONLY in
+			// state.queue, never in state.messages. ChatView renders queued
+			// items from state.queue AFTER the streaming AI message so they
+			// appear chronologically below "work currently in flight". Keeping
+			// them out of messages also means Ctrl+↑ → clearQueue() →
+			// QUEUE_UPDATE(empty) atomically removes every visible queued
+			// bubble — no orphan-duplicate bug (#201 follow-up screenshot).
 			return {
 				...state,
-				messages: [...state.messages, bubble],
 				queue:
 					action.kind === "steer"
 						? {

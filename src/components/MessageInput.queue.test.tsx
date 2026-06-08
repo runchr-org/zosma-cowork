@@ -30,7 +30,11 @@ describe("MessageInput — queue affordances (#201 PR 3)", () => {
 		onEditQueue: vi.fn(),
 	};
 
-	it("shows a queue summary line when queue has steering items", () => {
+	// PR3 follow-up: when streaming, the queue affordance is folded into
+	// the textarea PLACEHOLDER (no separate visible row — that looked like a
+	// second input above the main input). When idle, the queue chip is
+	// visible because a follow-up can outlive the originating turn.
+	it("streaming: queue affordance lives in the textarea placeholder (count + Ctrl+↑)", () => {
 		render(
 			<MessageInput
 				{...baseProps}
@@ -38,13 +42,14 @@ describe("MessageInput — queue affordances (#201 PR 3)", () => {
 				queue={{ steering: ["stop, do A", "actually B"], followUp: [] }}
 			/>,
 		);
-		const summary = screen.getByTestId("composer-queue-summary");
-		expect(summary).toBeInTheDocument();
-		expect(summary.textContent).toMatch(/2 queued/i);
-		expect(summary.textContent).toMatch(/Ctrl.*\u2191|Ctrl.*Up/i);
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		expect(textarea.placeholder).toMatch(/2 queued/i);
+		expect(textarea.placeholder).toMatch(/Ctrl\+↑/i);
+		// No separate row.
+		expect(screen.queryByTestId("composer-queue-summary")).not.toBeInTheDocument();
 	});
 
-	it("shows a queue summary line when queue has follow-up items", () => {
+	it("streaming: total count appears in placeholder for follow-up only queue", () => {
 		render(
 			<MessageInput
 				{...baseProps}
@@ -52,10 +57,11 @@ describe("MessageInput — queue affordances (#201 PR 3)", () => {
 				queue={{ steering: [], followUp: ["finally C"] }}
 			/>,
 		);
-		expect(screen.getByText(/1 queued/i)).toBeInTheDocument();
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		expect(textarea.placeholder).toMatch(/1 queued/i);
 	});
 
-	it("combines steering + follow-up counts into one total", () => {
+	it("streaming: placeholder combines steer + follow-up counts into one total", () => {
 		render(
 			<MessageInput
 				{...baseProps}
@@ -63,14 +69,34 @@ describe("MessageInput — queue affordances (#201 PR 3)", () => {
 				queue={{ steering: ["a", "b"], followUp: ["c"] }}
 			/>,
 		);
-		expect(screen.getByText(/3 queued/i)).toBeInTheDocument();
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		expect(textarea.placeholder).toMatch(/3 queued/i);
 	});
 
-	it("hides the queue summary when both queues are empty", () => {
+	it("idle: queue chip is visible because a follow-up can outlive STREAM_COMPLETE", () => {
 		render(
 			<MessageInput
 				{...baseProps}
+				queue={{ steering: [], followUp: ["finally C"] }}
+			/>,
+		);
+		const summary = screen.getByTestId("composer-queue-summary");
+		expect(summary.textContent).toMatch(/1 queued/i);
+		expect(summary.textContent).toMatch(/Ctrl\+↑/i);
+	});
+
+	it("hides the queue summary when both queues are empty (idle and streaming)", () => {
+		const { rerender } = render(
+			<MessageInput
+				{...baseProps}
 				streaming
+				queue={{ steering: [], followUp: [] }}
+			/>,
+		);
+		expect(screen.queryByText(/queued/i)).not.toBeInTheDocument();
+		rerender(
+			<MessageInput
+				{...baseProps}
 				queue={{ steering: [], followUp: [] }}
 			/>,
 		);

@@ -288,7 +288,10 @@ describe("MessageInput — streaming-mode keyboard behavior (issue #201)", () =>
 describe("MessageInput — discoverability hints (issue #201)", () => {
 	afterEach(() => cleanupMocks());
 
-	it("shows a steer / follow-up hint while streaming", () => {
+	it("advertises steer / follow-up via the textarea placeholder while streaming (single integrated input, no extra hint row)", () => {
+		// PR3 follow-up: the stand-alone hint row that lived below the
+		// textarea looked like a second input area. We fold the shortcut
+		// hints into the placeholder so the composer reads as ONE input.
 		render(
 			<MessageInput
 				onSend={vi.fn()}
@@ -298,10 +301,13 @@ describe("MessageInput — discoverability hints (issue #201)", () => {
 			/>,
 		);
 
-		// Both shortcuts must be advertised. Match leniently so wording can
-		// evolve without breaking the test.
-		expect(screen.getByText(/steer/i)).toBeInTheDocument();
-		expect(screen.getByText(/follow.?up/i)).toBeInTheDocument();
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		const placeholder = textarea.placeholder.toLowerCase();
+		expect(placeholder).toMatch(/steer/);
+		expect(placeholder).toMatch(/follow.?up/);
+		// The old hint row must be gone — no visible text node carrying both.
+		expect(screen.queryByText(/Enter to steer/i)).not.toBeInTheDocument();
+		expect(screen.queryByText(/Alt\+Enter to queue follow-up/i)).not.toBeInTheDocument();
 	});
 
 	it("placeholder text reflects the streaming-mode keyboard contract", () => {
@@ -363,5 +369,56 @@ describe("MessageInput — disabled vs streaming separation", () => {
 
 		expect(onSteer).not.toHaveBeenCalled();
 		expect(onSend).not.toHaveBeenCalled();
+	});
+});
+
+describe("MessageInput — auto-focus after send (PR3 follow-up)", () => {
+	afterEach(() => cleanupMocks());
+
+	it("keeps focus on the textarea after Enter sends an idle prompt", async () => {
+		// Why: when you fire a prompt you almost always want to type the
+		// next one immediately (steer / follow-up). Losing focus to body on
+		// submit forces a mouse trip to refocus the textarea.
+		const user = userEvent.setup();
+		render(<MessageInput onSend={vi.fn()} />);
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		await user.click(textarea);
+		await user.type(textarea, "hi");
+		await user.keyboard("{Enter}");
+		expect(document.activeElement).toBe(textarea);
+	});
+
+	it("keeps focus on the textarea after Enter queues a steer mid-stream", async () => {
+		const user = userEvent.setup();
+		render(
+			<MessageInput
+				onSend={vi.fn()}
+				onSteer={vi.fn()}
+				onFollowUp={vi.fn()}
+				streaming={true}
+			/>,
+		);
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		await user.click(textarea);
+		await user.type(textarea, "pivot");
+		await user.keyboard("{Enter}");
+		expect(document.activeElement).toBe(textarea);
+	});
+
+	it("keeps focus on the textarea after Alt+Enter queues a follow-up mid-stream", async () => {
+		const user = userEvent.setup();
+		render(
+			<MessageInput
+				onSend={vi.fn()}
+				onSteer={vi.fn()}
+				onFollowUp={vi.fn()}
+				streaming={true}
+			/>,
+		);
+		const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+		await user.click(textarea);
+		await user.type(textarea, "later");
+		await user.keyboard("{Alt>}{Enter}{/Alt}");
+		expect(document.activeElement).toBe(textarea);
 	});
 });
