@@ -37,7 +37,15 @@ interface SessionEntry {
 }
 
 function App() {
-	const { state: streamState, startStream, abortStream, toolPhase, dispatch } = usePiStream();
+	const {
+		state: streamState,
+		startStream,
+		abortStream,
+		steerStream,
+		followUpStream,
+		toolPhase,
+		dispatch,
+	} = usePiStream();
 	const telemetry = useTelemetry();
 	const [showTelemetryConsent, setShowTelemetryConsent] = useState<boolean | null>(null);
 	const personaRef = useRef("");
@@ -827,6 +835,9 @@ function App() {
 								error={streamState.error}
 								onSend={handleSend}
 								onAbort={() => abortStream()}
+								/* Issue #201, PR 2 — mid-turn message queuing. */
+								onSteer={steerStream}
+								onFollowUp={followUpStream}
 								sessionKey={activeSessionFile ?? "new"}
 								onRetry={() => {
 									const lastUser = [...displayMessages].reverse().find((m) => m.role === "user");

@@ -464,5 +464,43 @@ export function usePiStream() {
 		}
 	}, []);
 
-	return { state, startStream, abortStream, dispatch, toolPhase };
+	/**
+	 * Queue a steering message on the running session (issue #201, PR 1).
+	 * Mid-turn course correction — the agent picks it up after its current
+	 * tool batch finishes, before the next LLM call. Errors from the sidecar
+	 * (extension command, empty text, etc.) are logged but not re-thrown:
+	 * the composer’s textarea is already cleared on submit so we don’t want
+	 * to surface a stack trace mid-conversation. Future PR may surface them
+	 * as a transient toast.
+	 */
+	const steerStream = useCallback(async (text: string) => {
+		try {
+			await invoke("steer_prompt", { text });
+		} catch (err) {
+			console.warn("[cowork] steer_prompt rejected:", err);
+		}
+	}, []);
+
+	/**
+	 * Queue a follow-up message on the running session (issue #201, PR 1).
+	 * Delivered after the agent finishes all current work. Same error
+	 * handling rationale as {@link steerStream}.
+	 */
+	const followUpStream = useCallback(async (text: string) => {
+		try {
+			await invoke("follow_up_prompt", { text });
+		} catch (err) {
+			console.warn("[cowork] follow_up_prompt rejected:", err);
+		}
+	}, []);
+
+	return {
+		state,
+		startStream,
+		abortStream,
+		steerStream,
+		followUpStream,
+		dispatch,
+		toolPhase,
+	};
 }

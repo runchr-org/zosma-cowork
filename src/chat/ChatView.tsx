@@ -26,6 +26,10 @@ interface ChatViewProps {
 	sessionKey?: string;
 	/** External draft (e.g. a prompt template) to load into the composer for editing. */
 	draft?: { text: string; nonce: number };
+	/** Issue #201, PR 2 — queue a steering message on the active session. */
+	onSteer?: (text: string) => void;
+	/** Issue #201, PR 2 — queue a follow-up message on the active session. */
+	onFollowUp?: (text: string) => void;
 }
 
 export function ChatView({
@@ -43,6 +47,8 @@ export function ChatView({
 	toolPhase,
 	sessionKey,
 	draft,
+	onSteer,
+	onFollowUp,
 }: ChatViewProps) {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -134,7 +140,13 @@ export function ChatView({
 					key={sessionKey}
 					ref={inputRef}
 					onSend={onSend}
-					disabled={isRunning}
+					/* Issue #201: while streaming, the input stays enabled and
+					   Enter/Alt+Enter route to steer/follow-up instead of starting
+					   a fresh prompt. `disabled` is reserved for hard-blocks like
+					   "no model selected" or "sidecar not ready". */
+					streaming={isRunning}
+					onSteer={onSteer}
+					onFollowUp={onFollowUp}
 					models={models}
 					currentModelId={currentModelId}
 					onModelSelect={onModelSelect}

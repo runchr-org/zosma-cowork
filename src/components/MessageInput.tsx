@@ -19,6 +19,17 @@ interface MessageInputProps {
 	 * letting the user edit before sending — it does NOT auto-send.
 	 */
 	draft?: { text: string; nonce: number };
+	/**
+	 * True while the agent is actively responding. The composer stays
+	 * **enabled** in this state and routes Enter to `onSteer` (mid-turn
+	 * course correction) and Alt+Enter to `onFollowUp` (post-turn task) —
+	 * matching pi-coding-agent's TUI shortcuts. See issue #201.
+	 */
+	streaming?: boolean;
+	/** Queue a steering message on the running session (issue #201, PR 1). */
+	onSteer?: (message: string) => void;
+	/** Queue a follow-up message on the running session (issue #201, PR 1). */
+	onFollowUp?: (message: string) => void;
 }
 
 export interface MessageInputHandle {
@@ -26,7 +37,21 @@ export interface MessageInputHandle {
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
-	({ onSend, disabled, modelLabel, models, currentModelId, onModelSelect, draft }, ref) => {
+	(
+		{
+			onSend,
+			disabled,
+			modelLabel,
+			models,
+			currentModelId,
+			onModelSelect,
+			draft,
+			streaming = false,
+			onSteer,
+			onFollowUp,
+		},
+		ref,
+	) => {
 		const [text, setText] = useState("");
 		const [attachedFiles, setAttachedFiles] = useState<{ path: string; name: string }[]>([]);
 		const [isListening, setIsListening] = useState(false);
@@ -138,7 +163,22 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 			}
 		}, [pastedImages.length]);
 
-		async function handleSubmit(e?: React.FormEvent) {
+		/**
+		 * Submit the composer. `intent` decides which callback receives the
+		 * payload:
+		 *   - `"send"`     : start a fresh turn (idle mode — default)
+		 *   - `"steer"`    : mid-turn course-correction (streaming + Enter)
+		 *   - `"follow_up"`: post-turn task (streaming + Alt+Enter)
+		 *
+		 * If the requested callback isn't wired (e.g. `onSteer` missing during
+		 * streaming) the submit is suppressed — falling back to `onSend` would
+		 * start a fresh prompt, which the sidecar's prompt-scheduler would
+		 * queue behind the running turn (exactly the bug #201 is fixing).
+		 */
+		async function handleSubmit(
+			intent: "send" | "steer" | "follow_up" = "send",
+			e?: React.FormEvent,
+		) {
 			e?.preventDefault();
 			const trimmed = text.trim();
 			if ((!trimmed && attachedFiles.length === 0 && pastedImages.length === 0) || disabled) return;
@@ -156,7 +196,15 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 				finalPrompt = finalPrompt ? `${finalPrompt}\n\n${trimmed}` : trimmed;
 			}
 
-			onSend(finalPrompt);
+			const handler =
+				intent === "steer"
+					? onSteer
+					: intent === "follow_up"
+						? onFollowUp
+						: onSend;
+			if (!handler) return; // silent no-op is safer than misroute — see jsdoc
+
+			handler(finalPrompt);
 			setText("");
 			setAttachedFiles([]);
 			clearImages();
@@ -166,21 +214,26 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 		}
 
 		function handleKeyDown(e: React.KeyboardEvent) {
-			if (e.key === "Enter" && !e.shiftKey) {
-				e.preventDefault();
-				handleSubmit();
+			if (e.key !== "Enter" || e.shiftKey) return;
+			e.preventDefault();
+			if (streaming) {
+				handleSubmit(e.altKey ? "follow_up" : "steer");
+			} else {
+				handleSubmit("send");
 			}
 		}
 
 		const placeholder = disabled
-			? "Thinking..."
-			: "Message (Enter to send, Shift+Enter for newline)";
+			? "Not ready..."
+			: streaming
+				? "Enter to steer · Alt+Enter to queue follow-up"
+				: "Message (Enter to send, Shift+Enter for newline)";
 
 		const hasContent = !!(text.trim() || attachedFiles.length > 0 || pastedImages.length > 0);
 
 		return (
 			<motion.form
-				onSubmit={handleSubmit}
+				onSubmit={(e) => handleSubmit(streaming ? "steer" : "send", e)}
 				className="px-4 pb-4 mx-auto w-full"
 				style={{ maxWidth: "var(--chat-composer-max-width, 852px)" }}
 				initial={prefersReducedMotion ? false : { y: 72, opacity: 0 }}
@@ -212,6 +265,19 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 						inputMode="text"
 						className="w-full resize-none bg-transparent px-4 pt-3 pb-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
 					/>
+
+					{/* Steering / follow-up affordance — visible only mid-turn.
+					    Without this hint the keyboard shortcuts are invisible. */}
+					{streaming && (
+						<div
+							className="px-4 pb-1 text-[11px] leading-tight"
+							style={{ color: "hsl(var(--muted-foreground) / 0.7)" }}
+						>
+							<span>Enter to steer</span>
+							<span className="opacity-50"> · </span>
+							<span>Alt+Enter to queue follow-up</span>
+						</div>
+					)}
 
 					{/* Pasted image chips */}
 					{pastedImages.length > 0 && (
@@ -318,7 +384,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 						<button
 							type="submit"
 							disabled={disabled || !hasContent}
-							aria-label="Send message"
+							aria-label={streaming ? "Send steering message" : "Send message"}
 							className="flex items-center justify-center w-8 h-8 rounded-full transition-all duration-150 disabled:cursor-not-allowed"
 							style={{
 								background: hasContent ? "#ffffff" : "hsl(var(--muted))",
