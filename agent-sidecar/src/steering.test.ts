@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	handleClearQueueCommand,
 	handleFollowUpCommand,
 	handleSteerCommand,
+	type ClearQueueCommand,
+	type ClearableSession,
 	type FollowUpCommand,
 	type ImageAttachment,
 	type SidecarOutgoing,
@@ -293,5 +296,131 @@ describe("steering command handlers", () => {
 
 		expect(session.followUp).toHaveBeenCalledTimes(1);
 		expect(session.steer).not.toHaveBeenCalled();
+	});
+
+	// ─────────────────────────────── clear_queue ────────────────────────────
+
+	/**
+	 * `clear_queue` atomically drains the SDK queue and returns the messages
+	 * that were pulled. PR 3 of #201 uses this to power Ctrl+↑ in the
+	 * composer: the queued steer/follow-up messages come back so the user
+	 * can edit them; the SDK queue is left empty so nothing fires while
+	 * editing. Re-enqueueing is done by the frontend via subsequent
+	 * `steer` / `follow_up` calls — this handler does NOT auto-restore.
+	 */
+	describe("handleClearQueueCommand", () => {
+		function makeClearable(
+			overrides: Partial<ClearableSession> = {},
+		): ClearableSession {
+			return {
+				clearQueue: vi
+					.fn()
+					.mockReturnValue({ steering: [], followUp: [] }),
+				...overrides,
+			};
+		}
+
+		it("returns the drained steering + followUp arrays in the result envelope", async () => {
+			const session = makeClearable({
+				clearQueue: vi.fn().mockReturnValue({
+					steering: ["stop, do A", "actually B"],
+					followUp: ["then C"],
+				}),
+			});
+			const { sent, send } = capture();
+
+			await handleClearQueueCommand(
+				session,
+				{ type: "clear_queue", id: "q-1" },
+				send,
+			);
+
+			expect(session.clearQueue).toHaveBeenCalledTimes(1);
+			expect(sent).toEqual([
+				{
+					type: "result",
+					id: "q-1",
+					data: {
+						command: "clear_queue",
+						steering: ["stop, do A", "actually B"],
+						followUp: ["then C"],
+					},
+				},
+			]);
+		});
+
+		it("returns empty arrays when the queue is already empty", async () => {
+			const session = makeClearable();
+			const { sent, send } = capture();
+
+			await handleClearQueueCommand(
+				session,
+				{ type: "clear_queue", id: "q-2" },
+				send,
+			);
+
+			expect(sent).toEqual([
+				{
+					type: "result",
+					id: "q-2",
+					data: {
+						command: "clear_queue",
+						steering: [],
+						followUp: [],
+					},
+				},
+			]);
+		});
+
+		it("surfaces synchronous SDK errors as a single error envelope", async () => {
+			const session = makeClearable({
+				clearQueue: vi.fn(() => {
+					throw new Error("queue is locked");
+				}),
+			});
+			const { sent, send } = capture();
+
+			await handleClearQueueCommand(
+				session,
+				{ type: "clear_queue", id: "q-3" },
+				send,
+			);
+
+			expect(sent).toEqual([
+				{ type: "error", id: "q-3", message: "queue is locked" },
+			]);
+		});
+
+		it("emits exactly one envelope per command id (no double-response)", async () => {
+			const session = makeClearable();
+			const { sent, send } = capture();
+			await handleClearQueueCommand(
+				session,
+				{ type: "clear_queue", id: "q-4" },
+				send,
+			);
+			expect(sent).toHaveLength(1);
+		});
+
+		it("preserves message order returned by the SDK (FIFO)", async () => {
+			const session = makeClearable({
+				clearQueue: vi.fn().mockReturnValue({
+					steering: ["first", "second", "third"],
+					followUp: ["alpha", "beta"],
+				}),
+			});
+			const { sent, send } = capture();
+
+			await handleClearQueueCommand(
+				session,
+				{ type: "clear_queue", id: "q-5" },
+				send,
+			);
+
+			const data = (sent[0] as Extract<SidecarOutgoing, { type: "result" }>)
+				.data as { steering: string[]; followUp: string[] };
+			expect(data.steering).toEqual(["first", "second", "third"]);
+			expect(data.followUp).toEqual(["alpha", "beta"]);
+		});
 	});
 });

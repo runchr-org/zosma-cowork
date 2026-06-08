@@ -79,3 +79,106 @@ describe("streamReducer — single bubble per agent run", () => {
 		expect(s.streamingMessage?.thinking).toBe("first\nsecond");
 	});
 });
+
+/**
+ * Queue slice — issue #201 PR 3.
+ *
+ * StreamState gains a `queue: { steering: string[]; followUp: string[] }` slice
+ * populated from two sources:
+ *   1. `queue_update` events from the SDK (canonical, drives reconciliation),
+ *   2. optimistic dispatches at the moment the user presses Enter / Alt+Enter
+ *      while streaming, so the bubble appears instantly instead of waiting
+ *      for the sidecar round-trip.
+ *
+ * The user-visible chat bubble for a queued message must also appear in
+ * `state.messages` so the chat view scrolls naturally; we tag the message
+ * with `kind: "steer" | "follow_up"` to render the badge.
+ */
+describe("streamReducer — queue slice (#201 PR 3)", () => {
+	it("INITIAL_STATE has empty queue arrays", () => {
+		expect(INITIAL_STATE.queue).toEqual({ steering: [], followUp: [] });
+	});
+
+	it("QUEUE_UPDATE replaces the queue snapshot from SDK truth", () => {
+		const s = run([
+			{
+				type: "QUEUE_UPDATE",
+				steering: ["stop, do A", "actually B"],
+				followUp: ["then C"],
+			},
+		]);
+		expect(s.queue).toEqual({
+			steering: ["stop, do A", "actually B"],
+			followUp: ["then C"],
+		});
+	});
+
+	it("QUEUE_UPDATE with empty arrays clears the queue (no stale items)", () => {
+		const s = run([
+			{
+				type: "QUEUE_UPDATE",
+				steering: ["x"],
+				followUp: ["y"],
+			},
+			{ type: "QUEUE_UPDATE", steering: [], followUp: [] },
+		]);
+		expect(s.queue).toEqual({ steering: [], followUp: [] });
+	});
+
+	it("QUEUE_OPTIMISTIC(steer) appends a user-message bubble tagged steer AND adds to queue.steering", () => {
+		const s = run([
+			{ type: "START_STREAM", prompt: "long task" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "steer", text: "stop, do A" },
+		]);
+		expect(s.queue.steering).toEqual(["stop, do A"]);
+		expect(s.queue.followUp).toEqual([]);
+		// Last message in conversation is the optimistic queued bubble.
+		const last = s.messages[s.messages.length - 1];
+		expect(last.role).toBe("user");
+		expect(last.content).toBe("stop, do A");
+		expect(last.kind).toBe("queued-steer");
+	});
+
+	it("QUEUE_OPTIMISTIC(follow_up) appends a queued-follow-up bubble AND adds to queue.followUp", () => {
+		const s = run([
+			{ type: "START_STREAM", prompt: "long task" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "follow_up", text: "after, do B" },
+		]);
+		expect(s.queue.followUp).toEqual(["after, do B"]);
+		expect(s.queue.steering).toEqual([]);
+		const last = s.messages[s.messages.length - 1];
+		expect(last.kind).toBe("queued-follow-up");
+	});
+
+	it("multiple QUEUE_OPTIMISTIC dispatches append in order (FIFO, no de-dup)", () => {
+		const s = run([
+			{ type: "START_STREAM", prompt: "x" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "steer", text: "a" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "steer", text: "a" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "follow_up", text: "b" },
+		]);
+		expect(s.queue.steering).toEqual(["a", "a"]);
+		expect(s.queue.followUp).toEqual(["b"]);
+	});
+
+	it("STREAM_COMPLETE preserves the queue (a follow-up survives the originating turn)", () => {
+		// The whole point of follow_up is that the agent processes it AFTER
+		// the current turn ends. If we cleared the queue on STREAM_COMPLETE
+		// the UI would forget the pending message a moment before the next
+		// queue_update event arrives — visible flicker.
+		const s = run([
+			{ type: "START_STREAM", prompt: "x" },
+			{ type: "QUEUE_OPTIMISTIC", kind: "follow_up", text: "b" },
+			{ type: "STREAM_COMPLETE" },
+		]);
+		expect(s.queue.followUp).toEqual(["b"]);
+	});
+
+	it("RESET clears the queue back to empty arrays", () => {
+		const s = run([
+			{ type: "QUEUE_UPDATE", steering: ["x"], followUp: ["y"] },
+			{ type: "RESET" },
+		]);
+		expect(s.queue).toEqual({ steering: [], followUp: [] });
+	});
+});

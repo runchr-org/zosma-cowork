@@ -44,6 +44,17 @@ export interface SteerableSession {
 	followUp(text: string, images?: ImageAttachment[]): Promise<void>;
 }
 
+/**
+ * The slice of `AgentSession` the clear-queue handler depends on.
+ * Pi SDK exposes `clearQueue(): {steering: string[]; followUp: string[]}`
+ * which atomically drains the in-memory queue. We keep this interface
+ * separate from {@link SteerableSession} so the steer/follow-up handlers
+ * stay minimal and don't force every consumer to also implement clearing.
+ */
+export interface ClearableSession {
+	clearQueue(): { steering: readonly string[]; followUp: readonly string[] };
+}
+
 /** Inbound steer command from the desktop UI (via Tauri stdin). */
 export interface SteerCommand {
 	type: "steer";
@@ -61,6 +72,18 @@ export interface FollowUpCommand {
 }
 
 /**
+ * Inbound clear-queue command (PR 3 of issue #201). Pulled by the
+ * desktop composer when the user presses Ctrl+↑ to edit pending
+ * queued messages. The handler drains the SDK queue and returns the
+ * drained messages so the UI can present them for editing; nothing is
+ * automatically re-enqueued.
+ */
+export interface ClearQueueCommand {
+	type: "clear_queue";
+	id: string;
+}
+
+/**
  * Outgoing envelopes this module emits to stdout. Intentionally a subset
  * of the sidecar's full envelope vocabulary — these handlers only ever
  * emit `result` (acceptance) or `error` (rejection).
@@ -70,6 +93,15 @@ export type SidecarOutgoing =
 			type: "result";
 			id: string;
 			data: { accepted: true; command: "steer" | "follow_up" };
+	  }
+	| {
+			type: "result";
+			id: string;
+			data: {
+				command: "clear_queue";
+				steering: string[];
+				followUp: string[];
+			};
 	  }
 	| { type: "error"; id: string; message: string };
 
@@ -144,6 +176,41 @@ export async function handleFollowUpCommand(
 			type: "result",
 			id: cmd.id,
 			data: { accepted: true, command: "follow_up" },
+		});
+	} catch (err) {
+		send({ type: "error", id: cmd.id, message: errMessage(err) });
+	}
+}
+
+/**
+ * Atomically drain the running session's steer + follow-up queue and
+ * return what was drained. Issue #201 PR 3 wires this to the composer's
+ * Ctrl+↑ "edit queue" affordance so the user can recall every pending
+ * queued message in one shot, edit them freely, and decide whether to
+ * re-queue them. The SDK queue is left empty regardless of what the
+ * frontend does next — if the user cancels editing without re-sending,
+ * those messages are gone (intentional: a queued message the user
+ * pulled back is no longer "committed").
+ *
+ * Synchronous SDK errors (e.g. a future pi version may throw if the
+ * session is shutting down) surface as a single `error` envelope; on
+ * the happy path exactly one `result` envelope is emitted.
+ */
+export async function handleClearQueueCommand(
+	session: ClearableSession,
+	cmd: ClearQueueCommand,
+	send: Send,
+): Promise<void> {
+	try {
+		const drained = session.clearQueue();
+		send({
+			type: "result",
+			id: cmd.id,
+			data: {
+				command: "clear_queue",
+				steering: [...drained.steering],
+				followUp: [...drained.followUp],
+			},
 		});
 	} catch (err) {
 		send({ type: "error", id: cmd.id, message: errMessage(err) });

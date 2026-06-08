@@ -30,6 +30,21 @@ interface MessageInputProps {
 	onSteer?: (message: string) => void;
 	/** Queue a follow-up message on the running session (issue #201, PR 1). */
 	onFollowUp?: (message: string) => void;
+	/**
+	 * Pending steer + follow-up messages on the active session
+	 * (issue #201, PR 3). When either array is non-empty the composer
+	 * surfaces a small "N queued — Ctrl+↑ to edit" summary and Ctrl+↑
+	 * fires {@link onEditQueue}.
+	 */
+	queue?: { steering: readonly string[]; followUp: readonly string[] };
+	/**
+	 * User pressed Ctrl+↑ to edit pending queued messages. The parent
+	 * should atomically drain the SDK queue (via `clearQueue`) and load
+	 * the drained messages into the composer through the existing
+	 * {@link draft} prop. While editing, the SDK queue is empty so
+	 * nothing accidentally fires.
+	 */
+	onEditQueue?: () => void;
 }
 
 export interface MessageInputHandle {
@@ -49,6 +64,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 			streaming = false,
 			onSteer,
 			onFollowUp,
+			queue,
+			onEditQueue,
 		},
 		ref,
 	) => {
@@ -213,7 +230,23 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 			}
 		}
 
+		/** Total pending queued messages across both kinds (#201 PR 3). */
+		const queueCount =
+			(queue?.steering.length ?? 0) + (queue?.followUp.length ?? 0);
+
 		function handleKeyDown(e: React.KeyboardEvent) {
+			// Ctrl+↑ — recall pending queued messages for editing
+			// (#201 PR 3). Works in both streaming and idle state because
+			// pending follow-ups survive STREAM_COMPLETE until the agent
+			// actually dequeues them. No-op when the queue is empty so
+			// we don't round-trip to the sidecar for nothing.
+			if (e.key === "ArrowUp" && e.ctrlKey && !e.shiftKey && !e.altKey) {
+				if (queueCount > 0 && onEditQueue) {
+					e.preventDefault();
+					onEditQueue();
+				}
+				return;
+			}
 			if (e.key !== "Enter" || e.shiftKey) return;
 			e.preventDefault();
 			if (streaming) {
@@ -268,7 +301,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 
 					{/* Steering / follow-up affordance — visible only mid-turn.
 					    Without this hint the keyboard shortcuts are invisible. */}
-					{streaming && (
+					{streaming && !disabled && (
 						<div
 							className="px-4 pb-1 text-[11px] leading-tight"
 							style={{ color: "hsl(var(--muted-foreground) / 0.7)" }}
@@ -276,6 +309,22 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
 							<span>Enter to steer</span>
 							<span className="opacity-50"> · </span>
 							<span>Alt+Enter to queue follow-up</span>
+						</div>
+					)}
+
+					{/* Queue summary (#201 PR 3) — shown when there are pending
+					    queued messages and the composer isn't hard-disabled.
+					    Renders in both streaming and idle state because a
+					    follow-up can outlive its originating turn. */}
+					{queueCount > 0 && !disabled && (
+						<div
+							className="px-4 pb-1 text-[11px] leading-tight"
+							style={{ color: "hsl(var(--muted-foreground) / 0.85)" }}
+							data-testid="composer-queue-summary"
+						>
+							<span>{queueCount} queued</span>
+							<span className="opacity-50"> · </span>
+							<span>Ctrl+↑ to edit</span>
 						</div>
 					)}
 

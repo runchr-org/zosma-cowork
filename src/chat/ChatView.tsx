@@ -30,6 +30,10 @@ interface ChatViewProps {
 	onSteer?: (text: string) => void;
 	/** Issue #201, PR 2 — queue a follow-up message on the active session. */
 	onFollowUp?: (text: string) => void;
+	/** Issue #201, PR 3 — SDK queue snapshot for composer affordance. */
+	queue?: { steering: readonly string[]; followUp: readonly string[] };
+	/** Issue #201, PR 3 — user pressed Ctrl+↑ to edit the pending queue. */
+	onEditQueue?: () => void;
 }
 
 export function ChatView({
@@ -49,6 +53,8 @@ export function ChatView({
 	draft,
 	onSteer,
 	onFollowUp,
+	queue,
+	onEditQueue,
 }: ChatViewProps) {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -147,6 +153,8 @@ export function ChatView({
 					streaming={isRunning}
 					onSteer={onSteer}
 					onFollowUp={onFollowUp}
+					queue={queue}
+					onEditQueue={onEditQueue}
 					models={models}
 					currentModelId={currentModelId}
 					onModelSelect={onModelSelect}

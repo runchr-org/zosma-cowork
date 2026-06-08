@@ -43,6 +43,7 @@ function App() {
 		abortStream,
 		steerStream,
 		followUpStream,
+		clearQueue,
 		toolPhase,
 		dispatch,
 	} = usePiStream();
@@ -444,6 +445,30 @@ function App() {
 		setComposerDraft((prev) => ({ text: prompt, nonce: (prev?.nonce ?? 0) + 1 }));
 	}, []);
 
+	/**
+	 * Issue #201 PR 3 — Ctrl+↑ in the composer fires this. We atomically
+	 * drain the SDK queue (so nothing fires while the user is editing) and
+	 * load the drained messages into the composer via the existing
+	 * `draft` channel.
+	 *
+	 * Format: steering items first, follow-up items second, separated by a
+	 * blank line. The user can rewrite, reorder, or delete freely. When
+	 * they press Enter / Alt+Enter, the whole edited blob re-queues as ONE
+	 * message (intentional: simpler than splitting + per-kind round-trip,
+	 * and the agent reads the result identically). If they want to drop
+	 * the queue entirely they just clear the textarea — nothing fires.
+	 */
+	const handleEditQueue = useCallback(async () => {
+		const drained = await clearQueue();
+		const all = [...drained.steering, ...drained.followUp];
+		if (all.length === 0) return;
+		const joined = all.join("\n\n");
+		setComposerDraft((prev) => ({
+			text: joined,
+			nonce: (prev?.nonce ?? 0) + 1,
+		}));
+	}, [clearQueue]);
+
 	const handleModelSelect = async (provider: string, modelId: string) => {
 		setActiveModelId(modelKey(provider, modelId));
 		try {
@@ -838,6 +863,9 @@ function App() {
 								/* Issue #201, PR 2 — mid-turn message queuing. */
 								onSteer={steerStream}
 								onFollowUp={followUpStream}
+								/* Issue #201, PR 3 — queue visibility + editing. */
+								queue={streamState.queue}
+								onEditQueue={handleEditQueue}
 								sessionKey={activeSessionFile ?? "new"}
 								onRetry={() => {
 									const lastUser = [...displayMessages].reverse().find((m) => m.role === "user");

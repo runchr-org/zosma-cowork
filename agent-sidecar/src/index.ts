@@ -118,6 +118,7 @@ import { startRemoteServer, stopRemoteServer } from "./remote-server.js";
 import { commandQueue } from "./command-queue.js";
 import { createPromptScheduler } from "./prompt-scheduler.js";
 import {
+	handleClearQueueCommand,
 	handleFollowUpCommand,
 	handleSteerCommand,
 } from "./steering.js";
@@ -215,6 +216,18 @@ interface FollowUpCommand {
 	id: string;
 	text: string;
 	images?: SteerImage[];
+}
+
+/**
+ * Atomically drain the active session's steer + follow-up queue and
+ * return the drained messages. Issue #201 PR 3 — powers the composer's
+ * Ctrl+↑ "edit queue" affordance. The SDK queue is left empty; if the
+ * frontend wants to re-queue any pulled message it does so via
+ * subsequent steer/follow_up commands.
+ */
+interface ClearQueueCommand {
+	type: "clear_queue";
+	id: string;
 }
 
 /** Re-export of the steering module's image type to avoid duplicate shapes. */
@@ -451,6 +464,7 @@ type Command =
 	| AbortCommand
 	| SteerCommand
 	| FollowUpCommand
+	| ClearQueueCommand
 	| SetModelCommand
 	| SaveAuthCommand
 	| StartOAuthCommand
@@ -1732,6 +1746,19 @@ async function main() {
 						break;
 					}
 					await handleFollowUpCommand(session, cmd, send);
+					break;
+				}
+
+				// ── clear_queue ─────────────────────────────
+				// Drain the SDK queue and return what was drained so the
+				// composer can present the messages for editing. Issue #201
+				// PR 3 — see steering.ts.
+				case "clear_queue": {
+					if (!initialized || !session) {
+						send({ type: "error", id: cmd.id, message: "Not initialized" });
+						break;
+					}
+					await handleClearQueueCommand(session, cmd, send);
 					break;
 				}
 

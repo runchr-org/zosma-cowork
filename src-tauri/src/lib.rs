@@ -482,6 +482,18 @@ async fn read_stdout(
                             let _ = app.emit(kind, e.clone());
                         }
                     }
+                    // Pi SDK session-level events (queue_update,
+                    // session_info_changed, etc.) use `type` instead of
+                    // `kind`. The composer (#201 PR 3) needs to know about
+                    // queue mutations EVEN WHEN NO PROMPT IS ACTIVE — e.g.
+                    // after the agent finishes and a follow-up dequeues.
+                    // Emit those globally so a `listen("queue_update", ...)`
+                    // in React works regardless of streaming state.
+                    if let Some(t) = e.get("type").and_then(|v| v.as_str()) {
+                        if t == "queue_update" {
+                            let _ = app.emit("queue_update", e.clone());
+                        }
+                    }
                     for (_, p) in pp.lock().await.iter() {
                         let _ = p.channel.send(e.clone());
                     }
@@ -642,6 +654,17 @@ fn build_steer_payload(id: &str, text: &str) -> Value {
     })
 }
 
+/// Build the JSONL payload sent to the sidecar for a `clear_queue` command.
+/// Issue #201 PR 3 — atomically drains the SDK queue. No `text` field: this
+/// command takes no input. The sidecar replies with the drained
+/// `{steering, followUp}` arrays in a `result` envelope.
+fn build_clear_queue_payload(id: &str) -> Value {
+    serde_json::json!({
+        "type": "clear_queue",
+        "id": id,
+    })
+}
+
 /// Build the JSONL payload sent to the sidecar for a `follow_up` command.
 /// See [`build_steer_payload`] for rationale.
 fn build_follow_up_payload(id: &str, text: &str) -> Value {
@@ -683,6 +706,24 @@ async fn follow_up_prompt(text: String, s: State<'_, AppState>) -> Result<Value,
     scmd_r(
         &s,
         &build_follow_up_payload(&id, &text),
+        std::time::Duration::from_secs(5),
+    )
+    .await
+}
+
+/// Drain the active session's steer + follow-up queue and return the
+/// drained `{steering, followUp}` arrays. Issue #201 PR 3 — the desktop
+/// composer calls this when the user presses Ctrl+↑ to recall pending
+/// queued messages for editing. Idempotent on an empty queue.
+#[tauri::command]
+async fn clear_queue(s: State<'_, AppState>) -> Result<Value, String> {
+    if !s.sidecar.ready.load(Ordering::Acquire) {
+        return Err("not ready".into());
+    }
+    let id = format!("cq-{}", uuid_v4());
+    scmd_r(
+        &s,
+        &build_clear_queue_payload(&id),
         std::time::Duration::from_secs(5),
     )
     .await
@@ -1802,6 +1843,7 @@ pub fn run() {
             abort_prompt,
             steer_prompt,
             follow_up_prompt,
+            clear_queue,
             send_ui_response,
             set_active_model,
             save_auth_key,
@@ -1850,11 +1892,12 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_follow_up_payload, build_steer_payload};
+    use super::{build_clear_queue_payload, build_follow_up_payload, build_steer_payload};
 
-    // Wire-format guards: the sidecar's `case "steer"` / `case "follow_up"`
-    // handlers (agent-sidecar/src/index.ts) read these exact fields. Drift
-    // here = silent breakage on the React → Rust → sidecar path.
+    // Wire-format guards: the sidecar's `case "steer"` / `case "follow_up"` /
+    // `case "clear_queue"` handlers (agent-sidecar/src/index.ts) read these
+    // exact fields. Drift here = silent breakage on the React → Rust → sidecar
+    // path.
 
     #[test]
     fn steer_payload_uses_steer_type_with_text_and_id() {
@@ -1887,6 +1930,20 @@ mod tests {
         );
         assert!(serialized.contains("line one\\nline two"));
         assert!(serialized.contains("caf\u{00e9}"));
+    }
+
+    #[test]
+    fn clear_queue_payload_uses_clear_queue_type_with_id_only() {
+        // No text field — clear_queue takes no input from the user. The
+        // sidecar reads `type` to dispatch and `id` to route the response
+        // envelope back through `pending_requests`.
+        let p = build_clear_queue_payload("cq-abc");
+        assert_eq!(p["type"], "clear_queue");
+        assert_eq!(p["id"], "cq-abc");
+        // Defensive: ensure no extra fields snuck in that the sidecar
+        // doesn't expect (sidecar's strict TS Command union would refuse).
+        let obj = p.as_object().expect("clear_queue payload is an object");
+        assert_eq!(obj.len(), 2, "unexpected fields in clear_queue payload: {p}");
     }
 
     #[test]
