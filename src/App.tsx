@@ -655,7 +655,7 @@ function App() {
 	}));
 
 	return (
-		<div className="flex h-screen bg-background md:gap-2.5 md:p-2.5" style={{ zoom: fontScale }}>
+		<div className="flex h-screen md:gap-2.5 md:p-2.5" style={{ zoom: fontScale }}>
 			{/* Extension UI dialogs (pi-ask-user etc. via ctx.ui) */}
 			<ExtensionUiHost />
 

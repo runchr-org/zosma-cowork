@@ -1230,6 +1230,65 @@ async fn read_skill_md(path: String, _s: State<'_, AppState>) -> Result<Value, S
     }))
 }
 
+// ── Background wallpaper (#191) ──────────────────────────────────────
+//
+// The webview can't read arbitrary files the user picks (fs scope is limited
+// to ~/.zosmaai/cowork/**, and there's no asset protocol), so the picked image
+// is copied into the wallpapers dir by Rust and read back as bytes at apply
+// time. Keeping both file ops in Rust avoids any Tauri config/capability change.
+
+const WALLPAPER_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "gif"];
+
+fn wallpapers_dir() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|e| format!("Cannot find home directory: {e}"))?;
+    let dir = PathBuf::from(home)
+        .join(".zosmaai")
+        .join("cowork")
+        .join("wallpapers");
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create wallpapers dir: {e}"))?;
+    Ok(dir)
+}
+
+/// Copy a user-picked image into the wallpapers dir. Returns the stored filename.
+/// A single active slot is kept (`wallpaper.<ext>`), overwriting any previous one
+/// of the same extension; stale slots with other extensions are removed.
+#[tauri::command]
+fn import_wallpaper(src_path: String) -> Result<String, String> {
+    let src = PathBuf::from(&src_path);
+    let ext = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .filter(|e| WALLPAPER_EXTS.contains(&e.as_str()))
+        .ok_or_else(|| "Unsupported image type (use PNG, JPG, WEBP or GIF).".to_string())?;
+
+    let dir = wallpapers_dir()?;
+    // Drop any previous wallpaper slot so we don't accumulate files.
+    for other in WALLPAPER_EXTS {
+        let p = dir.join(format!("wallpaper.{other}"));
+        if p.exists() {
+            let _ = fs::remove_file(&p);
+        }
+    }
+
+    let filename = format!("wallpaper.{ext}");
+    let dest = dir.join(&filename);
+    fs::copy(&src, &dest).map_err(|e| format!("Failed to copy image: {e}"))?;
+    Ok(filename)
+}
+
+/// Read a stored wallpaper image's bytes by filename (no path traversal allowed).
+#[tauri::command]
+fn read_wallpaper(filename: String) -> Result<Vec<u8>, String> {
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+        return Err("Invalid wallpaper filename.".to_string());
+    }
+    let path = wallpapers_dir()?.join(&filename);
+    fs::read(&path).map_err(|e| format!("Failed to read wallpaper: {e}"))
+}
+
 /// Extract a YAML frontmatter field from SKILL.md content
 fn extract_field_from_frontmatter(content: &str, field: &str) -> String {
     let content = content.trim_start();
@@ -1877,6 +1936,8 @@ pub fn run() {
             read_skill_md,
             install_skill,
             remove_skill,
+            import_wallpaper,
+            read_wallpaper,
             start_remote_server,
             stop_remote_server,
             get_remote_status,
