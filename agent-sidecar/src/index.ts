@@ -128,10 +128,11 @@ import {
 	saveSettings as saveSettingsStore,
 } from "./settings-store.js";
 import {
-	computeInheritedCredentials,
-	piAuthPath,
-	readAuthFile,
-} from "./auth-seed.js";
+	deleteCustomProvider,
+	discoverModels,
+	listCustomProviders,
+	saveCustomProvider,
+} from "./custom-providers.js";
 // Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
 // this loaded as an extension, Claude Pro/Max OAuth requests are
 // fingerprinted by Anthropic as a "third-party app" and rejected with a
@@ -267,6 +268,26 @@ interface LogoutCommand {
 interface GetAuthStatusCommand {
 	type: "get_auth_status";
 	id: string;
+}
+
+/** List user-added custom OpenAI-compatible providers (issue #207). */
+interface ListCustomProvidersCommand {
+	type: "list_custom_providers";
+	id: string;
+}
+
+/** Upsert a custom OpenAI-compatible provider (issue #207). */
+interface SaveCustomProviderCommand {
+	type: "save_custom_provider";
+	id: string;
+	provider: import("./custom-providers.js").SaveCustomProviderInput;
+}
+
+/** Remove a custom OpenAI-compatible provider by id (issue #207). */
+interface DeleteCustomProviderCommand {
+	type: "delete_custom_provider";
+	id: string;
+	providerId: string;
 }
 
 /** Broker the single Google OAuth consent (union scopes) and fan creds out. */
@@ -471,6 +492,9 @@ type Command =
 	| CancelOAuthCommand
 	| LogoutCommand
 	| GetAuthStatusCommand
+	| ListCustomProvidersCommand
+	| SaveCustomProviderCommand
+	| DeleteCustomProviderCommand
 	| ConnectGoogleCommand
 	| GetGoogleStatusCommand
 	| DisconnectGoogleCommand
@@ -906,8 +930,10 @@ function resolveWorkspace(requested?: string): string {
  * extensions, skills, prompts, and themes are discovered from (and
  * installed into) pi's own dirs rather than a private cowork silo. This
  * keeps the GUI and the pi CLI in sync — anything installed in one shows
- * up in the other. Cowork-private app state (auth, models, sessions,
- * settings) stays under ~/.zosmaai/cowork via zosmaAgentDir(). See #147.
+ * up in the other. Auth and models are also shared from pi's dir so that
+ * custom providers configured in pi appear in Cowork immediately.
+ * Cowork-private app state (sessions, settings, UI state) stays under
+ * ~/.zosmaai/cowork via zosmaAgentDir(). See #147.
  */
 function piAgentDir(): string {
 	return join(homedir(), ".pi", "agent");
@@ -1341,7 +1367,24 @@ async function main() {
 			systemPromptOverride: () => ZOSMA_SYSTEM_PROMPT,
 			appendSystemPromptOverride: () => [],
 		});
-		await loader.reload();
+		// Resource resolution shells out to pi's package manager (e.g.
+		// `npm root -g`) to locate npm-sourced skills/prompts/themes configured
+		// in ~/.pi/agent/settings.json. A packaged GUI sidecar has no `npm` on
+		// PATH (GUI apps don't inherit the shell PATH, and the bundle ships no
+		// npm), so resolve() can throw `spawnSync npm ENOENT`. That must NOT
+		// take down agent init — and with it `init`, `reload`, and
+		// `save_custom_provider` (#207) — so degrade gracefully. The model
+		// registry and the chat request path don't depend on the resource
+		// loader, so custom local models still work; we only lose npm-sourced
+		// resources, which can't load without npm anyway.
+		try {
+			await loader.reload();
+		} catch (err) {
+			log(
+				"resource reload failed (continuing without npm-sourced resources): %s",
+				err instanceof Error ? err.message : String(err),
+			);
+		}
 		// Surface any extension-load errors — they're silently collected by
 		// the loader otherwise, which made the pi-anthropic-messages bridge
 		// look "installed" while never actually activating.
@@ -1374,59 +1417,28 @@ async function main() {
 			workspaceCwd = resolveWorkspace(workspace);
 		}
 		log("Workspace cwd: %s", workspaceCwd);
-		const agentDir = zosmaAgentDir(zosmaDir);
-		ensureDir(agentDir);
+		const piDir = piAgentDir();
+		ensureDir(piDir);
 
-		const authPath = join(agentDir, "auth.json");
-		const modelsPath = join(agentDir, "models.json");
+		const authPath = join(piDir, "auth.json");
+		const modelsPath = join(piDir, "models.json");
 
 		// Clean stale lock files from old Rust backend
-		cleanStaleLocks(agentDir);
+		cleanStaleLocks(piDir);
 
 		// One-time migration of legacy Google token files (pre-unified OAuth).
-		const piDir = piAgentDir();
 		const migration = migrateLegacyTokens(defaultGooglePaths(piDir));
 		if (migration.migrated) {
 			log("Migrated legacy Google tokens from %s", migration.from);
 		}
 
-		log("Agent dir: %s", agentDir);
 		log("Auth path: %s", authPath);
 		log("Models path: %s", modelsPath);
 
-		// Auth storage — points at our zosma dir
+		// Auth storage — points at pi's canonical dir (~/.pi/agent)
 		authStorage = AuthStorage.create(authPath);
 
-		// Credential inheritance from the pi CLI. When Cowork has NO credentials of
-		// its own, fall back to ~/.pi/agent/auth.json and seed every provider the
-		// user already configured in pi (API keys AND OAuth). This makes those
-		// providers work immediately and means the onboarding/Connect screen only
-		// appears when NOTHING is configured anywhere (in pi OR Cowork). Once Cowork
-		// has any credential of its own we stop inheriting, so a deliberate logout
-		// of a single provider sticks; only a fully-empty Cowork auth falls back to
-		// pi again. See user request in the #169 thread.
-		if (authStorage.list().length === 0) {
-			try {
-				const inherited = computeInheritedCredentials(
-					{},
-					readAuthFile(piAuthPath(piAgentDir())),
-				);
-				const ids = Object.keys(inherited);
-				for (const id of ids) {
-					authStorage.set(id, inherited[id] as Parameters<typeof authStorage.set>[1]);
-				}
-				if (ids.length > 0) {
-					log("Seeded %d credential(s) from pi: %s", ids.length, ids.join(", "));
-				}
-			} catch (err) {
-				log(
-					"pi credential seed failed: %s",
-					err instanceof Error ? err.message : String(err),
-				);
-			}
-		}
-
-		// Model registry — reads built-in + custom models from our dir
+		// Model registry — reads built-in + custom models from pi's dir
 		modelRegistry = ModelRegistry.create(authStorage, modelsPath);
 
 		// Settings — in-memory for now, minimal config
@@ -1601,7 +1613,7 @@ async function main() {
 			// Surface SDK errors back to the UI instead of swallowing them
 			// silently with just a "done" event.
 			const msg = err instanceof Error ? err.message : String(err);
-			log("prompt: %s", msg);
+			log("prompt error: %s", msg);
 			send({ type: "error", id: cmd.id, message: msg });
 		} finally {
 			clearTimeout(abortTimeout);
@@ -1826,11 +1838,11 @@ async function main() {
 
 				// ── save_auth ──────────────────────────────────────────────
 				case "save_auth": {
-					const agentDir = zosmaAgentDir(zosmaDir);
-					ensureDir(agentDir);
-					cleanStaleLocks(agentDir);
+					const piDir = piAgentDir();
+					ensureDir(piDir);
+					cleanStaleLocks(piDir);
 
-					const authPath = join(agentDir, "auth.json");
+					const authPath = join(piDir, "auth.json");
 					let existing: Record<string, unknown> = {};
 					try {
 						if (existsSync(authPath)) {
@@ -2151,6 +2163,116 @@ async function main() {
 						id: cmd.id,
 						data: { providers, supported, apiKeyProviders },
 					});
+					break;
+				}
+
+				// ── custom OpenAI-compatible providers (issue #207) ─────────
+				//
+				// Three handlers that let the UI add / list / remove user-defined
+				// providers in models.json's `providers.<id>` map. After save or
+				// delete we re-run initAgent() so ModelRegistry reloads from disk
+				// and the model selector sees the change immediately.
+				case "list_custom_providers": {
+					const modelsPath = join(piAgentDir(), "models.json");
+					send({
+						type: "result",
+						id: cmd.id,
+						data: { providers: listCustomProviders(modelsPath) },
+					});
+					break;
+				}
+
+				case "save_custom_provider": {
+					const modelsPath = join(piAgentDir(), "models.json");
+					// New UX (#207 follow-up): the form collects only a base URL +
+					// optional key. An empty `models` array means "discover the model
+					// list from the server". A non-empty array is the manual-entry
+					// fallback the UI reveals when discovery finds nothing.
+					let provider = cmd.provider;
+					if (!provider.models || provider.models.length === 0) {
+						let discovered: Awaited<ReturnType<typeof discoverModels>>;
+						try {
+							discovered = await discoverModels(provider.baseUrl, provider.apiKey);
+						} catch (err) {
+							// Malformed base URL etc. — a normal validation error.
+							send({
+								type: "error",
+								id: cmd.id,
+								message: err instanceof Error ? err.message : String(err),
+							});
+							break;
+						}
+						if (discovered.models.length === 0) {
+							// Signal the UI to reveal its manual model-id field. The
+							// reachable flag lets it word the hint precisely. The
+							// `NO_MODELS_DISCOVERED:` prefix is the cross-boundary
+							// contract (Tauri invoke only carries the message string).
+							send({
+								type: "error",
+								id: cmd.id,
+								message: `NO_MODELS_DISCOVERED:${discovered.reachable ? "reachable" : "unreachable"}`,
+							});
+							break;
+						}
+						provider = {
+							...provider,
+							models: discovered.models.map((id) => ({ id })),
+						};
+					}
+					try {
+						saveCustomProvider(modelsPath, provider);
+					} catch (err) {
+						send({
+							type: "error",
+							id: cmd.id,
+							message: err instanceof Error ? err.message : String(err),
+						});
+						break;
+					}
+					log("Saved custom provider %s (%d models)", provider.id, provider.models.length);
+					// Reload the agent so ModelRegistry picks up the new provider
+					// without an app restart. The provider is already persisted to
+					// models.json above, so a reload failure (e.g. resource
+					// resolution shelling out to a missing npm) must not fail the
+					// save — the model appears on the next init regardless. initAgent
+					// already degrades gracefully on resource-reload errors; this
+					// catch is defense-in-depth against any other init fragility.
+					try {
+						await initAgent(zosmaDir);
+					} catch (err) {
+						log(
+							"save_custom_provider: agent reload failed (provider saved): %s",
+							err instanceof Error ? err.message : String(err),
+						);
+						send({ type: "result", id: cmd.id, data: { success: true } });
+						break;
+					}
+					// Surface ModelRegistry's own validation result so the UI can
+					// show a precise error if pi-mono rejected the merged config.
+					const regError = modelRegistry?.getError();
+					if (regError) {
+						send({ type: "error", id: cmd.id, message: regError });
+						break;
+					}
+					send({ type: "result", id: cmd.id, data: { success: true } });
+					break;
+				}
+
+				case "delete_custom_provider": {
+					const modelsPath = join(piAgentDir(), "models.json");
+					deleteCustomProvider(modelsPath, cmd.providerId);
+					log("Deleted custom provider %s", cmd.providerId);
+					// Provider already removed from models.json; a reload failure
+					// must not fail the delete (mirrors save_custom_provider).
+					try {
+						await initAgent(zosmaDir);
+					} catch (err) {
+						log(
+							"delete_custom_provider: agent reload failed (provider deleted): %s",
+							err instanceof Error ? err.message : String(err),
+						);
+					}
+					send({ type: "result", id: cmd.id, data: { success: true } });
 					break;
 				}
 
