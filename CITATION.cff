@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: Zosma Cowork
+message: If you use this software, please cite it as below.
+type: software
+authors:
+  - name: Zosma AI
+    website: https://zosma.ai
+abstract: >-
+  A desktop agentic work harness built on pi — streaming, thinking, tool calls
+  and multi-turn sessions, all free, open-source and local.
+repository-code: https://github.com/zosmaai/zosma-cowork
+url: https://zosma.ai
+license: MIT
+version: 0.15.2
+date-released: 2026-06-10
+keywords:
+  - agentic
+  - ai-agent
+  - desktop
+  - tauri
+  - coding-agent

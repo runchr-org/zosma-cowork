@@ -9,6 +9,8 @@
 [![CI](https://github.com/zosmaai/zosma-cowork/actions/workflows/ci.yml/badge.svg)](https://github.com/zosmaai/zosma-cowork/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/zosmaai/zosma-cowork?label=release&color=success)](https://github.com/zosmaai/zosma-cowork/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-blue)](https://github.com/zosmaai/zosma-cowork/releases/latest)
+[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri-24C8DB?logo=tauri&logoColor=white)](https://tauri.app)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/c5vadsv9)
 [![GitHub Repo Stars](https://img.shields.io/github/stars/zosmaai/zosma-cowork?style=social)](https://github.com/zosmaai/zosma-cowork/stargazers)
 
@@ -262,6 +264,20 @@ zosma-cowork/
 ## 🇮🇳 Made in India
 
 **Zosma Cowork** — built **from India** by **ZOSMAAI SOLUTIONS PRIVATE LIMITED**.
+
+## Citation
+
+If you use Zosma Cowork in your work, please cite it:
+
+```bibtex
+@software{zosma_cowork,
+  author  = {Zosma AI},
+  title   = {{Zosma Cowork: A Desktop Agentic Work Harness}},
+  url     = {https://github.com/zosmaai/zosma-cowork},
+  version = {0.15.2},
+  year    = {2026}
+}
+```
 
 ## License
 
