@@ -461,15 +461,6 @@ function App() {
 		[activeSessionFile, startStream, models, activeModelId, workspaceCwd],
 	);
 
-	// Load a prompt template into the composer instead of sending it directly,
-	// so the user can review/edit before hitting send.
-	const handleUseTemplate = useCallback((prompt: string) => {
-		setSidebarView("chats");
-		setShowSettings(false);
-		setMobileMenuOpen(false);
-		setComposerDraft((prev) => ({ text: prompt, nonce: (prev?.nonce ?? 0) + 1 }));
-	}, []);
-
 	/**
 	 * Issue #201 PR 3 — Ctrl+↑ in the composer fires this. We atomically
 	 * drain the SDK queue (so nothing fires while the user is editing) and
@@ -851,7 +842,6 @@ function App() {
 									setShowSettings(false);
 								}
 							}}
-							onUseTemplate={handleUseTemplate}
 						/>
 					</div>
 
@@ -904,7 +894,6 @@ function App() {
 										setShowSettings(false);
 									}
 								}}
-								onUseTemplate={handleUseTemplate}
 							/>
 						</div>
 					</div>

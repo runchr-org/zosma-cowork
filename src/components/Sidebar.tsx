@@ -1,7 +1,6 @@
-import { MessageSquare, NotebookPen, Settings } from "lucide-react";
+import { ListChecks, MessageSquare, Settings } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ConversationSearch, type DeepSearchMatch } from "./ConversationSearch";
-import { PromptTemplates } from "./PromptTemplates";
 
 interface Session {
 	id: string;
@@ -31,15 +30,13 @@ interface SidebarProps {
 	/** Deep content search across message bodies. */
 	onDeepSearch?: (query: string) => Promise<DeepSearchMatch[]>;
 	onChangeView: (view: string) => void;
-	/** Load a prompt template into the composer for editing (does not send). */
-	onUseTemplate?: (prompt: string) => void;
 	/** The user's home dir, used to collapse session paths to `~`. */
 	homeDir?: string;
 }
 
 const TABS = [
-	{ id: "chats", label: "Chats", Icon: MessageSquare },
-	{ id: "templates", label: "Templates", Icon: NotebookPen },
+	{ id: "chats", label: "Cowork", Icon: MessageSquare },
+	{ id: "tasks", label: "Tasks", Icon: ListChecks },
 ] as const;
 
 // ease-out-expo
@@ -56,11 +53,10 @@ export function Sidebar({
 	onPinSession,
 	onDeepSearch,
 	onChangeView,
-	onUseTemplate,
 	homeDir,
 }: SidebarProps) {
 	const reduced = useReducedMotion();
-	const activeTab: "chats" | "templates" = view === "templates" ? "templates" : "chats";
+	const activeTab: "chats" | "tasks" = view === "tasks" ? "tasks" : "chats";
 
 	return (
 		<motion.div
@@ -113,16 +109,16 @@ export function Sidebar({
 			{/* ── Content area ── */}
 			<div className="flex-1 min-h-0 relative overflow-hidden">
 				<AnimatePresence mode="wait" initial={false}>
-					{activeTab === "templates" && onUseTemplate ? (
+					{activeTab === "tasks" ? (
 						<motion.div
-							key="templates"
+							key="tasks"
 							className="absolute inset-0"
 							initial={reduced ? { opacity: 0 } : { opacity: 0, x: 16 }}
 							animate={{ opacity: 1, x: 0 }}
 							exit={reduced ? { opacity: 0 } : { opacity: 0, x: -16 }}
 							transition={{ duration: 0.2, ease: easeOutExpo }}
 						>
-							<PromptTemplates onUseTemplate={onUseTemplate} />
+							<TasksPanel />
 						</motion.div>
 					) : (
 						<motion.div
@@ -175,5 +171,27 @@ export function Sidebar({
 				</motion.button>
 			</div>
 		</motion.div>
+	);
+}
+
+/**
+ * TasksPanel — placeholder for the Tasks tab.
+ *
+ * The real scheduled-tasks list (backed by pi-routines via the sidecar
+ * bridge) lands in #289. For the P1 IA scaffold (#287) this just shows an
+ * empty state so the tab is selectable and renders cleanly.
+ */
+function TasksPanel() {
+	return (
+		<div className="flex h-full flex-col items-center justify-center px-6 text-center">
+			<div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+				<ListChecks className="h-5 w-5" />
+			</div>
+			<p className="text-sm font-medium text-sidebar-foreground">No tasks yet</p>
+			<p className="mt-1 text-[11px] leading-relaxed text-sidebar-foreground/50">
+				Ask in a Cowork chat to schedule a task — for example, “every weekday at 9am summarize
+				my unread email.” Scheduled tasks will show up here.
+			</p>
+		</div>
 	);
 }
