@@ -3,13 +3,15 @@
  * broker. Returns the raw token response + resolved account email; the caller
  * (broker.fanOutCredentials) writes them to the real package config files.
  *
- * Flow (Google installed-app / loopback, RFC 8252 + PKCE S256):
- *   1. Bind an ephemeral http server on 127.0.0.1 → redirect_uri.
- *   2. Open the consent URL (browser) via the injected `onAuthUrl` callback —
- *      mirrors the existing start_oauth handler which emits an
- *      `oauth_open_url` event the frontend opens.
- *   3. Receive ?code=…&state=… on the loopback callback, verify state.
- *   4. Exchange code (+ code_verifier + client_secret) for tokens.
+ * Flow (PKCE S256 via the Zosma backend broker — NO secret on the device):
+ *   1. Bind an ephemeral http server on 127.0.0.1 (the loopback listener).
+ *   2. redirect_uri is the BROKER's HTTPS /callback (a registered Web-client
+ *      redirect); `state` carries the loopback port + a CSRF nonce.
+ *   3. Open the consent URL (browser). Google redirects to the broker, which
+ *      bounces the browser back to 127.0.0.1:<port>/oauth2callback?code&state.
+ *   4. Verify the state nonce, then POST {code, code_verifier, redirect_uri} to
+ *      the broker /token endpoint — the broker adds the client_secret and
+ *      returns the tokens. The device never holds the secret.
  *   5. Resolve the account email from the userinfo endpoint.
  *
  * Cancellation: pass an AbortSignal; aborting closes the loopback server and
@@ -22,7 +24,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { type EmbeddedClient, type OAuthTokenResponse, UNION_SCOPES } from "./broker.js";
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 
 export interface ConsentResult {
@@ -69,19 +70,23 @@ function abortError(): Error {
 
 /** Run the full consent flow and return tokens + email. */
 export async function runConsent(opts: ConsentOptions): Promise<ConsentResult> {
-	if (!opts.client.clientId || !opts.client.clientSecret) {
+	if (!opts.client.clientId || !opts.client.brokerUrl) {
 		throw new Error(
-			"Zosma Google OAuth client not configured (set ZOSMA_GOOGLE_CLIENT_ID / ZOSMA_GOOGLE_CLIENT_SECRET).",
+			"Zosma Google OAuth client not configured (set ZOSMA_GOOGLE_CLIENT_ID; broker via ZOSMA_OAUTH_BROKER_URL).",
 		);
 	}
 	if (opts.signal?.aborted) throw abortError();
 
 	const { verifier, challenge } = makePkce();
-	const state = base64Url(randomBytes(16));
+	const nonce = base64Url(randomBytes(16));
 
 	const server = createServer();
 	const port = await listen(server, opts.port ?? 0);
-	const redirectUri = `http://127.0.0.1:${port}/oauth2callback`;
+	// Google redirects to the broker's HTTPS callback (a registered redirect),
+	// which bounces back to this loopback listener. `state` carries the port so
+	// the broker knows where to bounce, plus a nonce we verify on return.
+	const redirectUri = `${opts.client.brokerUrl}/callback`;
+	const state = base64Url(Buffer.from(JSON.stringify({ port, nonce }), "utf8"));
 
 	// Wait for the loopback callback (or abort).
 	const code = await new Promise<string>((resolve, reject) => {
@@ -100,6 +105,7 @@ export async function runConsent(opts: ConsentOptions): Promise<ConsentResult> {
 			const err = url.searchParams.get("error");
 			const returnedState = url.searchParams.get("state");
 			const returnedCode = url.searchParams.get("code");
+			const returnedNonce = decodeState(returnedState).nonce;
 
 			const finish = (status: number, body: string) => {
 				res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" }).end(body);
@@ -108,23 +114,27 @@ export async function runConsent(opts: ConsentOptions): Promise<ConsentResult> {
 			};
 
 			if (err) {
-				finish(400, htmlPage("Connection failed", `Google returned: ${escapeHtml(err)}`));
+				finish(400, htmlPage("Connection failed", `Google returned: ${escapeHtml(err)}`, false));
 				reject(new Error(`Google consent error: ${err}`));
 				return;
 			}
-			if (!returnedState || returnedState !== state) {
-				finish(400, htmlPage("Connection failed", "State mismatch — please try again."));
+			if (!returnedNonce || returnedNonce !== nonce) {
+				finish(400, htmlPage("Connection failed", "State mismatch — please try again.", false));
 				reject(new Error("OAuth state mismatch"));
 				return;
 			}
 			if (!returnedCode) {
-				finish(400, htmlPage("Connection failed", "No authorization code returned."));
+				finish(400, htmlPage("Connection failed", "No authorization code returned.", false));
 				reject(new Error("No authorization code returned"));
 				return;
 			}
 			finish(
 				200,
-				htmlPage("Google connected", "You can close this tab and return to Zosma Cowork."),
+				htmlPage(
+					"Google connected",
+					"You can close this tab and return to Zosma Cowork.",
+					true,
+				),
 			);
 			resolve(returnedCode);
 		});
@@ -145,10 +155,24 @@ export async function runConsent(opts: ConsentOptions): Promise<ConsentResult> {
 		opts.onAuthUrl(`${AUTH_URL}?${authParams.toString()}`);
 	});
 
-	// Exchange the code for tokens (client_secret + PKCE verifier).
+	// Exchange the code for tokens via the BROKER (no secret on the device).
 	const tokens = await exchangeCode(opts.client, code, redirectUri, verifier, opts.signal);
 	const email = await fetchEmail(tokens.access_token, opts.signal);
 	return { tokens, email, redirectUri };
+}
+
+/** Decode the broker `state` blob → { port, nonce }; tolerant of garbage. */
+function decodeState(raw: string | null): { port?: number; nonce?: string } {
+	if (!raw) return {};
+	try {
+		const v = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as {
+			port?: number;
+			nonce?: string;
+		};
+		return v && typeof v === "object" ? v : {};
+	} catch {
+		return {};
+	}
 }
 
 async function exchangeCode(
@@ -158,17 +182,10 @@ async function exchangeCode(
 	verifier: string,
 	signal?: AbortSignal,
 ): Promise<OAuthTokenResponse> {
-	const res = await fetch(TOKEN_URL, {
+	const res = await fetch(`${client.brokerUrl}/token`, {
 		method: "POST",
-		headers: { "Content-Type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({
-			code,
-			client_id: client.clientId,
-			client_secret: client.clientSecret,
-			redirect_uri: redirectUri,
-			grant_type: "authorization_code",
-			code_verifier: verifier,
-		}),
+		headers: { "Content-Type": "application/json", Accept: "application/json" },
+		body: JSON.stringify({ code, code_verifier: verifier, redirect_uri: redirectUri }),
 		signal,
 	});
 	const text = await res.text();
@@ -182,7 +199,7 @@ async function exchangeCode(
 		const msg =
 			typeof data.error_description === "string"
 				? data.error_description
-				: `Token exchange failed (HTTP ${res.status})`;
+				: `Token exchange failed via broker (HTTP ${res.status})`;
 		throw new Error(msg);
 	}
 	return data as unknown as OAuthTokenResponse;
@@ -219,10 +236,45 @@ function escapeHtml(s: string): string {
 	});
 }
 
-function htmlPage(title: string, message: string): string {
-	return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
-		title,
-	)}</title><style>body{font-family:system-ui,sans-serif;background:#0b0b0f;color:#e8e8ea;display:grid;place-items:center;height:100vh;margin:0}main{text-align:center;max-width:28rem;padding:2rem}h1{font-size:1.25rem;margin:0 0 .5rem}p{opacity:.7}</style></head><body><main><h1>${escapeHtml(
-		title,
-	)}</h1><p>${escapeHtml(message)}</p></main></body></html>`;
+/**
+ * Branded loopback landing page shown in the user's browser after consent.
+ * `ok` toggles the success (animated tick) vs error (animated cross) variant.
+ * Fully self-contained: inline CSS + SVG + keyframes, no network deps, so it
+ * renders instantly and offline. Brand: Zosma blue (#017cf3 → #3080ff) on the
+ * app's dark canvas (#0b0b0f).
+ */
+function htmlPage(title: string, message: string, ok = true): string {
+	const t = escapeHtml(title);
+	const m = escapeHtml(message);
+	const icon = ok
+		? `<svg class="glyph" viewBox="0 0 52 52" aria-hidden="true"><path class="tick" fill="none" d="M14 27l8 8 16-17"/></svg>`
+		: `<svg class="glyph" viewBox="0 0 52 52" aria-hidden="true"><path class="tick" fill="none" d="M18 18l16 16"/><path class="tick tick2" fill="none" d="M34 18l-16 16"/></svg>`;
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${t} · Zosma Cowork</title><style>
+:root{--blue:#017cf3;--blue2:#3080ff;--ok:#017cf3;--ok2:#3080ff;--err:#f5455c;--err2:#ff6b7a;--ink:#e8eaf0;--mut:#9aa3b2}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:'Space Grotesk',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:#0b0b0f;display:grid;place-items:center;overflow:hidden}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(60rem 60rem at 50% -10%,rgba(${ok ? "1,124,243" : "245,69,92"},.18),transparent 60%),radial-gradient(40rem 40rem at 50% 120%,rgba(48,128,255,.10),transparent 60%);pointer-events:none}
+main{position:relative;text-align:center;max-width:30rem;padding:2.5rem 2rem;animation:rise .6s cubic-bezier(.16,1,.3,1) both}
+.badge{position:relative;width:104px;height:104px;margin:0 auto 1.6rem;display:grid;place-items:center}
+.ring{position:absolute;inset:0;border-radius:50%;background:linear-gradient(145deg,var(--${ok ? "ok" : "err"}),var(--${ok ? "ok2" : "err2"}));box-shadow:0 12px 40px rgba(${ok ? "1,124,243" : "245,69,92"},.45),inset 0 0 0 1px rgba(255,255,255,.18);animation:pop .55s cubic-bezier(.34,1.56,.64,1) .05s both}
+.pulse{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(${ok ? "1,124,243" : "245,69,92"},.5);animation:pulse 2.2s ease-out infinite}
+.pulse.d{animation-delay:1.1s}
+.glyph{position:relative;width:56px;height:56px;stroke:#fff;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.tick{stroke-dasharray:48;stroke-dashoffset:48;animation:draw .5s cubic-bezier(.65,0,.45,1) .42s forwards}
+.tick2{animation-delay:.58s}
+h1{font-family:'Chakra Petch','Space Grotesk',system-ui,sans-serif;font-weight:600;font-size:1.5rem;letter-spacing:.01em;margin:0 0 .5rem}
+p{margin:0;color:var(--mut);font-size:.98rem;line-height:1.5}
+.brand{margin-top:2rem;display:inline-flex;align-items:center;gap:.55rem;color:var(--mut);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;opacity:.8}
+.dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(145deg,var(--blue),var(--blue2));box-shadow:0 0 10px rgba(1,124,243,.8)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(0);opacity:0}60%{opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes pulse{0%{transform:scale(1);opacity:.6}100%{transform:scale(1.7);opacity:0}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}.tick{stroke-dashoffset:0}}
+</style></head><body><main>
+<div class="badge">${ok ? '<span class="pulse"></span><span class="pulse d"></span>' : ""}<span class="ring"></span>${icon}</div>
+<h1>${t}</h1><p>${m}</p>
+<div class="brand"><span class="dot"></span>Zosma Cowork</div>
+</main></body></html>`;
 }
