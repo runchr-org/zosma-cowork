@@ -145,6 +145,13 @@ import {
 	loadInstructions,
 	saveInstructions,
 } from "./instructions-store.js";
+import {
+	deleteTask,
+	listTasks,
+	runTaskNow,
+	setTaskEnabled,
+	watchTaskFiles,
+} from "./tasks-store.js";
 // Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
 // this loaded as an extension, Claude Pro/Max OAuth requests are
 // fingerprinted by Anthropic as a "third-party app" and rejected with a
@@ -450,6 +457,37 @@ interface ListExtensionsCommand {
 	id: string;
 }
 
+// ── Tasks bridge (pi-routines scheduled tasks) ──────────────────────────────
+// All four read/write `<cwd>/.pi/scheduled_tasks.json` directly (see
+// tasks-store.ts). `cwd` defaults to the active session's workspaceCwd.
+interface TasksListCommand {
+	type: "tasks_list";
+	id: string;
+	cwd?: string;
+}
+
+interface TasksDeleteCommand {
+	type: "tasks_delete";
+	id: string;
+	taskId: string;
+	cwd?: string;
+}
+
+interface TasksSetEnabledCommand {
+	type: "tasks_set_enabled";
+	id: string;
+	taskId: string;
+	enabled: boolean;
+	cwd?: string;
+}
+
+interface TasksRunNowCommand {
+	type: "tasks_run_now";
+	id: string;
+	taskId: string;
+	cwd?: string;
+}
+
 interface InstallExtensionCommand {
 	type: "install_extension";
 	id: string;
@@ -588,6 +626,10 @@ type Command =
 	| GetInstructionsCommand
 	| SaveInstructionsCommand
 	| ListExtensionsCommand
+	| TasksListCommand
+	| TasksDeleteCommand
+	| TasksSetEnabledCommand
+	| TasksRunNowCommand
 	| InstallExtensionCommand
 	| UninstallExtensionCommand
 	| SetExtensionEnabledCommand
@@ -1254,6 +1296,20 @@ async function main() {
 	// arbitrary cwd the user never chose.
 	let workspaceCwd = resolveWorkspace();
 	let activePromptId: string | null = null;
+
+	// Tasks-bridge file watcher: pushes a `tasks_changed` event whenever the
+	// active cwd's .pi/scheduled_tasks.json (or the bridge's disabled file)
+	// changes — pi-routines edits it when tasks fire, and the bridge edits it on
+	// delete/enable/run-now — so the Tasks list live-updates. Re-targeted on
+	// every workspaceCwd change via retargetTasksWatcher().
+	let closeTasksWatcher: (() => void) | null = null;
+	function retargetTasksWatcher(cwd: string) {
+		closeTasksWatcher?.();
+		closeTasksWatcher = watchTaskFiles(cwd, () => {
+			send({ type: "event", event: { type: "tasks_changed" } });
+		});
+	}
+	retargetTasksWatcher(workspaceCwd);
 	// Serializes prompt execution WITHOUT blocking the stdin read loop, so an
 	// `abort` (and the next prompt) stay readable mid-generation. See
 	// runPromptTask + the "prompt" command handler, and prompt-scheduler.ts.
@@ -1428,6 +1484,7 @@ async function main() {
 		// created here so the rest of init binds tools/sessions to a real dir.
 		if (workspace !== undefined) {
 			workspaceCwd = resolveWorkspace(workspace);
+			retargetTasksWatcher(workspaceCwd);
 		}
 		log("Workspace cwd: %s", workspaceCwd);
 		const piDir = piAgentDir();
@@ -2545,6 +2602,7 @@ async function main() {
 					const requestedCwd = resolveWorkspace(cmd.cwd);
 					if (requestedCwd !== workspaceCwd) {
 						workspaceCwd = requestedCwd;
+						retargetTasksWatcher(workspaceCwd);
 						log("new_session: workspace → %s", workspaceCwd);
 						resourceLoader = await buildResourceLoader(workspaceCwd);
 					}
@@ -2643,6 +2701,7 @@ async function main() {
 								// Folder changed: rebuild the loader bound to the restored
 								// cwd (this also re-scans disk for new extensions/skills).
 								workspaceCwd = sessionCwd;
+								retargetTasksWatcher(workspaceCwd);
 								log("load_session: workspace → %s", workspaceCwd);
 								resourceLoader = await buildResourceLoader(workspaceCwd);
 							} else {
@@ -2816,6 +2875,38 @@ async function main() {
 				case "list_extensions": {
 					const extensions = discoverExtensions(zosmaDir);
 					send({ type: "result", id: cmd.id, data: { extensions } });
+					break;
+				}
+
+				// ── Tasks bridge ───────────────────────────────────────────
+				// Read/write pi-routines' per-cwd .pi/scheduled_tasks.json
+				// directly (no LLM round-trip). cwd defaults to the active
+				// session's workspaceCwd. See tasks-store.ts.
+				case "tasks_list": {
+					const tasks = listTasks(cmd.cwd ?? workspaceCwd);
+					send({ type: "result", id: cmd.id, data: { tasks } });
+					break;
+				}
+
+				case "tasks_delete": {
+					const deleted = deleteTask(cmd.cwd ?? workspaceCwd, cmd.taskId);
+					send({ type: "result", id: cmd.id, data: { deleted } });
+					break;
+				}
+
+				case "tasks_set_enabled": {
+					const ok = setTaskEnabled(
+						cmd.cwd ?? workspaceCwd,
+						cmd.taskId,
+						cmd.enabled,
+					);
+					send({ type: "result", id: cmd.id, data: { ok } });
+					break;
+				}
+
+				case "tasks_run_now": {
+					const ran = runTaskNow(cmd.cwd ?? workspaceCwd, cmd.taskId);
+					send({ type: "result", id: cmd.id, data: { ran } });
 					break;
 				}
 

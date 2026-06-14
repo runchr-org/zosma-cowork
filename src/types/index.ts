@@ -102,4 +102,33 @@ export interface ZemExtension {
 	configSchema?: Record<string, unknown>;
 }
 
+/**
+ * A scheduled task from the pi-routines store, as surfaced by the sidecar
+ * Tasks bridge (#288). Mirrors pi-routines' on-disk `ScheduledTask`
+ * (`.pi/scheduled_tasks.json`) plus the bridge-derived `enabled` flag.
+ *
+ * `enabled` is NOT a pi-routines concept: the bridge derives it by keeping
+ * paused tasks in a separate `.pi/scheduled_tasks_disabled.json` file that
+ * pi-routines never sees. See agent-sidecar/src/tasks-store.ts.
+ */
+export interface Task {
+	id: string;
+	name: string;
+	/** cron expression, e.g. "* * * * *" */
+	schedule: string;
+	/** message sent to the agent when the task fires */
+	prompt: string;
+	type: "durable" | "session";
+	/** ISO timestamp */
+	createdAt: string;
+	lastRunAt?: string;
+	nextRunAt?: string;
+	recurring: boolean;
+	/** auto-expire recurring tasks after N days of inactivity (0 = permanent) */
+	maxAgeDays: number;
+	sessionId?: string;
+	/** bridge-derived: false when the task is paused (in the disabled file) */
+	enabled: boolean;
+}
+
 export * from "./pi-events";
