@@ -47,6 +47,8 @@ interface UseTasksReturn {
 	completedTasks: CompletedTask[];
 	/** Loading state for completed tasks. */
 	completedLoading: boolean;
+	/** Monotonic counter incremented on each task_run_completed event. */
+	runCompletedAt: number;
 }
 
 export function useTasks(): UseTasksReturn {
@@ -56,9 +58,9 @@ export function useTasks(): UseTasksReturn {
 	const [completedTasks, setCompletedTasks] = useState<CompletedTask[]>([]);
 	const [completedLoading, setCompletedLoading] = useState(false);
 
-	const refresh = useCallback(async () => {
-		setLoading(true);
-		setError(null);
+	const refresh = useCallback(async (failed = false) => {
+		if (!failed) setLoading(true);
+		if (!failed) setError(null);
 		try {
 			const result = await retryOnClosed(() =>
 				invoke<{ tasks?: Task[] } | Task[]>("tasks_list"),
@@ -67,10 +69,16 @@ export function useTasks(): UseTasksReturn {
 				? result
 				: (result as { tasks?: Task[] }).tasks || [];
 			setTasks(list);
+			setError(null);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			const msg = err instanceof Error ? err.message : String(err);
+			setError(msg);
+			// Auto-retry once after a short delay (sidecar might still be initing)
+			if (!failed) {
+				setTimeout(() => refresh(true), 2000);
+			}
 		} finally {
-			setLoading(false);
+			if (!failed) setLoading(false);
 		}
 	}, []);
 
@@ -114,12 +122,17 @@ export function useTasks(): UseTasksReturn {
 	}, [refresh]);
 
 	// Live updates for run completion (#300): when a task finishes executing,
-	// refresh both the task list and the completed tasks list.
+	// refresh both the task list, the completed tasks list, and trigger
+	// run-list refresh via a counter that drives TaskDetailPage's re-fetch.
+	const [runCompletedAt, setRunCompletedAt] = useState(0);
+
 	useEffect(() => {
 		let unlisten: (() => void) | undefined;
 		let mounted = true;
-		listen("task_run_completed", () => {
+		listen("task_run_completed", (_event) => {
+			refresh();
 			refreshCompleted();
+			setRunCompletedAt(Date.now());
 		}).then((fn) => {
 			if (mounted) unlisten = fn;
 			else fn();
@@ -128,7 +141,7 @@ export function useTasks(): UseTasksReturn {
 			mounted = false;
 			unlisten?.();
 		};
-	}, [refreshCompleted]);
+	}, [refreshCompleted, refresh]);
 
 	const del = useCallback(
 		async (taskId: string) => {
@@ -209,5 +222,6 @@ export function useTasks(): UseTasksReturn {
 		getCompletedTasks,
 		completedTasks,
 		completedLoading,
+		runCompletedAt,
 	};
 }

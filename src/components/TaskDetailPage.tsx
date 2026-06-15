@@ -5,10 +5,12 @@
  * section (expanded by default) with a game-like timeline of past executions.
  */
 
-import { CalendarClock, Pause, Play, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CalendarClock, ChevronDown, ChevronRight, Eye, Pause, Play, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationEntry, Task, TaskRun } from "@/types";
 import { formatRelative, humanizeCron } from "@/lib/cron";
+
+import { RunDetailView } from "./RunDetailView";
 
 interface TaskDetailPageProps {
 	task: Task | null;
@@ -32,16 +34,60 @@ export function TaskDetailPage({
 	const [busy, setBusy] = useState<null | "run" | "toggle" | "delete">(null);
 	const [runs, setRuns] = useState<TaskRun[]>([]);
 	const [runsLoading, setRunsLoading] = useState(false);
+	const [selectedRun, setSelectedRun] = useState<TaskRun | null>(null);
 
-	// Fetch runs whenever the task changes (expanded by default)
+	const taskId = task?.id;
+	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+	// Fetch the runs list. `silent` updates data WITHOUT toggling the loading
+	// state — critical so background refreshes don't unmount the list (which
+	// would flash a spinner and reset the scroll position).
+	const fetchRuns = useCallback(
+		async (silent = false) => {
+			if (!taskId || !listRuns) return [] as TaskRun[];
+			if (!silent) setRunsLoading(true);
+			try {
+				const fresh = await listRuns(taskId, 20);
+				setRuns(fresh);
+				return fresh;
+			} catch {
+				if (!silent) setRuns([]);
+				return [] as TaskRun[];
+			} finally {
+				if (!silent) setRunsLoading(false);
+			}
+		},
+		[taskId, listRuns],
+	);
+
+	// Load runs once on mount / task change. NO background polling — the list
+	// only refreshes on demand (after pressing "Run now"; see `run()` below).
 	useEffect(() => {
-		if (!task || !listRuns) return;
-		setRunsLoading(true);
-		listRuns(task.id, 20)
-			.then(setRuns)
-			.catch(() => setRuns([]))
-			.finally(() => setRunsLoading(false));
-	}, [task?.id, listRuns]);
+		fetchRuns();
+	}, [fetchRuns]);
+
+	// Stop any in-progress poll when the task changes or we unmount.
+	useEffect(() => {
+		return () => {
+			if (pollRef.current) {
+				clearInterval(pollRef.current);
+				pollRef.current = null;
+			}
+		};
+	}, []);
+
+	// When viewing a run detail, render the full-page view (#300).
+	// NOTE: must come AFTER all hooks to satisfy Rules of Hooks.
+	if (selectedRun && task) {
+		return (
+			<RunDetailView
+				run={selectedRun}
+				taskName={task.name || "Untitled task"}
+				onBack={() => setSelectedRun(null)}
+				listRuns={listRuns}
+			/>
+		);
+	}
 
 	if (!task) {
 		return (
@@ -59,11 +105,28 @@ export function TaskDetailPage({
 
 	const run = async () => {
 		setBusy("run");
+		// Snapshot existing run IDs so we can detect the NEW run appearing.
+		const knownRunIds = new Set(runs.map((r) => r.runId));
 		try {
 			await onRunNow(task.id);
 		} finally {
 			setBusy(null);
 		}
+		// Silently poll the list (data only — no spinner, no scroll reset) until
+		// the new run shows up, then STOP. The scheduler writes a pending record
+		// within ~1s of firing.
+		if (pollRef.current) clearInterval(pollRef.current);
+		const deadline = Date.now() + 15_000; // give up after 15s
+		pollRef.current = setInterval(async () => {
+			const fresh = await fetchRuns(true);
+			const appeared = fresh.some((r) => !knownRunIds.has(r.runId));
+			if (appeared || Date.now() > deadline) {
+				if (pollRef.current) {
+					clearInterval(pollRef.current);
+					pollRef.current = null;
+				}
+			}
+		}, 1500);
 	};
 	const toggle = async () => {
 		setBusy("toggle");
@@ -201,7 +264,7 @@ export function TaskDetailPage({
 							<div className="absolute left-[11px] top-2 bottom-2 w-px bg-border/60" />
 
 							{runs.map((run, idx) => (
-								<RunCard key={run.runId} run={run} isLatest={idx === 0} />
+								<RunCard key={run.runId} run={run} isLatest={idx === 0} onViewRun={() => setSelectedRun(run)} />
 							))}
 						</div>
 					)}
@@ -211,7 +274,8 @@ export function TaskDetailPage({
 	);
 }
 
-function RunCard({ run, isLatest }: { run: TaskRun; isLatest: boolean }) {
+function RunCard({ run, isLatest, onViewRun }: { run: TaskRun; isLatest: boolean; onViewRun?: () => void }) {
+	const [stepsExpanded, setStepsExpanded] = useState(false);
 	const duration = run.completedAt
 		? formatDuration(run.startedAt, run.completedAt)
 		: null;
@@ -259,6 +323,16 @@ function RunCard({ run, isLatest }: { run: TaskRun; isLatest: boolean }) {
 							Latest
 						</span>
 					)}
+					{onViewRun && (
+						<button
+							type="button"
+							onClick={(e) => { e.stopPropagation(); onViewRun(); }}
+							className="ml-2 shrink-0 rounded-md border border-border px-2 py-0.5 text-[9px] font-medium text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+						>
+							<Eye className="mr-1 inline-block h-3 w-3" />
+							View run
+						</button>
+					)}
 				</div>
 
 				{/* Prompt */}
@@ -271,15 +345,27 @@ function RunCard({ run, isLatest }: { run: TaskRun; isLatest: boolean }) {
 					</p>
 				</div>
 
-				{/* Conversation tree */}
+				{/* Conversation tree — collapsible (#300) */}
 				{run.conversation && run.conversation.length > 0 && (
-					<div className="mt-2 space-y-1">
-						<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1.5">
+					<div className="mt-2">
+						<button
+							type="button"
+							onClick={() => setStepsExpanded(!stepsExpanded)}
+							className="flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 hover:bg-muted/30"
+						>
+							{stepsExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
 							Steps
-						</p>
-						{run.conversation.map((entry, i) => (
-							<ConversationStep key={i} entry={entry} />
-						))}
+							<span className="ml-auto rounded bg-muted/50 px-1.5 py-px text-[9px] font-normal normal-case tracking-normal text-muted-foreground/50">
+								{run.conversation.length}
+							</span>
+						</button>
+						{stepsExpanded && (
+							<div className="mt-1.5 space-y-1">
+								{run.conversation.map((entry, i) => (
+									<ConversationStep key={`${entry.type}-${i}`} entry={entry} />
+								))}
+							</div>
+						)}
 					</div>
 				)}
 			</div>
@@ -291,48 +377,122 @@ function ConversationStep({ entry }: { entry: ConversationEntry }) {
 	switch (entry.type) {
 		case "thinking":
 			return (
-				<div className="flex items-start gap-1.5 rounded-md bg-amber-500/5 px-2.5 py-1.5">
-					<span className="mt-px shrink-0 text-[11px]">💭</span>
-					<p className="line-clamp-1 text-[11px] italic text-muted-foreground/60">
-						{entry.content?.slice(0, 120)}
-					</p>
+				<div className="group relative overflow-hidden rounded-lg border border-amber-500/15 bg-gradient-to-br from-amber-500/[0.04] to-amber-500/[0.02] px-3 py-2">
+					{/* Accent bar */}
+					<div className="absolute left-0 top-0 h-full w-0.5 bg-amber-500/30" />
+					<div className="flex items-start gap-2">
+						<span className="mt-0.5 shrink-0 text-[11px] opacity-60">
+							<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500/70">
+								<path d="M12 2a10 10 0 1 0 10 10h-10V2Z" />
+								<path d="M22 12A10 10 0 0 0 12 2v10h10Z" />
+							</svg>
+						</span>
+						<div className="min-w-0 flex-1">
+							<p className="text-[10px] font-semibold uppercase tracking-wider text-amber-500/60">
+								Thinking
+							</p>
+							<p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed italic text-muted-foreground/70">
+								{entry.content?.slice(0, 200)}
+							</p>
+						</div>
+					</div>
 				</div>
 			);
 		case "tool_call":
 			return (
-				<div className="flex items-center gap-1.5 rounded-md bg-sky-500/5 px-2.5 py-1.5">
-					<span className="shrink-0 text-[11px]">🔧</span>
-					<span className="truncate text-[11px] font-medium text-sky-600 dark:text-sky-400">
-						{entry.toolName}
-					</span>
-					{entry.toolArgs && (
-						<span className="truncate text-[10px] text-muted-foreground/50">
-							{JSON.stringify(entry.toolArgs).slice(0, 80)}
+				<div className="group relative overflow-hidden rounded-lg border border-sky-500/15 bg-gradient-to-br from-sky-500/[0.04] to-sky-500/[0.02] px-3 py-2">
+					{/* Accent bar */}
+					<div className="absolute left-0 top-0 h-full w-0.5 bg-sky-500/30" />
+					<div className="flex items-start gap-2">
+						<span className="mt-0.5 shrink-0 text-[11px] opacity-60">
+							<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sky-500/70">
+								<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+							</svg>
 						</span>
-					)}
+						<div className="min-w-0 flex-1">
+							<div className="flex items-center gap-1.5 flex-wrap">
+								<span className="text-[10px] font-semibold uppercase tracking-wider text-sky-500/60">
+									Tool
+								</span>
+								<span className="truncate rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+									{entry.toolName}
+								</span>
+							</div>
+							{entry.toolArgs && Object.keys(entry.toolArgs).length > 0 && (
+								<div className="mt-1.5 rounded-md bg-background/50 px-2 py-1 font-mono text-[10px] text-muted-foreground/70">
+									{formatToolArgs(entry.toolArgs)}
+								</div>
+							)}
+						</div>
+					</div>
 				</div>
 			);
 		case "tool_result":
 			return (
-				<div className={`flex items-start gap-1.5 rounded-md px-2.5 py-1.5 ${entry.toolError ? "bg-red-500/5" : "bg-emerald-500/5"}`}>
-					<span className="mt-px shrink-0 text-[11px]">{entry.toolError ? "⚠️" : "📎"}</span>
-					<p className="line-clamp-1 text-[11px] text-muted-foreground/60">
-						{entry.toolResult?.slice(0, 100)}
-					</p>
+				<div className={`group relative overflow-hidden rounded-lg border px-3 py-2 ${
+					entry.toolError
+						? "border-red-500/15 bg-gradient-to-br from-red-500/[0.04] to-red-500/[0.02]"
+						: "border-emerald-500/15 bg-gradient-to-br from-emerald-500/[0.04] to-emerald-500/[0.02]"
+				}`}>
+					<div className={`absolute left-0 top-0 h-full w-0.5 ${entry.toolError ? "bg-red-500/30" : "bg-emerald-500/30"}`} />
+					<div className="flex items-start gap-2">
+						<span className="mt-0.5 shrink-0 text-[11px] opacity-60">
+							{entry.toolError ? (
+								<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500/70">
+									<circle cx="12" cy="12" r="10" />
+									<line x1="15" y1="9" x2="9" y2="15" />
+									<line x1="9" y1="9" x2="15" y2="15" />
+								</svg>
+							) : (
+								<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500/70">
+									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+									<polyline points="14 2 14 8 20 8" />
+									<line x1="12" y1="18" x2="12" y2="12" />
+									<line x1="9" y1="15" x2="15" y2="15" />
+								</svg>
+							)}
+						</span>
+						<div className="min-w-0 flex-1">
+							<p className={`text-[10px] font-semibold uppercase tracking-wider ${entry.toolError ? "text-red-500/60" : "text-emerald-500/60"}`}>
+								{entry.toolError ? "Error" : "Result"}
+							</p>
+							<p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/70">
+								{entry.toolResult?.slice(0, 200)}
+							</p>
+						</div>
+					</div>
 				</div>
 			);
 		case "text":
 			return (
-				<div className="flex items-start gap-1.5 px-2.5 py-0.5">
-					<span className="mt-px shrink-0 text-[11px]">💬</span>
-					<p className="line-clamp-2 text-[11px] text-foreground/70">
-						{entry.content?.slice(0, 250)}
+				<div className="flex items-start gap-2 px-1 py-0.5">
+					<span className="mt-0.5 shrink-0 text-foreground/40">
+						<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+						</svg>
+					</span>
+					<p className="line-clamp-3 text-[11px] leading-relaxed text-foreground/70">
+						{entry.content}
 					</p>
 				</div>
 			);
 		default:
 			return null;
 	}
+}
+
+/** Format tool arguments as a compact single-line string. */
+function formatToolArgs(args: Record<string, unknown>): string {
+	const parts: string[] = [];
+	for (const [key, value] of Object.entries(args)) {
+		const strValue = typeof value === "string" ? value : JSON.stringify(value);
+		if (strValue.length > 60) {
+			parts.push(`${key}: ${strValue.slice(0, 57)}...`);
+		} else {
+			parts.push(`${key}: ${strValue}`);
+		}
+	}
+	return parts.join("  ");
 }
 
 function formatDuration(start: string, end: string): string {

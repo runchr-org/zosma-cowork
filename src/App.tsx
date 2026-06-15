@@ -788,7 +788,7 @@ function App() {
 				setLoadingSession(false);
 			}
 		},
-		[activeSessionFile, dispatch, refreshStats],
+		[activeSessionFile, dispatch, refreshStats, models],
 	);
 
 	// ── Build display messages ──

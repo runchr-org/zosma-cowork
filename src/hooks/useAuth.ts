@@ -22,28 +22,49 @@ export function useAuth() {
 		refresh();
 	}, [refresh]);
 
-	// Re-check credentials when sidecar becomes ready
-	// (avoids race where initial check runs before sidecar initializes)
+	// Retry credentials check a few times if the initial check fails.
+	// Handles the race where has_credentials fires before the sidecar's
+	// init confirms auth storage is fully loaded.
 	useEffect(() => {
-		// Guard against async-cleanup race in StrictMode dev / HMR (see
-		// ProviderAuthSection for the full explanation).
-		let mounted = true;
+		let retries = 0;
+		const maxRetries = 5;
+		let cancelled = false;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		const retry = () => {
+			if (cancelled) return;
+			invoke<boolean>("has_credentials").then((r) => {
+				if (cancelled) return;
+				if (r) {
+					setHasCredentials(true);
+				} else if (++retries < maxRetries) {
+					timeout = setTimeout(retry, 1000);
+				}
+			}).catch(() => {
+				if (cancelled) return;
+				if (++retries < maxRetries) {
+					timeout = setTimeout(retry, 2000);
+				}
+			});
+		};
+
+		// Also re-check on the "ready" event from the sidecar
 		let unlisten: (() => void) | undefined;
 		(async () => {
-			const u = await listen("ready", () => {
-				refresh();
-			});
-			if (!mounted) {
-				u();
-				return;
-			}
-			unlisten = u;
+			const u = await listen("ready", () => retry());
+			if (!cancelled) unlisten = u;
+			else u();
 		})();
+
+		// Retry after a short delay if initial check was false
+		timeout = setTimeout(retry, 500);
+
 		return () => {
-			mounted = false;
+			cancelled = true;
+			clearTimeout(timeout);
 			unlisten?.();
 		};
-	}, [refresh]);
+	}, []);
 
 	// Re-check on any provider auth change. ProviderAuthSection dispatches
 	// `config-reload` after a successful OAuth sign-in (and on sign-out),

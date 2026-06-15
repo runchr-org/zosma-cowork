@@ -154,6 +154,7 @@ import {
 	setTaskEnabled,
 	watchTaskFiles,
 } from "./tasks-store.js";
+import { runTaskFire } from "./task-fire.js";
 // Vendored pi-anthropic-messages bridge (see scripts/prebuild.mjs). Without
 // this loaded as an extension, Claude Pro/Max OAuth requests are
 // fingerprinted by Anthropic as a "third-party app" and rejected with a
@@ -179,6 +180,7 @@ import { runConsent } from "./google-auth/consent.js";
 // work in the bundled sidecar (no node_modules beside it). See #147.
 import {
 	buildExtensionFactories,
+	makeExtensionFactory,
 	readPiPackages,
 } from "./disk-extension-loader.js";
 
@@ -490,6 +492,20 @@ interface TasksRunNowCommand {
 	cwd?: string;
 }
 
+interface TasksListRunsCommand {
+	type: "tasks_list_runs";
+	id: string;
+	taskId: string;
+	cwd?: string;
+	limit?: number;
+}
+
+interface TasksGetCompletedCommand {
+	type: "tasks_get_completed";
+	id: string;
+	cwd?: string;
+}
+
 interface InstallExtensionCommand {
 	type: "install_extension";
 	id: string;
@@ -632,6 +648,8 @@ type Command =
 	| TasksDeleteCommand
 	| TasksSetEnabledCommand
 	| TasksRunNowCommand
+	| TasksListRunsCommand
+	| TasksGetCompletedCommand
 	| InstallExtensionCommand
 	| UninstallExtensionCommand
 	| SetExtensionEnabledCommand
@@ -1351,10 +1369,21 @@ async function main() {
 	 */
 	async function buildResourceLoader(
 		cwd: string,
+		opts: { includeRoutines?: boolean; includePersona?: boolean } = {},
 	): Promise<DefaultResourceLoader> {
 		if (!settingsManager) {
 			throw new Error("buildResourceLoader: settingsManager not initialized");
 		}
+		// Per-run task sessions (#300) must NOT load pi-routines, otherwise each
+		// fire would spawn a second scheduler inside the isolated session →
+		// recursive fires. Only Cowork's main chat session runs the scheduler.
+		const includeRoutines = opts.includeRoutines ?? true;
+		// Per-run task sessions must ALSO skip the user's chat persona
+		// (INSTRUCTIONS.md). A scheduled task is a self-contained job: its prompt
+		// is the sole instruction. Injecting the chat persona (e.g. "you are my
+		// CTO, build pi-llm-wiki") makes a "drink water" reminder hijack into
+		// unrelated project work (#300).
+		const includePersona = opts.includePersona ?? true;
 		const piResourceDir = piAgentDir();
 		ensureDir(piResourceDir);
 
@@ -1387,6 +1416,12 @@ async function main() {
 			);
 		}
 
+		// The forked pi-routines is always injected as an inline extension
+		// factory (#300) so only Cowork loads it — never the pi CLI, since
+		// it's deliberately absent from settings.json packages.
+		const piRoutinesEntry = join(homedir(), "code", "pi-packages", "pi-routines", "src", "index.ts");
+		const piRoutinesFactory = makeExtensionFactory(piRoutinesEntry);
+
 		const loader = new DefaultResourceLoader({
 			cwd,
 			// Discover shared pi resources from ~/.pi/agent (not the cowork dir).
@@ -1395,7 +1430,8 @@ async function main() {
 			// We load ALL extensions ourselves (vendored inline + pi's disk/npm
 			// extensions via jiti). Skills/prompts/themes still load normally.
 			noExtensions: true,
-			extensionFactories: [
+		extensionFactories: [
+				...(includeRoutines ? [piRoutinesFactory] : []),
 				piAnthropicMessages,
 				zosmaOfficeDocs,
 				zosmaGoogleCalendar,
@@ -1414,15 +1450,17 @@ async function main() {
 				// latest content without restarting the app. Never fatal: a read
 				// failure just omits the block.
 				let personaBlock = "";
-				try {
-					personaBlock = customInstructionsBlock(
-						loadInstructions(zosmaAgentDir(zosmaDir)),
-					);
-				} catch (err) {
-					log(
-						"loadInstructions failed (custom instructions omitted): %s",
-						err instanceof Error ? err.message : String(err),
-					);
+				if (includePersona) {
+					try {
+						personaBlock = customInstructionsBlock(
+							loadInstructions(zosmaAgentDir(zosmaDir)),
+						);
+					} catch (err) {
+						log(
+							"loadInstructions failed (custom instructions omitted): %s",
+							err instanceof Error ? err.message : String(err),
+						);
+					}
 				}
 				try {
 					const aboutPath = writeAboutDoc(zosmaAgentDir(zosmaDir));
@@ -1591,9 +1629,12 @@ async function main() {
 		session = result.session;
 
 		// ── Wire forked pi-routines onFireCallback (#300) ─────────────────
-		// Route task fires into the Cowork session instead of the pi CLI
-		// terminal. This runs the task prompt through the active session,
-		// records the run, and emits task_run_completed when done.
+		// Route task fires into an ISOLATED Cowork session (NOT the shared chat
+		// session). Each fire gets its own sessionId + event stream so it can't
+		// capture unrelated chat/task activity (bleed-over) and can't fast-fail
+		// with "Agent is already processing". The per-run session uses a
+		// routines-free resource loader so it doesn't spawn a nested scheduler.
+		// Execution + capture logic lives in runTaskFire (task-fire.ts, tested).
 		(globalThis as Record<string, unknown>).__PI_ROUTINES_ON_FIRE = async (
 			task: {
 				id: string;
@@ -1611,103 +1652,36 @@ async function main() {
 			},
 			runId: string,
 		): Promise<void> => {
-			const activeSession = session;
-			if (!activeSession) return;
-
-			store.updateRun(task.id, runId, { status: "running" });
-
-			// Capture the full conversation: thinking, text, tool calls & results
-			const conversation: Array<{
-				type: "thinking" | "text" | "tool_call" | "tool_result";
-				content?: string;
-				toolName?: string;
-				toolArgs?: Record<string, unknown>;
-				toolResult?: string;
-				toolError?: boolean;
-			}> = [];
-
-			const unsub = activeSession.subscribe(
-				(event: Record<string, unknown>) => {
-					if (event.type === "message_update") {
-						const ame = event.assistantMessageEvent as Record<string, unknown> | undefined;
-						if (!ame) return;
-						if (ame.type === "text_delta") {
-							const last = conversation[conversation.length - 1];
-							if (last?.type === "text") {
-								last.content = (last.content ?? "") + (ame.delta as string ?? "");
-							} else {
-								conversation.push({ type: "text", content: ame.delta as string ?? "" });
-							}
-						} else if (ame.type === "thinking_delta") {
-							const last = conversation[conversation.length - 1];
-							if (last?.type === "thinking") {
-								last.content = (last.content ?? "") + (ame.delta as string ?? "");
-							} else {
-								conversation.push({ type: "thinking", content: ame.delta as string ?? "" });
-							}
-						} else if (ame.type === "toolcall_end") {
-							const tc = (ame as Record<string, unknown>).toolCall as Record<string, unknown> | undefined;
-							if (tc) {
-								conversation.push({
-									type: "tool_call",
-									toolName: tc.name as string ?? "unknown",
-									toolArgs: tc.arguments as Record<string, unknown> ?? {},
-								});
-							}
-						}
-					} else if (
-						event.type === "tool_execution_end"
-					) {
-						const te = event as Record<string, unknown>;
-						const result = te.result as Record<string, unknown> | undefined;
-						const contentArr = result?.content as Array<Record<string, unknown>> | undefined;
-						const text = contentArr?.map((c) => c.text as string ?? "").join("") ?? "";
-						conversation.push({
-							type: "tool_result",
-							toolName: te.toolName as string ?? "unknown",
-							toolResult: text,
-							toolError: (te.isError as boolean) ?? false,
-						});
-					}
+			await runTaskFire({
+				task: { id: task.id, name: task.name, prompt: task.prompt },
+				runId,
+				store,
+				send,
+				log,
+				createSession: async () => {
+					// Fresh isolated session for THIS run only.
+					const runResourceLoader = await buildResourceLoader(workspaceCwd, {
+						includeRoutines: false,
+						includePersona: false,
+					});
+					const runSessionManager = SessionManager.inMemory(workspaceCwd);
+					const runResult = await createAgentSession({
+						cwd: workspaceCwd,
+						authStorage,
+						modelRegistry,
+						sessionManager: runSessionManager,
+						settingsManager,
+						resourceLoader: runResourceLoader,
+					});
+					const runSession = runResult.session;
+					return {
+						subscribe: (listener) =>
+							runSession.subscribe(listener as Parameters<typeof runSession.subscribe>[0]),
+						prompt: (text) => runSession.prompt(text),
+						dispose: () => runSession.dispose(),
+					};
 				},
-			);
-
-			try {
-				await activeSession.prompt(task.prompt);
-				unsub();
-				const responseText = conversation
-					.filter((c) => c.type === "text")
-					.map((c) => c.content ?? "")
-					.join("");
-				store.updateRun(task.id, runId, {
-					status: "completed",
-					completedAt: new Date().toISOString(),
-					response: responseText,
-					conversation,
-				});
-				send({
-					type: "event",
-					event: { type: "task_run_completed", taskId: task.id, runId },
-				});
-			} catch (err) {
-				unsub();
-				const responseText = conversation
-					.filter((c) => c.type === "text")
-					.map((c) => c.content ?? "")
-					.join("");
-				store.updateRun(task.id, runId, {
-					status: "failed",
-					completedAt: new Date().toISOString(),
-					response: responseText,
-					conversation,
-				});
-				log(
-					"task fire failed for %s (%s): %s",
-					task.id,
-					task.name,
-					err instanceof Error ? err.message : String(err),
-				);
-			}
+			});
 		};
 
 		// ── Wire forked pi-routines with Cowork-specific lock (#300) ─────
@@ -1720,6 +1694,19 @@ async function main() {
 			".pi",
 			"cowork_tasks.lock",
 		);
+
+		// ── Cowork active flag for pi-routines fork (#300) ────────────────
+		// Write a flag file so the forked pi-routines' session_start handler
+		// can detect that Cowork is running. When the pi CLI loads the same
+		// fork in another terminal, it checks for this file and skips creating
+		// its own scheduler — tasks fire only inside Cowork.
+		const coworkActivePath = join(workspaceCwd, ".pi", "cowork_active");
+		try {
+			writeFileSync(coworkActivePath, `${process.pid}`, "utf-8");
+		} catch {
+			// Best-effort: if we can't write the flag, the fork falls back
+			// to checking coworok_tasks.lock as a secondary signal.
+		}
 
 		// Subscribe to all agent events and forward to stdout
 		session.subscribe((event) => {

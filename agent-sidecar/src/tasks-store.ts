@@ -74,6 +74,15 @@ export interface BridgeTask extends ScheduledTask {
  * A run record for a scheduled task. Stored in
  * `.pi/task_runs/<taskId>.jsonl` by the forked pi-routines.
  */
+export interface ConversationEntry {
+	type: "thinking" | "text" | "tool_call" | "tool_result";
+	content?: string;
+	toolName?: string;
+	toolArgs?: Record<string, unknown>;
+	toolResult?: string;
+	toolError?: boolean;
+}
+
 export interface TaskRun {
 	runId: string;
 	taskId: string;
@@ -83,6 +92,8 @@ export interface TaskRun {
 	startedAt: string;
 	completedAt?: string;
 	sessionId?: string;
+	/** Full run conversation (live steps), written incrementally by the fork. */
+	conversation?: ConversationEntry[];
 }
 
 interface DurableTaskFile {

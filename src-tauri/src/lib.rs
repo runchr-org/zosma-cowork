@@ -505,6 +505,12 @@ async fn read_stdout(
                         if t == "task_run_completed" {
                             let _ = app.emit("task_run_completed", e.clone());
                         }
+                        // Task-run-progress push (#300): the sidecar emits this
+                        // periodically while a scheduled task is still running so
+                        // the run detail view can stream live steps.
+                        if t == "task_run_progress" {
+                            let _ = app.emit("task_run_progress", e.clone());
+                        }
                     }
                     for (_, p) in pp.lock().await.iter() {
                         let _ = p.channel.send(e.clone());
