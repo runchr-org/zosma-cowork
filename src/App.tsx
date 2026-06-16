@@ -97,8 +97,9 @@ function App() {
 	// modal even without stored credentials.
 	const [skipOnboarding, setSkipOnboarding] = useState(false);
 	const [sidebarView, setSidebarView] = useState("chats");
-	// Tasks tab (#289): the selected task drives the main-pane detail view, and
-	// the Tasks tab transparently installs/enables pi-routines on first visit.
+	// Tasks tab (#289, #300): the selected task drives the main-pane detail view.
+	// pi-routines is vendored + bundled into the sidecar as an inline factory, so
+	// the hook just reports readiness — nothing is installed at runtime.
 	const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 	const tasksApi = useTasks();
 	const routines = useRoutinesExtension(

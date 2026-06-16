@@ -212,11 +212,13 @@ export function Sidebar({
 }
 
 /**
- * TasksPanel — the Tasks tab content (#289).
+ * TasksPanel — the Tasks tab content (#289, #300).
  *
- * While pi-routines is being installed/enabled on first visit
- * (`useRoutinesExtension`) this shows a "setting up" loading state; on failure,
- * an error with a retry; once ready, the real `TasksList`.
+ * pi-routines is vendored + bundled into the sidecar (inline factory), so it's
+ * ready without any runtime install. The hook briefly reports `checking` before
+ * the tab is active, during which we show a short "Checking Tasks…" state; once
+ * `ready` we render the real `TasksList`. The `installing`/`error` branches are
+ * defensive fallbacks that aren't reachable with the inline factory.
  */
 function TasksPanel({
 	status,
@@ -258,7 +260,7 @@ function TasksPanel({
 	);
 }
 
-/** First-run loading screen while the pi-routines extension is set up. */
+/** Brief loading screen while the Tasks scheduler readiness is confirmed. */
 function RoutinesSetup({ installing }: { installing: boolean }) {
 	return (
 		<div className="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -277,7 +279,7 @@ function RoutinesSetup({ installing }: { installing: boolean }) {
 	);
 }
 
-/** Shown if pi-routines install/enable failed. */
+/** Defensive fallback if the scheduler ever reports an error (unreachable with the inline factory). */
 function RoutinesError({ onRetry }: { onRetry?: () => void }) {
 	return (
 		<div className="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -286,8 +288,8 @@ function RoutinesError({ onRetry }: { onRetry?: () => void }) {
 			</div>
 			<p className="text-sm font-medium text-sidebar-foreground">Couldn’t set up Tasks</p>
 			<p className="mt-1 text-[11px] leading-relaxed text-sidebar-foreground/50">
-				The scheduler extension (pi-routines) couldn’t be installed. You can also add it from
-				Settings → Extensions.
+				The Tasks scheduler couldn’t be initialized. Try again, or restart the app if the problem
+				persists.
 			</p>
 			{onRetry && (
 				<button

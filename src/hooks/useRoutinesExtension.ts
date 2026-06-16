@@ -1,22 +1,21 @@
 /**
- * useRoutinesExtension — ensures the `pi-routines` extension is installed &
- * enabled the first time the user opens the Tasks tab (#289).
+ * useRoutinesExtension — reports when the Tasks scheduler is ready (#289, #300).
  *
- * Tasks are powered by the pi-routines pi-extension: it gives the agent the
- * `cron_create` tool and runs the scheduler that fires tasks. It isn't part of
- * the default package set, so rather than make the user hunt for it in the
- * Extensions screen, the Tasks tab transparently installs + enables it on first
- * visit and shows a short "setting up" state while that happens.
+ * HISTORY: originally (#289) this hook downloaded + enabled the `pi-routines`
+ * npm extension the first time the user opened the Tasks tab (install_extension
+ * → set_extension_enabled → reload_sidecar). That runtime install flow is GONE.
  *
- * Bringing it online needs three steps (install/enable only mutate config):
- *   1. install_extension (if missing) — adds the npm package + registry entry.
- *   2. set_extension_enabled (if present but disabled).
- *   3. reload_sidecar — re-inits the agent so cron_create + the scheduler load
- *      into the live session. We only reload when we actually changed something,
- *      so re-opening Tasks later is a cheap no-op.
+ * TODAY (#300): the forked pi-routines scheduler is VENDORED at build time from
+ * github.com/zosmaai/pi-routines (see agent-sidecar/scripts/fetch-vendor.mjs)
+ * and bundled into the sidecar, where it's injected as an inline extension
+ * factory (agent-sidecar/src/index.ts). Nothing is downloaded or installed at
+ * runtime, and there is no network call when the user opens Tasks.
  *
- * The check runs once per app session, gated on `active` (the Tasks tab being
- * selected), so nothing is installed until the user actually wants Tasks.
+ * The hook is therefore a thin status shim: it stays `checking` until the Tasks
+ * tab becomes active, then flips to `ready` immediately. The `installing` /
+ * `error` states and `retry()` are kept only to satisfy the UI contract
+ * consumed by App.tsx + Sidebar.tsx; they are not reachable with the inline
+ * factory and exist as defensive fallbacks.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

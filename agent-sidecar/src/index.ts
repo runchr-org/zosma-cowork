@@ -168,7 +168,9 @@ import zosmaOfficeDocs from "./office-docs/extension.js";
 import zosmaGoogleCalendar from "./google-calendar/extension.js";
 // Vendored forked pi-routines scheduler (#300). Bundled into the sidecar so it
 // works on any machine (no absolute ~/code path). Loaded ONLY by Cowork; the
-// pi CLI never sees it. Source of truth: github.com/zosmaai/pi-routines.
+// pi CLI never sees it. Source of truth: github.com/zosmaai/pi-routines,
+// vendored by VERIFIED release tag (see agent-sidecar/scripts/fetch-vendor.mjs
+// + vendor.lock.json; bump with `npm run vendor:latest`).
 import piRoutines from "./vendor/pi-routines/src/index.js";
 import {
 	defaultGooglePaths,
