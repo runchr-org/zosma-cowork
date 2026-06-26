@@ -3,13 +3,13 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { InThreadFind } from "@/components/InThreadFind";
 import { MessageInput } from "@/components/MessageInput";
 import { StatusLine } from "@/components/StatusLine";
-import { SuggestedActions } from "@/components/SuggestedActions";
+import { useGreeting } from "@/hooks/useGreeting";
 import type { ToolPhase } from "@/hooks/usePiStream";
 import { findModel } from "@/lib/model-key";
 import type { SessionStats, ThinkingState } from "@/lib/sessionStats";
 import type { ChatMessage, ModelInfo } from "@/types";
 import type { Command } from "@/types/commands";
-import { useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type StreamStateStatus = "idle" | "thinking" | "tool_call" | "responding" | "error";
@@ -86,6 +86,7 @@ export function ChatView({
 	const [findQuery, setFindQuery] = useState("");
 	const [activeMatch, setActiveMatch] = useState(0);
 	const reducedScroll = useReducedMotion();
+	const greeting = useGreeting();
 
 	// Flat, top-to-bottom list of every match (one entry per occurrence).
 	const findMatches = useMemo(() => {
@@ -244,15 +245,29 @@ export function ChatView({
 				onPrev={goPrevMatch}
 				onClose={closeFind}
 			/>
+
+			{/* #268 statusbar — pinned to the very top edge of the chat panel.
+			    Active chat only: the empty state stays ultra-clean (decision C). */}
+			{!isEmpty && thinking && (
+				<StatusLine
+					stats={sessionStats ?? null}
+					thinking={thinking}
+					modelName={findModel(models, currentModelId)?.name}
+					onCycleThinking={onCycleThinking}
+					isRunning={isRunning}
+					status={status}
+					streamingMessage={streamingMessage}
+					toolPhase={toolPhase}
+				/>
+			)}
+
 			<div
 				ref={scrollContainerRef}
 				onScroll={handleScroll}
 				className="flex-1 overflow-y-auto"
 				style={{ scrollbarGutter: "stable" }}
 			>
-				{isEmpty ? (
-					<SuggestedActions onSend={onSend} />
-				) : (
+				{!isEmpty && (
 					<div className="pt-1 pb-6">
 						{allMessages.map((msg) => {
 							const isStreaming = msg.id === streamingMessage?.id;
@@ -312,27 +327,31 @@ export function ChatView({
 				)}
 			</div>
 
-			{error && <ErrorBanner error={error} onRetry={onRetry} onSwitchModel={onRetry} />}
-
-			{/* #268 — single always-on footer. Hosts the live activity indicator
-			    (spinner + phase + elapsed) while streaming AND the persistent
-			    token/cost/context telemetry across turns. Stop lives in the
-			    composer below; the old standalone StatusBar was removed. */}
-			{thinking && (
-				<StatusLine
-					stats={sessionStats ?? null}
-					thinking={thinking}
-					modelName={findModel(models, currentModelId)?.name}
-					onCycleThinking={onCycleThinking}
-					isRunning={isRunning}
-					status={status}
-					streamingMessage={streamingMessage}
-					toolPhase={toolPhase}
-				/>
+			{/* AI greeting above the centered input — empty state only. No
+			    animation: it simply appears with the empty state and is gone once a
+			    message exists. min-h reserves the line so the static→AI swap-in
+			    causes no layout jump. */}
+			{isEmpty && (
+				<div
+					data-testid="greeting"
+					className="mx-auto w-full max-w-3xl px-6 pb-3 text-center text-lg text-muted-foreground min-h-7"
+				>
+					{greeting}
+				</div>
 			)}
 
-			{/* overflow-hidden gives the slide-up animation a clean clip edge */}
-			<div className="overflow-hidden">
+			{error && <ErrorBanner error={error} onRetry={onRetry} onSwitchModel={onRetry} />}
+
+			{/* Single persistent MessageInput. Flex positions it: centered (empty,
+			    via the bottom spacer) or pinned to the bottom (active). `layout=
+			    "position"` smoothly slides it between the two over 500ms — position
+			    only, so the composer's own height changes while typing are NOT
+			    animated. Never remounted (key=sessionKey) so focus/draft survive. */}
+			<motion.div
+				layout={reducedScroll ? false : "position"}
+				transition={{ layout: { duration: 0.5, ease: "easeInOut" } }}
+				className="overflow-hidden"
+			>
 				<MessageInput
 					key={sessionKey}
 					ref={inputRef}
@@ -355,7 +374,12 @@ export function ChatView({
 					commands={commands}
 					onRunCommand={onRunCommand}
 				/>
-			</div>
+			</motion.div>
+
+			{/* Bottom spacer balances the (empty) scroll area above so the
+			    greeting + input group sits vertically centered. Removed on first
+			    message, which lets the input settle at the bottom. */}
+			{isEmpty && <div className="flex-1" aria-hidden="true" />}
 		</div>
 	);
 }
